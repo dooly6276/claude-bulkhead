@@ -2,11 +2,13 @@
 
 [Back to README](../../README.md) | [All guards](../../README.md#guards)
 
-Three narrow rules for mistakes that cannot be undone, on by default.
+Four narrow rules for mistakes that cannot be undone, on by default.
 
 ## rm-root
 
-Blocks `rm -rf`, `Remove-Item -Recurse -Force` and `rd /s` aimed at a filesystem or drive root, the home directory or a folder above it, or a folder above the current repository, including `*` at those.
+Blocks `rm -rf`, `Remove-Item -Recurse -Force` and `rd /s` aimed at a filesystem or drive root, a top-level folder of the drive (`/srv`, `/usr`, `/opt`), the home directory or a folder above it, a folder directly in the home directory (`~/Documents`, `~/Desktop`, `~/archive`), or a folder above the current repository, including `*` at those.
+
+Folders directly in home that are only caches pass: `~/.cache`, `~/.npm`, `~/.pnpm-store`, `~/.yarn`, `~/.gradle`, `~/.m2`, `~/.cargo`, `~/tmp`, `~/.Trash` and similar.
 
 ```
 rm -rf /                 rm -rf ~                 rm -rf ~/*
@@ -14,11 +16,14 @@ rm -rf ..                Remove-Item -Recurse -Force C:\
 rd /s /q C:\
 rm -Rf /                 rm -r -f /               rm --recursive --force /
 rm -rf -- /              sudo rm -rf /            bash -c "rm -rf ~"
+rm -rf ~/Documents       rm -rf "$HOME/Desktop"   rm -rf /srv
 ```
 
-Wrappers (`bash -c`, `cmd /c`, `sudo`, `env` and the others listed in [kill-guard](kill-guard.md)) are opened for all three rules. Commands run on another machine with `ssh` pass.
+Why folders directly in home: they are where people keep things that are not in any repository, such as exports, archives and originals another project still reads. An agent deleting one "because there is a cloud copy" can stop that other project for hours.
 
-Passes: `rm -rf node_modules`, `rm -rf ./dist`, and paths with variables it cannot expand.
+Wrappers (`bash -c`, `cmd /c`, `sudo`, `env` and the others listed in [kill-guard](kill-guard.md)) are opened for all four rules. Commands run on another machine with `ssh` pass.
+
+Passes: `rm -rf node_modules`, `rm -rf ./dist`, `rm -rf ~/Documents/old-export`, and paths with variables it cannot expand.
 
 ## force-push-main
 
@@ -41,11 +46,30 @@ Blocks `git reset --hard` when tracked files have uncommitted changes, and `git 
 Commit them or run `git stash push -u` first, so they can be brought back.
 ```
 
+## agent-author
+
+Blocks commits authored as the agent instead of the person: Claude Code sometimes "fixes" a missing git identity by setting itself as the author, and every commit after that counts as someone else's work on GitHub (contribution graph, achievements) and in `git blame`.
+
+```
+git commit -m "fix" --author="Claude <noreply@anthropic.com>"
+git config user.name "Claude"              git config --global user.email noreply@anthropic.com
+git -c user.name=Claude commit -m x        GIT_AUTHOR_NAME=Claude git commit -m x
+$env:GIT_AUTHOR_NAME = "Claude"            git merge --author="Claude <noreply@anthropic.com>" feature
+```
+
+```
+[bulkhead] basics: `--author Claude <noreply@anthropic.com>` makes the agent the author of the commit.
+Commits authored as Claude or Anthropic do not count as the user's work on GitHub (contribution graph, achievements), and later blame points at a bot.
+Commit with the git identity already configured: leave user.name and user.email alone and drop --author. A Co-Authored-By line in the message is fine.
+```
+
+Passes: a `Co-Authored-By: Claude` trailer in the message, `git log --author=claude`, any other name, and text inside a heredoc handed to a script.
+
 ## Turn off or tune
 
-- `BULKHEAD_DISABLE=basics` turns all three off.
-- `BULKHEAD_DISABLE=rm-root`, `force-push-main` or `discard-changes` turns off one rule.
-- In a config file: `basics.enabled`, `basics.rmRoot`, `basics.forcePushMain`, `basics.discardChanges`, and `basics.protectedBranches`, for example `["main", "master", "release"]`. See [configuration](../configuration.md).
+- `BULKHEAD_DISABLE=basics` turns all four off.
+- `BULKHEAD_DISABLE=rm-root`, `force-push-main`, `discard-changes` or `agent-author` turns off one rule.
+- In a config file: `basics.enabled`, `basics.rmRoot`, `basics.forcePushMain`, `basics.discardChanges`, `basics.agentAuthor`, and `basics.protectedBranches`, for example `["main", "master", "release"]`. See [configuration](../configuration.md).
 
 ## Limits
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.0 - 2026-11-08
+
+### New
+
+- **`bulkhead scan`** replays the shell commands in your Claude Code transcripts (`~/.claude/projects`, subagents included) against the guards and prints what they would have stopped: hits per guard and rule, in how many sessions, how many a hook or you already stopped, the newest examples with secrets masked, and the most sessions that ran at once. checkout-guard is rebuilt from which sessions were active in the same git tree at that minute. Read-only, about 200 MB of transcripts a second. `--since`, `--project`, `--path`, `-n`, `--json`, and `/bulkhead:scan`.
+- **disk-guard** blocks scans that walk the whole drive or home folder (`du -sh ~`, `du -sh ~/*`, `ncdu /`, `Get-ChildItem C:\ -Recurse`, `dir /s C:\`), `find /` and `find ~` without `-maxdepth`, and disk scans run in parallel (`xargs -P`, GNU `parallel`, `&` in a loop, `ForEach-Object -Parallel`). The disk is shared by every session, and these stall all of them for minutes.
+- **checkout-guard `stage-all`** blocks `git add -A`, `git add .`, `git add -u` and `git commit -a` in a tree with changes when another live session works in it: the other session's half-finished edits would go into your commit. Named files pass.
+- **checkout-guard `remove-session-dir`** blocks `rm -rf`, `Remove-Item -Recurse -Force`, `rd /s` and `git worktree remove` of the folder another live session works in, or a folder above it.
+- **checkout-guard `worktree-force-links`** (Windows) blocks `git worktree remove --force` on a worktree with junctions or symlinks in its first two levels, which git has followed into the main checkout's `node_modules`.
+- **basics `agent-author`** blocks commits authored as Claude or Anthropic: `--author`, `git config user.name/user.email`, `git -c user.name=`, `GIT_AUTHOR_*` and `GIT_COMMITTER_*`. A `Co-Authored-By` trailer passes.
+- **basics `rm-root`** also covers a folder directly in the home directory (`~/Documents`, `~/Desktop`; caches such as `~/.cache`, `~/.npm` and `~/tmp` pass) and top-level folders of the drive (`/srv`, `/usr`).
+- New config keys `diskGuard.enabled`, `checkoutGuard.stageAll`, `checkoutGuard.removeSessionDir` and `basics.agentAuthor`, and `BULKHEAD_DISABLE` names `disk-guard`, `stage-all`, `remove-session-dir` and `agent-author`. `bulkhead doctor` lists rules turned off in any guard.
+- The skill covers committing by file name, not deleting another session's folder, the git identity, and the disk.
+
+### Changed
+
+- The repository moved to `dooly6276/claude-bulkhead`; the old address redirects. Install with `/plugin marketplace add dooly6276/claude-bulkhead`.
+- New README hero and `bulkhead scan` animations, light and dark.
+
 ## 0.1.1 - 2026-10-13
 
 - `/bulkhead:remote` printed nothing when no remote was configured, and `/bulkhead:doctor` printed nothing when a check failed: Claude Code drops a slash command whose shell step exits non-zero. Both now show the output.

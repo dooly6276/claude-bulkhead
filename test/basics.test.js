@@ -113,3 +113,46 @@ test('hook exits 2 on a block and fails open', () => {
   assert.strictEqual(runScript('basics', 'not json').status, 0)
   assert.strictEqual(runScript('basics', { tool_input: { command: 'rm -rf ~' } }, { BULKHEAD_DISABLE: 'basics' }).status, 0)
 })
+
+test('rm -rf of a folder directly in home, or a top-level folder, is blocked', () => {
+  for (const cmd of ['rm -rf ~/Documents', 'rm -rf ~/backups', 'rm -rf "$HOME/Desktop"', 'rm -rf /home/dev/photos', 'rm -rf /srv', 'rm -rf /usr',
+    'rm -rf /opt/', 'cd /tmp && rm -rf ~/archive']) {
+    assert.ok(check(cmd, linux()), cmd)
+  }
+  assert.ok(check('Remove-Item -Recurse -Force $env:USERPROFILE\\Documents', win()))
+  assert.match(check('rm -rf ~/Documents', linux()), /directly in your home directory/)
+  assert.match(check('rm -rf /srv', linux()), /top-level folder/)
+})
+
+test('caches in home and deeper folders still pass', () => {
+  for (const cmd of ['rm -rf ~/.cache', 'rm -rf ~/.npm', 'rm -rf ~/.pnpm-store', 'rm -rf ~/.gradle', 'rm -rf ~/tmp', 'rm -rf ~/.Trash',
+    'rm -rf ~/Documents/old-export', 'rm -rf ~/dev/shop-old', 'rm -rf /tmp/x', 'rm -f ~/notes.txt']) {
+    assert.strictEqual(check(cmd, linux()), null, cmd)
+  }
+})
+
+test('agent-author blocks commits authored as the agent', () => {
+  for (const cmd of ['git commit -m "fix" --author="Claude <noreply@anthropic.com>"', 'git commit --author "Claude Code <c@x>" -m x',
+    'git config user.name "Claude"', 'git config --global user.email noreply@anthropic.com', 'git -c user.name=Claude commit -m x',
+    'GIT_AUTHOR_NAME=Claude git commit -m x', 'export GIT_COMMITTER_EMAIL=noreply@anthropic.com && git commit -m x',
+    'git merge --author="Claude <noreply@anthropic.com>" feature']) {
+    const msg = check(cmd, linux())
+    assert.ok(msg, cmd)
+    assert.match(msg, /makes the agent the author/, cmd)
+  }
+  assert.match(check('$env:GIT_AUTHOR_NAME = "Claude"; git commit -m x', { ...win(), mode: 'ps' }), /agent the author/)
+})
+
+test('agent-author lets ordinary commits and messages through', () => {
+  for (const cmd of ['git commit -m "Co-Authored-By: Claude <noreply@anthropic.com>"', 'git config user.name "Dana Kim"', 'git config user.name',
+    'git log --author=claude', 'git commit -m "teach claude to commit"', 'echo GIT_AUTHOR_NAME=Claude', 'git commit --author="Dana <d@x>" -m x',
+    "git commit -F - <<'EOF'\nfix\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF"]) {
+    assert.strictEqual(check(cmd, linux()), null, cmd)
+  }
+})
+
+test('agent-author can be turned off alone', () => {
+  const r = runScript('basics', { tool_input: { command: 'git config user.name Claude' } }, { BULKHEAD_DISABLE: 'agent-author' })
+  assert.strictEqual(r.status, 0)
+  assert.strictEqual(runScript('basics', { tool_input: { command: 'git config user.name Claude' } }).status, 2)
+})

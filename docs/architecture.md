@@ -11,7 +11,7 @@ claude-bulkhead is a Claude Code plugin made of small Node scripts. There is no 
 | `SessionStart` | `startup\|resume` | orphan-reaper, run with `async: true` so the session does not wait | |
 | | `startup` | config-check: one notice when a config file is broken | 10 s |
 | `SessionEnd` | all reasons | orphan-reaper `--session-end`: starts a detached waiter and returns at once (it does nothing for `clear` and `resume`) | Claude Code's 1.5 s budget |
-| `PreToolUse` | `Bash\|PowerShell` | kill-guard, wait-guard, basics | 10 s |
+| `PreToolUse` | `Bash\|PowerShell` | kill-guard, wait-guard, disk-guard, basics | 10 s |
 | | | memory-guard, checkout-guard | 15 s |
 | | | port-guard | 20 s |
 

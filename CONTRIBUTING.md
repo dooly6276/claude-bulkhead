@@ -7,7 +7,7 @@ Thanks for helping. The most useful contributions are false-positive reports wit
 Node 18 or later. There are no dependencies to install.
 
 ```
-git clone https://github.com/Myeongseok-Kang/claude-bulkhead
+git clone https://github.com/dooly6276/claude-bulkhead
 cd claude-bulkhead
 node --test
 ```

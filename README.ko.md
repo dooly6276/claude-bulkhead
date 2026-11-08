@@ -5,7 +5,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/hero.svg" alt="한 저장소를 git worktree 세 개로 나눠 작업하는 Claude Code 세션 세 개. port-guard 가 두 번째 개발 서버를 3000 번 포트에서 비켜 세우고, kill-guard 가 pkill node 를 막아 두 개발 서버가 계속 돌고, bulkhead-slot 이 세 번째 무거운 작업을 대기열에 넣어 남은 램이 하한 아래로 내려가지 않는다." width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/hero-light.svg">
+    <img src="docs/hero.svg" alt="한 컴퓨터에서 git worktree 로 나눠 일하는 Claude Code 세션 여러 개. kill-guard 가 pkill node 를 막고, port-guard 가 두 번째 개발 서버를 빈 포트로 옮기고, disk-guard 가 du 열 개를 동시에 돌리는 것을 막고, checkout-guard 가 git add -A 로 다른 세션의 수정이 커밋에 딸려 가는 것을 막고, bulkhead-slot 이 세 번째 무거운 작업을 대기열에 넣어 남은 램이 하한 아래로 내려가지 않는다. bulkhead scan 은 지난 세션에서 무엇을 막았을지 셉니다." width="100%">
+  </picture>
 </p>
 
 <h1 align="center">claude-bulkhead</h1>
@@ -14,10 +17,10 @@
   <strong>한 컴퓨터에서 Claude Code 세션 여러 개를 돌릴 때, 서로의 서버를 죽이거나 램을 바닥내지 못하게 막는 훅 모음입니다.</strong>
 </p>
 
-<p align="center">가드 7개, 명령 9개, 상태 줄, 슬래시 명령 5개, 스킬 1개, 의존성 0개</p>
+<p align="center">가드 8개, 명령 10개, 상태 줄, 슬래시 명령 6개, 스킬 1개, 의존성 0개</p>
 
 <p align="center">
-  <a href="https://github.com/Myeongseok-Kang/claude-bulkhead/actions/workflows/test.yml"><img src="https://github.com/Myeongseok-Kang/claude-bulkhead/actions/workflows/test.yml/badge.svg" alt="tests"></a>
+  <a href="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml"><img src="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml/badge.svg" alt="tests"></a>
   <img src="https://img.shields.io/badge/node-18%2B-34d6b4?style=flat-square" alt="Node 18+">
   <img src="https://img.shields.io/badge/dependencies-0-34d6b4?style=flat-square" alt="의존성 없음">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-34d6b4?style=flat-square" alt="MIT"></a>
@@ -25,6 +28,7 @@
 
 <p align="center">
   <a href="#무엇인가"><strong>무엇인가</strong></a> |
+  <a href="#필요한지-기록에-물어보세요"><strong>스캔</strong></a> |
   <a href="#왜-필요한가"><strong>왜</strong></a> |
   <a href="#하는-일"><strong>기능</strong></a> |
   <a href="#설치"><strong>설치</strong></a> |
@@ -35,7 +39,7 @@
   <a href="#자주-묻는-질문"><strong>FAQ</strong></a>
 </p>
 
-> 릴리스 노트: [CHANGELOG.md](CHANGELOG.md)
+> **0.2.0 새 기능:** [`bulkhead scan`](#필요한지-기록에-물어보세요) 은 지난 Claude Code 세션 기록을 가드에 대 보고, 새 [disk-guard](docs/guards/disk-guard.md) 는 디스크 전체 스캔과 병렬 스캔을 막습니다. checkout-guard 는 이제 `git add -A` 로 다른 세션의 수정이 내 커밋에 딸려 가는 것과 다른 세션이 일하는 폴더의 `rm -rf` 도 막고, basics 는 Claude 를 작성자로 한 커밋을 막습니다. 릴리스 노트: [CHANGELOG.md](CHANGELOG.md).
 
 ## 무엇인가
 
@@ -55,6 +59,27 @@ bulkhead 는 한 가지 상황을 위한 훅 모음입니다. Claude Code 세션
 | 다른 세션이 고치고 있는 트리에서 한 세션이 다른 브랜치로 checkout 합니다. | checkout-guard 가 막고 `git worktree add` 를 권합니다. |
 | 세션이 끝났는데 그 세션의 개발 서버, 테스트 워커, 감시 프로세스가 램과 포트를 잡은 채 계속 돕니다. | 세션이 끝나고 몇 초 안에 orphan-reaper 가 끕니다. |
 | 서브에이전트가 포그라운드에서 10분 동안 기다립니다. 그동안 세션은 대답을 못 하고 프롬프트 캐시도 만료됩니다. | wait-guard 가 막고 `run_in_background: true` 로 돌리라고 알려 줍니다. |
+| 에이전트가 무엇이 디스크를 차지하는지 알아보겠다고 홈 폴더 전체에 `du` 를 열 개 동시에 돌립니다. 모든 세션의 빌드와 `git status` 가 몇 분씩 느려집니다. | disk-guard 가 막고 폴더를 하나씩 보라고 알려 줍니다. |
+| 세션 두 개가 한 체크아웃을 같이 씁니다. 한 세션이 `git add -A && git commit` 을 치면 다른 세션이 쓰던 수정이 그 커밋에 실려 나갑니다. | checkout-guard 가 막고 파일 이름을 적으라고 알려 줍니다. |
+| "worktree 정리" 작업이 다른 세션이 아직 일하는 worktree 에 `git worktree remove` 를 칩니다. | checkout-guard 가 막고 아직 그 안에 있는 세션을 알려 줍니다. |
+
+## 필요한지 기록에 물어보세요
+
+짐작할 필요가 없습니다. Claude Code 는 세션마다 기록을 `~/.claude/projects` 에 남깁니다. `bulkhead scan` 은 그 기록 속 셸 명령을 가드에 다시 대 봅니다. 실제로 세션을 몇 개나 동시에 돌렸는지, bulkhead 가 막는 일을 이미 얼마나 자주 했는지 알려 줍니다.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/scan-light.svg">
+    <img src="docs/scan.svg" alt="bulkhead scan 은 한 달 치 기록을 읽고, 동시에 돌았던 세션의 최대 수를 알려 주고, 가드와 규칙별로 몇 개의 명령을 몇 개의 세션에서 막았을지, 그중 몇 개를 훅이나 사용자가 이미 막았는지 나열합니다." width="100%">
+  </picture>
+</p>
+
+```
+/plugin install bulkhead@bulkhead      # then, inside Claude Code:
+/bulkhead:scan 30d
+```
+
+읽기만 하고, 출력 전에 비밀 값처럼 보이는 것은 가리며, 어디로도 보내지 않습니다. port-guard 와 램 부족 검사는 다시 돌리지 않습니다. 기록에는 어떤 포트가 쓰였고 램이 얼마나 찼는지가 남지 않기 때문입니다. checkout-guard 는 그 시각에 같은 git 트리에서 어떤 세션이 활동 중이었는지로 다시 구성합니다. 자세히: [docs/commands.md](docs/commands.md#bulkhead-scan)
 
 ## 왜 필요한가
 
@@ -81,10 +106,11 @@ claude-bulkhead 는 이런 일을 하나씩 막거나 치우는 작은 훅 모�
 | | |
 |---|---|
 | **[kill-guard](docs/guards/kill-guard.md)**<br>`pkill node`, `taskkill /IM`, `Stop-Process -Name` 처럼 프로그램 이름으로 끄는 명령을 막습니다. PID 로 끄는 건 통과합니다. | **[port-guard](docs/guards/port-guard.md)**<br>다른 세션이 쓰는 포트에 개발 서버를 띄우거나, 그 포트로 남의 서버를 끄는 명령을 막습니다. |
-| **[memory-guard, bulkhead-slot](docs/guards/memory-guard.md)**<br>램이 모자랄 때 무거운 명령을 막고, 모든 세션이 같이 쓰는 램 예산에 무거운 작업을 줄 세웁니다. | **[checkout-guard](docs/guards/checkout-guard.md)**<br>다른 세션이 같은 작업 트리에 있을 때 `git checkout`, `stash`, `reset --hard` 등을 막습니다. |
+| **[memory-guard, bulkhead-slot](docs/guards/memory-guard.md)**<br>램이 모자랄 때 무거운 명령을 막고, 모든 세션이 같이 쓰는 램 예산에 무거운 작업을 줄 세웁니다. | **[checkout-guard](docs/guards/checkout-guard.md)**<br>다른 세션이 같은 작업 트리에 있을 때 `git checkout`, `stash`, `reset --hard`, `git add -A` 등을 막고, 다른 세션이 일하는 폴더를 지우는 것도 막습니다. |
 | **[wait-guard](docs/guards/wait-guard.md)**<br>3분이 넘는 포그라운드 sleep 반복을 막습니다. 다음 요청이 프롬프트 캐시 전체를 다시 쓰게 되기 때문입니다. | **[orphan-reaper](docs/guards/orphan-reaper.md)**<br>세션이 끝나면, 그 세션이 남긴 개발 서버, 테스트 워커, 감시 프로세스, 헤드리스 브라우저를 끕니다. |
-| **[basics](docs/guards/basics.md)**<br>루트나 홈을 향한 `rm -rf`, `main` 강제 푸시, 커밋 안 한 변경을 날리는 리셋을 막습니다. | **[`bulkhead status`, `top`, `log`, `doctor`](#지금-도는-것-보기)**<br>세션마다 램, 포트, 대기 중인 작업, 가드가 막은 기록을 보여 줍니다. |
-| **[상태 줄](#상태-줄)**<br>Claude Code 상태 줄에 `3 sessions  2 heavy  9.1 GB free` 를 띄웁니다. 100 ms 안에 끝납니다. | **[설정과 슬래시 명령](#설정)**<br>컴퓨터 단위, 프로젝트 단위 설정 파일과 허용 목록. `/bulkhead:status`, `/bulkhead:log`, `/bulkhead:doctor`, `/bulkhead:reap`. |
+| **[disk-guard](docs/guards/disk-guard.md)** <sup>new</sup><br>`du -sh ~`, `-maxdepth` 없는 `find /`, 병렬로 돌리는 디스크 스캔을 막습니다. 모든 세션이 같이 쓰는 디스크가 멈추기 때문입니다. | **[`bulkhead scan`](#필요한지-기록에-물어보세요)** <sup>new</sup><br>지난 Claude Code 세션 기록을 가드에 대 봅니다. 무엇을 막았을지, 세션이 몇 개나 동시에 돌았는지 알려 줍니다. |
+| **[basics](docs/guards/basics.md)**<br>루트, 홈, 홈 바로 아래 폴더를 향한 `rm -rf`, `main` 강제 푸시, 커밋 안 한 변경을 날리는 리셋, Claude 를 작성자로 한 커밋을 막습니다. | **[`bulkhead status`, `top`, `log`, `doctor`](#지금-도는-것-보기)**<br>세션마다 램, 포트, 대기 중인 작업, 가드가 막은 기록을 보여 줍니다. |
+| **[상태 줄](#상태-줄)**<br>Claude Code 상태 줄에 `3 sessions  2 heavy  9.1 GB free` 를 띄웁니다. 100 ms 안에 끝납니다. | **[설정과 슬래시 명령](#설정)**<br>컴퓨터 단위, 프로젝트 단위 설정 파일과 허용 목록. `/bulkhead:scan`, `/bulkhead:status`, `/bulkhead:log`, `/bulkhead:doctor`, `/bulkhead:reap`. |
 
 선택 기능: **[`bulkhead remote`](#다른-컴퓨터에서-무거운-일-돌리기-선택)** 는 이 컴퓨터의 램이 모자랄 때 시험 묶음, 빌드, 브라우저 실행을 SSH 로 다른 컴퓨터에서 돌립니다.
 
@@ -97,7 +123,7 @@ claude-bulkhead 는 이런 일을 하나씩 막거나 치우는 작은 훅 모�
 ## 설치
 
 ```
-/plugin marketplace add Myeongseok-Kang/claude-bulkhead
+/plugin marketplace add dooly6276/claude-bulkhead
 /plugin install bulkhead@bulkhead
 ```
 
@@ -106,8 +132,9 @@ claude-bulkhead 는 이런 일을 하나씩 막거나 치우는 작은 훅 모�
 ## 빠른 시작
 
 1. 위처럼 플러그인을 설치하고 Claude Code 세션을 새로 엽니다.
-2. 설정을 점검합니다. Claude Code 안에서 `/bulkhead:doctor` 를 치거나, Bash 도구로 `bulkhead doctor` 를 실행합니다. 모든 줄이 `OK` 여야 합니다. `WARN` 이나 `FAIL` 줄에는 가드 이름과 이유가 나옵니다.
-3. 세션 옆에 터미널을 하나 열고 `bulkhead top` 을 실행합니다. 세션, 램, 포트, 무거운 작업이 실시간으로 보입니다. `q` 로 나갑니다.
+2. 무엇을 막았을지 봅니다. `/bulkhead:scan 30d` 를 치거나, Bash 도구로 `bulkhead scan` 을 실행합니다. 지난 한 달 치 기록을 읽기만 하고 아무것도 바꾸지 않습니다.
+3. 설정을 점검합니다. Claude Code 안에서 `/bulkhead:doctor` 를 치거나, Bash 도구로 `bulkhead doctor` 를 실행합니다. 모든 줄이 `OK` 여야 합니다. `WARN` 이나 `FAIL` 줄에는 가드 이름과 이유가 나옵니다.
+4. 세션 옆에 터미널을 하나 열고 `bulkhead top` 을 실행합니다. 세션, 램, 포트, 무거운 작업이 실시간으로 보입니다. `q` 로 나갑니다.
 
 그다음은 할 일이 없습니다. Bash 와 PowerShell 호출마다 가드가 돕니다. 무엇을 막았는지는 `bulkhead log` 나 `/bulkhead:log` 로 봅니다. `bulkhead log --summary` 는 내 컴퓨터에서 가드별로 몇 번 막았는지 셉니다. 기준값을 바꾸거나 특정 명령을 허용하려면 [docs/configuration.md](docs/configuration.md) 를 보세요. 명령 전체 목록은 [docs/commands.md](docs/commands.md) 에 있습니다.
 
@@ -143,7 +170,7 @@ bulkhead remote run -- npm test
 
 ```mermaid
 flowchart LR
-  CC["Claude Code 세션"] -->|"PreToolUse: Bash, PowerShell"| G["kill-guard, wait-guard, memory-guard,<br>port-guard, checkout-guard, basics"]
+  CC["Claude Code 세션"] -->|"PreToolUse: Bash, PowerShell"| G["kill-guard, wait-guard, memory-guard,<br>port-guard, checkout-guard, disk-guard, basics"]
   CC -->|"SessionEnd, SessionStart"| R["orphan-reaper (백그라운드)"]
   G -->|"읽기"| P["프로세스 목록, 열린 포트,<br>~/.claude/sessions"]
   G <-->|"읽기, 추가"| S[("상태 폴더 ~/.claude/bulkhead<br>slots, guards.log, events.jsonl")]
@@ -188,9 +215,17 @@ flowchart LR
 <details>
 <summary><strong>checkout-guard</strong>: 한 git 트리에 세션 두 개</summary>
 
-다른 세션이 살아 있고 같은 작업 트리에 있을 때 `git checkout <브랜치>`, `switch`, `stash`, `reset --hard`, `clean -f`, `rebase`, `merge`, `restore .`, 변경이 남은 상태의 `pull` 을 막고 `git worktree add` 를 권합니다.
+다른 세션이 살아 있고 같은 작업 트리에 있을 때 `git checkout <브랜치>`, `switch`, `stash`, `reset --hard`, `clean -f`, `rebase`, `merge`, `restore .`, 변경이 남은 상태의 `pull` 을 막고 `git worktree add` 를 권합니다. 같은 조건에서 `git add -A`, `git add .`, `git commit -a`(`stage-all`)도 막습니다. 다른 세션이 쓰던 수정이 내 커밋에 딸려 가기 때문입니다. 다른 세션이 일하는 폴더의 `rm -rf` 나 `git worktree remove`(`remove-session-dir`)도 막습니다. Windows 에서는 junction 이 들어 있는 worktree 에 `git worktree remove --force` 를 치는 것도 막습니다. git 이 junction 을 따라 메인 체크아웃까지 지우기 때문입니다.
 
-끄기: `BULKHEAD_DISABLE=checkout-guard`. 자세히: [docs/guards/checkout-guard.md](docs/guards/checkout-guard.md)
+끄기: `BULKHEAD_DISABLE=checkout-guard`, 규칙 하나만 끄려면 `BULKHEAD_DISABLE=stage-all` 또는 `remove-session-dir`. 자세히: [docs/guards/checkout-guard.md](docs/guards/checkout-guard.md)
+</details>
+
+<details>
+<summary><strong>disk-guard</strong>: 디스크 전체 스캔과 병렬 스캔</summary>
+
+드라이브 전체, 홈 폴더, 모든 사용자의 홈을 향한 `du`, `ncdu`, `dust`, `ls -R`, `Get-ChildItem -Recurse`, `dir /s`(`du -sh ~`, `du -sh ~/*`, `ncdu /`)와 `-maxdepth` 없는 `find /`, `find ~` 를 막습니다. 어디를 향하든 병렬로 돌리는 디스크 스캔(`xargs -P 10 du`, GNU `parallel`, 반복문 안의 `du ... &`, `ForEach-Object -Parallel`)도 막습니다. 폴더 하나씩 보는 것은 통과합니다(`du -sh node_modules`, `du -sh ~/Library/Caches`).
+
+끄기: `BULKHEAD_DISABLE=disk-guard`. 자세히: [docs/guards/disk-guard.md](docs/guards/disk-guard.md)
 </details>
 
 <details>
@@ -210,9 +245,9 @@ sleep 을 합쳐 180초가 넘을 수 있는 포그라운드 명령을 막습니
 </details>
 
 <details>
-<summary><strong>basics</strong>: 되돌릴 수 없는 실수 세 가지</summary>
+<summary><strong>basics</strong>: 되돌릴 수 없는 실수 네 가지</summary>
 
-`rm-root`(루트, 홈, 저장소 위 폴더를 향한 `rm -rf`), `force-push-main`(`main` 이나 `master` 로 `git push --force`. `--force-with-lease` 는 통과), `discard-changes`(커밋 안 한 작업을 날리는 `git reset --hard`, `git clean -fd`).
+`rm-root`(루트, `/srv` 같은 최상위 폴더, 홈, `~/Documents` 같은 홈 바로 아래 폴더, 저장소 위 폴더를 향한 `rm -rf`), `force-push-main`(`main` 이나 `master` 로 `git push --force`. `--force-with-lease` 는 통과), `discard-changes`(커밋 안 한 작업을 날리는 `git reset --hard`, `git clean -fd`), `agent-author`(`--author="Claude <noreply@anthropic.com>"`, `git config user.name Claude` 등. 내 커밋이 계속 내 것으로 집계되게 합니다).
 
 끄기: `BULKHEAD_DISABLE=basics`, 또는 규칙 이름으로 하나씩. 자세히: [docs/guards/basics.md](docs/guards/basics.md)
 </details>
@@ -221,7 +256,7 @@ sleep 을 합쳐 180초가 넘을 수 있는 포그라운드 명령을 막습니
 
 일반 안전 훅 모음은 세션 하나를 위험한 명령에서 지킵니다. 예를 들어 [claude-forge](https://github.com/sangrokjung/claude-forge) 에는 출력에 섞인 비밀 값을 걸러 내고, 파이프로 받는 원격 스크립트와 파괴적인 SQL 을 막는 훅이 있습니다. [dcg](https://github.com/Dicklesworthstone/destructive_command_guard) 와 [cc-safety-net](https://github.com/kenryu42/claude-code-safety-net) 은 파괴적인 셸 명령과 git 명령을 폭넓게 다룹니다. 같이 쓸 만한 도구들입니다.
 
-bulkhead 는 다른 문제를 다룹니다. 한 컴퓨터의 세션들이 프로세스 소유, 포트, 같이 쓰는 램, 같이 쓰는 git 트리 때문에 서로 부딪히는 문제입니다. 위 도구들과 겹치는 건 `basics` 규칙 세 개뿐이고, 다른 도구가 이미 다룬다면 `BULKHEAD_DISABLE=basics` 로 끄면 됩니다. bulkhead 는 다른 훅과 함께 돕니다. Claude Code 는 도구 호출에 맞는 훅을 모두 돌리고, 그중 하나라도 막으면 그 호출은 멈춥니다.
+bulkhead 는 다른 문제를 다룹니다. 한 컴퓨터의 세션들이 프로세스 소유, 포트, 같이 쓰는 램, 같이 쓰는 git 트리 때문에 서로 부딪히는 문제입니다. 위 도구들과 겹치는 건 `basics` 규칙뿐이고, 다른 도구가 이미 다룬다면 `BULKHEAD_DISABLE=basics` 로 끄면 됩니다. bulkhead 는 다른 훅과 함께 돕니다. Claude Code 는 도구 호출에 맞는 훅을 모두 돌리고, 그중 하나라도 막으면 그 호출은 멈춥니다.
 
 ## 설정
 
@@ -245,7 +280,7 @@ bulkhead 는 다른 문제를 다룹니다. 한 컴퓨터의 세션들이 프로
 
 | 변수 | 기본값 | 같은 설정 |
 |---|---|---|
-| `BULKHEAD_DISABLE` | 비어 있음 | 끌 가드를 쉼표로 나열: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `orphan-reaper`, `basics`, `all`. basics 규칙은 `rm-root`, `force-push-main`, `discard-changes` 로 하나씩 끌 수도 있습니다. 여기 적은 가드는 파일 설정과 상관없이 꺼집니다 |
+| `BULKHEAD_DISABLE` | 비어 있음 | 끌 가드를 쉼표로 나열: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `disk-guard`, `orphan-reaper`, `basics`, `all`. 규칙 하나씩 끌 수도 있습니다: `rm-root`, `force-push-main`, `discard-changes`, `agent-author`, `stage-all`, `remove-session-dir`. 여기 적은 가드는 파일 설정과 상관없이 꺼집니다 |
 | `BULKHEAD_WAIT_MAX_SEC` | 180 | `waitGuard.limitSeconds` |
 | `BULKHEAD_MIN_FREE_GB` | 3, 또는 램의 15% 중 작은 값 | `memory.minFreeGb` |
 | `BULKHEAD_SLOT_FLOOR_GB` | 5, 또는 램의 25% 중 작은 값 | `memory.slotFloorGb` |
@@ -258,7 +293,7 @@ bulkhead 는 다른 문제를 다룹니다. 한 컴퓨터의 세션들이 프로
 
 ## 지금 도는 것 보기
 
-`bulkhead` 는 `bulkhead-slot` 과 함께 Bash 도구의 `PATH` 에 들어갑니다. Claude Code 안에서는 `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor`, `/bulkhead:reap` 이 해당 명령을 돌리고 결과를 정리해 줍니다. 내 터미널에서 쓰려면 경로로 부릅니다. 예: `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.1.1/bin/bulkhead top`. 캐시 경로는 설치마다 다르니 `/plugin` 에서 확인하세요. 표를 내는 명령은 모두 `--json` 을 받습니다. 전체 설명은 [docs/commands.md](docs/commands.md) 에 있습니다.
+`bulkhead` 는 `bulkhead-slot` 과 함께 Bash 도구의 `PATH` 에 들어갑니다. Claude Code 안에서는 `/bulkhead:scan [30d]`, `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor`, `/bulkhead:reap` 이 해당 명령을 돌리고 결과를 정리해 줍니다. 내 터미널에서 쓰려면 경로로 부릅니다. 예: `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0/bin/bulkhead top`. 캐시 경로는 설치마다 다르니 `/plugin` 에서 확인하세요. 표를 내는 명령은 모두 `--json` 을 받습니다. 전체 설명은 [docs/commands.md](docs/commands.md) 에 있습니다.
 
 ### bulkhead status
 
@@ -341,7 +376,7 @@ Node, 플러그인 파일, 상태 폴더, 설정 파일, 가드마다 켜졌는�
 ```
 $ bulkhead doctor
 OK    node            v24.11.0
-OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.1.1, hooks: 2 SessionStart, 1 SessionEnd, 6 PreToolUse
+OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
 OK    state dir       ~/.claude/bulkhead is writable
 OK    config          no config files, defaults in use
 OK    kill-guard      on
@@ -349,6 +384,7 @@ OK    wait-guard      on, limit 180s
 OK    memory-guard    on
 OK    port-guard      on
 OK    checkout-guard  on
+OK    disk-guard      on
 OK    basics          on, protected branches: main, master
 OK    orphan-reaper   on, at session start and after each session ends
 OK    hook run        kill-guard blocked a test command in 90 ms
@@ -359,7 +395,7 @@ OK    slots           none held
 OK    event log       ~/.claude/bulkhead/events.jsonl, empty so far
 OK    git             2.52.0.windows.1
 
-18 OK, 0 WARN, 0 FAIL
+19 OK, 0 WARN, 0 FAIL
 ```
 
 ### bulkhead port
@@ -397,7 +433,7 @@ sessions 는 `~/.claude/sessions` 에서 살아 있는 세션 수, heavy 는 bul
 {
   "statusLine": {
     "type": "command",
-    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.1.1/bin/bulkhead-statusline",
+    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0/bin/bulkhead-statusline",
     "refreshInterval": 10
   }
 }
@@ -411,7 +447,7 @@ sessions 는 `~/.claude/sessions` 에서 살아 있는 세션 수, heavy 는 bul
 조금 느려집니다. 가드 하나는 짧게 도는 Node 프로세스 하나입니다. Windows 11 데스크톱, Node 24 에서 `node scripts/bench-hooks.js 15` 로 재 보니, 통과하는 명령에 가드 하나가 40에서 49 ms 걸렸습니다(15번 돌린 중앙값). Node 를 띄우는 데만 33 ms 가 듭니다. 막은 기록을 이벤트 로그에 쓰는 시간은 재지 못할 만큼 작습니다. 프로세스 목록 읽기(Windows 에서 1, 2초)처럼 느린 일은 명령이 맞는 모양일 때만 합니다. 이미 응답하는 포트에 개발 서버를 띄울 때, 무언가를 끌 때, 무거운 명령일 때입니다. 상태 줄은 100 ms 안에 끝나고 5초 동안 캐시합니다.
 
 **막지 말아야 할 걸 막았어요.**
-`bulkhead log` 로 정확한 명령과 이유를 봅니다. 프로젝트 설정 `<repo>/.claude/bulkhead.json` 에서 통과시킵니다. 프로그램 이름은 `killGuard.allowNames`, 같이 쓰는 포트는 `portGuard.ignorePorts`, 더 긴 대기는 `waitGuard.limitSeconds`, 그 프로젝트에서 가드 전체를 끄려면 `"enabled": false` 입니다. [docs/configuration.md](docs/configuration.md) 를 보세요. 그리고 `bulkhead log` 의 그 줄을 붙여 [오탐 이슈](https://github.com/Myeongseok-Kang/claude-bulkhead/issues/new?template=false-positive.yml)를 남겨 주세요. 패턴을 고쳐 모두에게 반영하겠습니다.
+`bulkhead log` 로 정확한 명령과 이유를 봅니다. 프로젝트 설정 `<repo>/.claude/bulkhead.json` 에서 통과시킵니다. 프로그램 이름은 `killGuard.allowNames`, 같이 쓰는 포트는 `portGuard.ignorePorts`, 더 긴 대기는 `waitGuard.limitSeconds`, 그 프로젝트에서 가드 전체를 끄려면 `"enabled": false` 입니다. [docs/configuration.md](docs/configuration.md) 를 보세요. 그리고 `bulkhead log` 의 그 줄을 붙여 [오탐 이슈](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml)를 남겨 주세요. 패턴을 고쳐 모두에게 반영하겠습니다.
 
 **세션을 하나만 써도 쓸모가 있나요?**
 있습니다. kill-guard, wait-guard, memory-guard, basics 는 세션 하나와 그 서브에이전트도 똑같이 지킵니다. port-guard 와 checkout-guard 는 다른 세션이 살아 있을 때만 움직입니다. orphan-reaper 는 끝난 세션이 남긴 것을 치웁니다.
@@ -445,10 +481,10 @@ Windows, Linux, macOS 이고 Node 18 이상이 필요합니다. orphan-reaper �
 프로젝트 README 에 이 배지를 붙여 보세요.
 
 ```markdown
-[![Guarded by bulkhead](https://img.shields.io/badge/guarded_by-bulkhead-34d6b4?style=flat-square)](https://github.com/Myeongseok-Kang/claude-bulkhead)
+[![Guarded by bulkhead](https://img.shields.io/badge/guarded_by-bulkhead-34d6b4?style=flat-square)](https://github.com/dooly6276/claude-bulkhead)
 ```
 
-이렇게 보입니다: [![Guarded by bulkhead](https://img.shields.io/badge/guarded_by-bulkhead-34d6b4?style=flat-square)](https://github.com/Myeongseok-Kang/claude-bulkhead)
+이렇게 보입니다: [![Guarded by bulkhead](https://img.shields.io/badge/guarded_by-bulkhead-34d6b4?style=flat-square)](https://github.com/dooly6276/claude-bulkhead)
 
 ## 기여
 

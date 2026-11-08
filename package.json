@@ -1,11 +1,11 @@
 {
   "name": "claude-bulkhead",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Claude Code hooks for a machine shared by many sessions and subagents",
   "private": true,
   "license": "MIT",
-  "author": "Myeongseok-Kang",
-  "repository": "github:Myeongseok-Kang/claude-bulkhead",
+  "author": "Myeongseok Kang",
+  "repository": "github:dooly6276/claude-bulkhead",
   "engines": {
     "node": ">=18"
   },

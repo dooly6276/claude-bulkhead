@@ -92,11 +92,11 @@ function checkGuards(cfg, platform = process.platform) {
       continue
     }
     let note = 'on'
-    if (name === 'basics') {
-      const offRules = Object.entries(config.RULES).filter(([, k]) => cfg.values[k] === false).map(([r, k]) => `${r} off (${why(cfg.sources[k])})`)
-      if (offRules.length) note += `, ${offRules.join(', ')}`
-      note += `, protected branches: ${cfg.values['basics.protectedBranches'].join(', ')}`
-    }
+    const offRules = Object.entries(config.RULES)
+      .filter(([, k]) => k.startsWith(section + '.') && cfg.values[k] === false)
+      .map(([r, k]) => `${r} off (${why(cfg.sources[k])})`)
+    if (offRules.length) note += `, ${offRules.join(', ')}`
+    if (name === 'basics') note += `, protected branches: ${cfg.values['basics.protectedBranches'].join(', ')}`
     if (name === 'wait-guard') note += `, limit ${cfg.values['waitGuard.limitSeconds']}s`
     if (name === 'kill-guard') {
       const allow = cfg.values['killGuard.allowNames']

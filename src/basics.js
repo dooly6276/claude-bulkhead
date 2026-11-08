@@ -6,13 +6,8 @@ const { runHook, enabled, setting, blocked, oneLine } = require('./hook')
 const shell = require('./shell')
 const { realPath } = require('./paths')
 
-// Three narrow rules for mistakes that cannot be undone. Each can be turned off on its own:
-// rm-root, force-push-main, discard-changes.
-
-// The commands a line runs on this machine, wrappers (sudo, bash -c, env) opened.
-function segments(cmd, mode) {
-  return shell.commands(shell.prepare(cmd, mode), mode).filter(c => !c.remote)
-}
+// Narrow rules for mistakes that cannot be undone. Each can be turned off on its own:
+// rm-root, force-push-main, discard-changes, agent-author.
 
 // ~, $HOME and %USERPROFILE% become the home directory; /c/... becomes C:/... on Windows.
 // Returns null for anything with a variable we cannot expand.
@@ -64,8 +59,12 @@ function rmTargets(t) {
   return []
 }
 
-// The dangerous targets: a filesystem or drive root, the home directory or anything above it,
-// and any directory above the repository the command runs in.
+// Folders directly in the home directory that are only caches and can always be rebuilt.
+const HOME_CACHES = /^\.?(?:cache|caches|tmp|temp|npm|pnpm-store|yarn|bun|gradle|m2|nuget|cargo|rustup|deno|expo|Trash|node-gyp|pyenv|bundle|cocoapods)$/i
+
+// The dangerous targets: a filesystem or drive root, a top-level folder such as /usr or /srv,
+// the home directory or anything above it, a folder directly in it (~/Documents, ~/backups;
+// caches excepted), and any directory above the repository the command runs in.
 function dangerousTarget(arg, { cwd, home, platform, repoRoot }) {
   const expanded = expand(arg, home, platform)
   if (expanded === null) return null
@@ -78,7 +77,11 @@ function dangerousTarget(arg, { cwd, home, platform, repoRoot }) {
   for (const v of views) {
     const abs = norm(pathFor(platform).resolve(v.cwd, rel), platform)
     if (/^(?:\/|[a-z]:\/?)$/i.test(abs) || /^[a-z]:$/i.test(abs)) return 'a filesystem root'
-    if (isAncestorOrSame(abs, norm(v.home, platform))) return 'your home directory or a folder above it'
+    const homeKey = norm(v.home, platform)
+    if (isAncestorOrSame(abs, homeKey)) return 'your home directory or a folder above it'
+    const parent = pathFor('linux').dirname(abs)
+    if (parent === homeKey && !HOME_CACHES.test(pathFor('linux').basename(abs))) return 'a folder directly in your home directory'
+    if ((parent === '/' || /^[a-z]:\/?$/i.test(parent)) && !isAncestorOrSame(abs, norm(v.cwd, platform))) return 'a top-level folder of the drive'
     // a folder inside the current directory cannot be above the repository
     if (abs !== norm(v.cwd, platform) && isAncestorOrSame(norm(v.cwd, platform), abs)) continue
     const root = repoRoot()
@@ -116,6 +119,42 @@ function forcePushToMain(rest, branch, protectedBranches = ['main', 'master']) {
   return targets.some(r => protectedBranches.includes(String(r || '').replace(/^refs\/heads\//, '')))
 }
 
+// An identity that is the agent, not the person: Claude <noreply@anthropic.com> and the like.
+const AGENT_ID = /\bclaude\b|anthropic/i
+
+// The --author value of git commit, the value git config sets for user.name or user.email, or a
+// -c user.name=... before the subcommand.
+function agentAuthor(t, rest) {
+  for (let i = 1; i < t.length; i++) {
+    if (t[i] === '-c' && /^user\.(?:name|email)=/i.test(t[i + 1] || '') && AGENT_ID.test(t[i + 1].split('=').slice(1).join('='))) return t[i + 1]
+  }
+  if (rest[0] === 'commit' || rest[0] === 'merge' || rest[0] === 'cherry-pick' || rest[0] === 'revert') {
+    for (let i = 1; i < rest.length; i++) {
+      const a = rest[i]
+      const v = a.startsWith('--author=') ? a.slice(9) : a === '--author' ? rest[i + 1] : null
+      if (v && AGENT_ID.test(v)) return `--author ${v}`
+    }
+  }
+  if (rest[0] === 'config') {
+    const args = rest.slice(1).filter(a => !/^--(?:global|local|system|worktree|replace-all|add)$/.test(a))
+    if (/^user\.(?:name|email)$/i.test(args[0] || '') && args[1] && AGENT_ID.test(args[1])) return `${args[0]} ${args[1]}`
+  }
+  return null
+}
+
+// GIT_AUTHOR_NAME=Claude git commit, export GIT_COMMITTER_EMAIL=noreply@anthropic.com, $env:GIT_AUTHOR_NAME = "Claude"
+const AGENT_ENV = /\bGIT_(?:AUTHOR|COMMITTER)_(?:NAME|EMAIL)\s*=\s*["']?([^"'\s;&|]*)/gi
+function agentEnv(text) {
+  for (const m of text.matchAll(AGENT_ENV)) if (AGENT_ID.test(m[1])) return m[0]
+  return null
+}
+
+function agentMessage(what) {
+  return `[bulkhead] basics: \`${oneLine(what, 120)}\` makes the agent the author of the commit.\n` +
+    'Commits authored as Claude or Anthropic do not count as the user\'s work on GitHub (contribution graph, achievements), and later blame points at a bot.\n' +
+    'Commit with the git identity already configured: leave user.name and user.email alone and drop --author. A Co-Authored-By line in the message is fine.'
+}
+
 function check(cmd, {
   cwd = process.cwd(), home = os.homedir(), platform = process.platform, run = git,
   protectedBranches = setting('basics.protectedBranches', ['main', 'master']), mode = 'sh',
@@ -125,8 +164,20 @@ function check(cmd, {
   const rmRoot = once(() => enabled('rm-root'))
   const forcePush = once(() => enabled('force-push-main'))
   const discard = once(() => enabled('discard-changes'))
+  const author = once(() => enabled('agent-author'))
+  const prepared = shell.prepare(String(cmd || ''), mode)
+  const cmds = shell.commands(prepared, mode).filter(x => !x.remote)
+  if (author() && /GIT_(?:AUTHOR|COMMITTER)_/i.test(prepared)) {
+    // only the shell's own words: a heredoc body handed to python or node is code, not a variable
+    const runsGit = cmds.some(c => shell.bin(c.argv[0]) === 'git')
+    for (const c of cmds) {
+      const own = c.depth === 0 ? prepared.slice(c.s, c.e) : c.argv.join(' ')
+      const env = agentEnv(own)
+      if (env && (runsGit || /^(?:export|set|setx|\$env:)/i.test(own.trim()))) return agentMessage(env)
+    }
+  }
   const repoRoot = once(() => { try { return run(['rev-parse', '--show-toplevel'], cwd) } catch { return null } })
-  for (const c of segments(String(cmd || ''), mode)) {
+  for (const c of cmds) {
     const t = c.argv
     if (!t.length) continue
     const seg = t.join(' ')
@@ -143,6 +194,8 @@ function check(cmd, {
     if (path.basename(t[0]).replace(/\.exe$/i, '') !== 'git') continue
     const dir = gitCwd(t, cwd)
     const rest = gitSub(t)
+    const who = author() && agentAuthor(t, rest)
+    if (who) return agentMessage(who)
     if (rest[0] === 'push' && forcePush() && forcePushToMain(rest, () => { try { return run(['rev-parse', '--abbrev-ref', 'HEAD'], dir) } catch { return '' } }, protectedBranches)) {
       return `[bulkhead] basics: force-pushing to ${protectedBranches.join(' or ')} rewrites history other people and sessions have pulled.\n` +
         'Push to a branch, or use --force-with-lease if you are sure.'
@@ -174,9 +227,10 @@ if (require.main === module) {
 }
 
 function ruleOf(message) {
+  if (/makes the agent the author/.test(message)) return 'agent-author'
   if (/force-pushing/.test(message)) return 'force-push-main'
   if (/would throw away/.test(message)) return 'discard-changes'
   return 'rm-root'
 }
 
-module.exports = { check, rmTargets, dangerousTarget, forcePushToMain, ruleOf }
+module.exports = { check, rmTargets, dangerousTarget, forcePushToMain, ruleOf, agentAuthor }

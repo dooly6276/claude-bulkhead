@@ -13,6 +13,8 @@ const wait = require('../src/wait-guard')
 const memory = require('../src/memory-guard')
 const basics = require('../src/basics')
 const checkout = require('../src/checkout-guard')
+const disk = require('../src/disk-guard')
+const scan = require('../src/scan')
 const port = require('../src/port-guard')
 const devServers = require('../src/dev-servers')
 const shell = require('../src/shell')
@@ -105,6 +107,11 @@ const LONG = {
   },
   'echo chain': n => fill('echo x && ', n),
   'rm parents': n => 'rm -rf ' + fill('../', n),
+  'xargs du chain': n => fill('xargs du ', n),
+  'du background chain': n => fill('du -sh a & ', n),
+  'for without do': n => fill('for ', n) + ' du -sh a & wait',
+  'secret-like names': n => fill('PASSWORD', n),
+  'name equals chain': n => fill('API_KEY=x ', n),
   'rm flags': n => 'rm ' + fill('-r ', n) + '/',
   'git -C chain': n => 'git ' + fill('-C . ', n) + 'checkout main',
   'push refspecs': n => 'git push ' + fill('+main ', n),
@@ -202,6 +209,8 @@ const CHECKS = {
   'memory-guard': [c => memory.check(c, () => H.PLENTY), c => memory.check(c, () => H.LOW, undefined, 'ps')],
   basics: [c => basics.check(c, { cwd: repo, home, run: fakeGit }), c => basics.check(c, { cwd: repo, home, run: fakeGit, mode: 'ps' })],
   'checkout-guard': [c => checkout.check(c, { cwd: repo, sessionId: 'me', files: other, isAlive: () => true, run: fakeGit })],
+  'disk-guard': [c => disk.check(c, { home }), c => disk.check(c, { home, mode: 'ps' })],
+  'scan-mask': [c => scan.mask(c)],
   'dev-servers': [c => devServers.detect(c, { cwd: repo, readFile: () => pkg })],
   // port-guard's hook runs both: a dev server start and a kill by port
   'port-guard': [c => Promise.all([port.check(c, { cwd: repo, ...portFakes }), port.checkKill(c, portFakes)])],

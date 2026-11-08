@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 878" width="1200" height="878" role="img" aria-labelledby="t d" xml:space="preserve" font-family="system-ui,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,Roboto,Helvetica,Arial,sans-serif"><title id="t">bulkhead scan replaying Claude Code transcripts</title><desc id="d">An animated terminal. The command bulkhead scan is typed, then its real output appears: 14 transcripts, 527 shell commands, up to 4 sessions running at once, a table of 13 guard rules with hit counts counting up (checkout-guard stage-all 5, kill-guard pkill 5, disk-guard disk-wide-scan 3 and more), example commands such as git add -A, pkill node and du -sh ~, and the closing line: 24 commands in 13 sessions would have been stopped by bulkhead, 10 of them already stopped by a hook or declined.</desc><style>svg{--bg:#f6f8fa;--panel:#ffffff;--term:#ffffff;--bar:#f3f5f8;--line:#e1e6ec;--line2:#cdd5df;--fg:#1f2328;--mute:#4f5a66;--dim:#5f6b78;--ac:#0a7f6a;--acbg:#e3f6f1;--red:#c9252d;--redbg:#fdecec;--amber:#9a6200;--amberbg:#fbf1dc;--blue:#0969da;--track:#e8ecf1;--base:#b4c0cd}
+text{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;font-size:15px;white-space:pre}
+.fg{fill:var(--fg)}.mu{fill:var(--mute)}.dm{fill:var(--dim)}.ac{fill:var(--ac)}.rd{fill:var(--red)}
+.am{fill:var(--amber)}.b{font-weight:700}.cv{fill:var(--term)}
+@keyframes k1{0%{transform:translate(0px,0px)}3.125%{transform:translate(0px,0px);animation-timing-function:steps(32,end)}8.75%{transform:translate(298.8px,0px)}93.75%{transform:translate(298.8px,0px)}93.812%{transform:translate(0px,0px)}100%{transform:translate(0px,0px)}}
+@keyframes k2{0%{opacity:1}1.562%{opacity:0}3.125%{opacity:1}10.312%{opacity:1}10.375%{opacity:0}95.625%{opacity:0}95.688%{opacity:1}96.875%{opacity:1}98.438%{opacity:0}100%{opacity:0}}
+@keyframes k3{0%{opacity:0;transform:translate(0px,6px)}10.312%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}12.188%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k4{0%{opacity:0;transform:translate(0px,6px)}11.062%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}12.937%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k5{0%{opacity:0;transform:translate(0px,6px)}11.812%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}13.688%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k6{0%{opacity:0;transform:translate(0px,6px)}12.562%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}14.437%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k7{0%{opacity:0;transform:translate(-10px,0px)}14.875%{opacity:0;transform:translate(-10px,0px);animation-timing-function:cubic-bezier(.22,1,.36,1)}16.75%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k8{0%{opacity:0}16.125%{opacity:0}16.15%{opacity:1}16.75%{opacity:1}16.775%{opacity:0}100%{opacity:0}}
+@keyframes k9{0%{opacity:0}16.75%{opacity:0}16.775%{opacity:1}17.375%{opacity:1}17.4%{opacity:0}100%{opacity:0}}
+@keyframes k10{0%{opacity:0}17.375%{opacity:0}17.4%{opacity:1}18%{opacity:1}18.025%{opacity:0}100%{opacity:0}}
+@keyframes k11{0%{opacity:0}18%{opacity:0}18.025%{opacity:1}18.625%{opacity:1}18.65%{opacity:0}100%{opacity:0}}
+@keyframes k12{0%{opacity:0}18.625%{opacity:0}18.65%{opacity:1}100%{opacity:1}}
+@keyframes k13{0%{opacity:0;transform:translate(-12px,0px)}15.5%{opacity:0;transform:translate(-12px,0px);animation-timing-function:cubic-bezier(.22,1,.36,1)}17.375%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k14{0%{opacity:0}16.75%{opacity:0}16.775%{opacity:1}17.375%{opacity:1}17.4%{opacity:0}100%{opacity:0}}
+@keyframes k15{0%{opacity:0}17.375%{opacity:0}17.4%{opacity:1}18%{opacity:1}18.025%{opacity:0}100%{opacity:0}}
+@keyframes k16{0%{opacity:0}18%{opacity:0}18.025%{opacity:1}18.625%{opacity:1}18.65%{opacity:0}100%{opacity:0}}
+@keyframes k17{0%{opacity:0}18.625%{opacity:0}18.65%{opacity:1}19.25%{opacity:1}19.275%{opacity:0}100%{opacity:0}}
+@keyframes k18{0%{opacity:0}19.25%{opacity:0}19.275%{opacity:1}100%{opacity:1}}
+@keyframes k19{0%{opacity:0;transform:translate(-12px,0px)}16.125%{opacity:0;transform:translate(-12px,0px);animation-timing-function:cubic-bezier(.22,1,.36,1)}18%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k20{0%{opacity:0}17.375%{opacity:0}17.4%{opacity:1}18%{opacity:1}18.025%{opacity:0}100%{opacity:0}}
+@keyframes k21{0%{opacity:0}18%{opacity:0}18.025%{opacity:1}18.625%{opacity:1}18.65%{opacity:0}100%{opacity:0}}
+@keyframes k22{0%{opacity:0}18.625%{opacity:0}18.65%{opacity:1}100%{opacity:1}}
+@keyframes k23{0%{opacity:0;transform:translate(-12px,0px)}16.75%{opacity:0;transform:translate(-12px,0px);animation-timing-function:cubic-bezier(.22,1,.36,1)}18.625%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k24{0%{opacity:0}18%{opacity:0}18.025%{opacity:1}18.625%{opacity:1}18.65%{opacity:0}100%{opacity:0}}
+@keyframes k25{0%{opacity:0}18.625%{opacity:0}18.65%{opacity:1}100%{opacity:1}}
+@keyframes k26{0%{opacity:0;transform:translate(-12px,0px)}17.375%{opacity:0;transform:translate(-12px,0px);animation-timing-function:cubic-bezier(.22,1,.36,1)}19.25%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k27{0%{opacity:0}18.625%{opacity:0}18.65%{opacity:1}100%{opacity:1}}
+@keyframes k28{0%{opacity:0;transform:translate(-12px,0px)}18%{opacity:0;transform:translate(-12px,0px);animation-timing-function:cubic-bezier(.22,1,.36,1)}19.875%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k29{0%{opacity:0}19.25%{opacity:0}19.275%{opacity:1}100%{opacity:1}}
+@keyframes k30{0%{opacity:0;transform:translate(-12px,0px)}18.625%{opacity:0;transform:translate(-12px,0px);animation-timing-function:cubic-bezier(.22,1,.36,1)}20.5%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k31{0%{opacity:0}19.875%{opacity:0}19.9%{opacity:1}100%{opacity:1}}
+@keyframes k32{0%{opacity:0;transform:translate(-12px,0px)}19.25%{opacity:0;transform:translate(-12px,0px);animation-timing-function:cubic-bezier(.22,1,.36,1)}21.125%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k33{0%{opacity:0}20.5%{opacity:0}20.525%{opacity:1}100%{opacity:1}}
+@keyframes k34{0%{opacity:0;transform:translate(-12px,0px)}19.875%{opacity:0;transform:translate(-12px,0px);animation-timing-function:cubic-bezier(.22,1,.36,1)}21.75%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k35{0%{opacity:0}21.125%{opacity:0}21.15%{opacity:1}100%{opacity:1}}
+@keyframes k36{0%{opacity:0;transform:translate(-12px,0px)}20.5%{opacity:0;transform:translate(-12px,0px);animation-timing-function:cubic-bezier(.22,1,.36,1)}22.375%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k37{0%{opacity:0}21.75%{opacity:0}21.775%{opacity:1}100%{opacity:1}}
+@keyframes k38{0%{opacity:0;transform:translate(-12px,0px)}21.125%{opacity:0;transform:translate(-12px,0px);animation-timing-function:cubic-bezier(.22,1,.36,1)}23%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k39{0%{opacity:0}22.375%{opacity:0}22.4%{opacity:1}100%{opacity:1}}
+@keyframes k40{0%{opacity:0;transform:translate(-12px,0px)}21.75%{opacity:0;transform:translate(-12px,0px);animation-timing-function:cubic-bezier(.22,1,.36,1)}23.625%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k41{0%{opacity:0}23%{opacity:0}23.025%{opacity:1}100%{opacity:1}}
+@keyframes k42{0%{opacity:0;transform:translate(-12px,0px)}22.375%{opacity:0;transform:translate(-12px,0px);animation-timing-function:cubic-bezier(.22,1,.36,1)}24.25%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k43{0%{opacity:0}23.625%{opacity:0}23.65%{opacity:1}100%{opacity:1}}
+@keyframes k44{0%{opacity:0;transform:translate(-12px,0px)}23%{opacity:0;transform:translate(-12px,0px);animation-timing-function:cubic-bezier(.22,1,.36,1)}24.875%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k45{0%{opacity:0;transform:translate(0px,6px)}26.75%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}28.625%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k46{0%{opacity:0;transform:translate(0px,6px)}27.688%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}29.563%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k47{0%{opacity:0;transform:translate(0px,6px)}29.563%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}31.438%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k48{0%{opacity:0;transform:translate(0px,6px)}30.5%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}32.375%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k49{0%{opacity:0;transform:translate(0px,6px)}32.375%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}34.25%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k50{0%{opacity:0;transform:translate(0px,6px)}33.313%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}35.188%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k51{0%{opacity:0}37.688%{opacity:0}37.712%{opacity:1}38.062%{opacity:1}38.087%{opacity:0}100%{opacity:0}}
+@keyframes k52{0%{opacity:0}38.062%{opacity:0}38.087%{opacity:1}38.438%{opacity:1}38.462%{opacity:0}100%{opacity:0}}
+@keyframes k53{0%{opacity:0}38.438%{opacity:0}38.462%{opacity:1}38.812%{opacity:1}38.837%{opacity:0}100%{opacity:0}}
+@keyframes k54{0%{opacity:0}38.812%{opacity:0}38.837%{opacity:1}39.188%{opacity:1}39.212%{opacity:0}100%{opacity:0}}
+@keyframes k55{0%{opacity:0}39.188%{opacity:0}39.212%{opacity:1}39.562%{opacity:1}39.587%{opacity:0}100%{opacity:0}}
+@keyframes k56{0%{opacity:0}39.562%{opacity:0}39.587%{opacity:1}39.938%{opacity:1}39.962%{opacity:0}100%{opacity:0}}
+@keyframes k57{0%{opacity:0}39.938%{opacity:0}39.962%{opacity:1}40.312%{opacity:1}40.337%{opacity:0}100%{opacity:0}}
+@keyframes k58{0%{opacity:0}40.312%{opacity:0}40.337%{opacity:1}40.688%{opacity:1}40.712%{opacity:0}100%{opacity:0}}
+@keyframes k59{0%{opacity:0}40.688%{opacity:0}40.712%{opacity:1}41.062%{opacity:1}41.087%{opacity:0}100%{opacity:0}}
+@keyframes k60{0%{opacity:0}41.062%{opacity:0}41.087%{opacity:1}100%{opacity:1}}
+@keyframes k61{0%{opacity:0;transform:translate(0px,6px)}37.063%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}38.938%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k62{0%{opacity:0;transform:translate(0px,6px)}37.688%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}39.562%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k63{0%{opacity:0;transform:translate(0px,6px)}42.688%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}44.563%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k64{0%{opacity:0;transform:translate(0px,6px)}43.313%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}45.188%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k65{0%{opacity:0;transform:translate(0px,6px)}43.938%{opacity:0;transform:translate(0px,6px);animation-timing-function:cubic-bezier(.22,1,.36,1)}45.813%{opacity:1;transform:translate(0px,0px)}100%{opacity:1;transform:translate(0px,0px)}}
+@keyframes k66{0%{opacity:1}90%{opacity:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}93.125%{opacity:0}100%{opacity:0}}
+.k1{animation:k1 16.0s linear infinite;}
+.k2{animation:k2 16.0s linear infinite;}
+.k3{animation:k3 16.0s linear infinite;}
+.k4{animation:k4 16.0s linear infinite;}
+.k5{animation:k5 16.0s linear infinite;}
+.k6{animation:k6 16.0s linear infinite;}
+.k7{animation:k7 16.0s linear infinite;}
+.k8{animation:k8 16.0s linear infinite;}
+.k9{animation:k9 16.0s linear infinite;}
+.k10{animation:k10 16.0s linear infinite;}
+.k11{animation:k11 16.0s linear infinite;}
+.k12{animation:k12 16.0s linear infinite;}
+.k13{animation:k13 16.0s linear infinite;}
+.k14{animation:k14 16.0s linear infinite;}
+.k15{animation:k15 16.0s linear infinite;}
+.k16{animation:k16 16.0s linear infinite;}
+.k17{animation:k17 16.0s linear infinite;}
+.k18{animation:k18 16.0s linear infinite;}
+.k19{animation:k19 16.0s linear infinite;}
+.k20{animation:k20 16.0s linear infinite;}
+.k21{animation:k21 16.0s linear infinite;}
+.k22{animation:k22 16.0s linear infinite;}
+.k23{animation:k23 16.0s linear infinite;}
+.k24{animation:k24 16.0s linear infinite;}
+.k25{animation:k25 16.0s linear infinite;}
+.k26{animation:k26 16.0s linear infinite;}
+.k27{animation:k27 16.0s linear infinite;}
+.k28{animation:k28 16.0s linear infinite;}
+.k29{animation:k29 16.0s linear infinite;}
+.k30{animation:k30 16.0s linear infinite;}
+.k31{animation:k31 16.0s linear infinite;}
+.k32{animation:k32 16.0s linear infinite;}
+.k33{animation:k33 16.0s linear infinite;}
+.k34{animation:k34 16.0s linear infinite;}
+.k35{animation:k35 16.0s linear infinite;}
+.k36{animation:k36 16.0s linear infinite;}
+.k37{animation:k37 16.0s linear infinite;}
+.k38{animation:k38 16.0s linear infinite;}
+.k39{animation:k39 16.0s linear infinite;}
+.k40{animation:k40 16.0s linear infinite;}
+.k41{animation:k41 16.0s linear infinite;}
+.k42{animation:k42 16.0s linear infinite;}
+.k43{animation:k43 16.0s linear infinite;}
+.k44{animation:k44 16.0s linear infinite;}
+.k45{animation:k45 16.0s linear infinite;}
+.k46{animation:k46 16.0s linear infinite;}
+.k47{animation:k47 16.0s linear infinite;}
+.k48{animation:k48 16.0s linear infinite;}
+.k49{animation:k49 16.0s linear infinite;}
+.k50{animation:k50 16.0s linear infinite;}
+.k51{animation:k51 16.0s linear infinite;}
+.k52{animation:k52 16.0s linear infinite;}
+.k53{animation:k53 16.0s linear infinite;}
+.k54{animation:k54 16.0s linear infinite;}
+.k55{animation:k55 16.0s linear infinite;}
+.k56{animation:k56 16.0s linear infinite;}
+.k57{animation:k57 16.0s linear infinite;}
+.k58{animation:k58 16.0s linear infinite;}
+.k59{animation:k59 16.0s linear infinite;}
+.k60{animation:k60 16.0s linear infinite;}
+.k61{animation:k61 16.0s linear infinite;}
+.k62{animation:k62 16.0s linear infinite;}
+.k63{animation:k63 16.0s linear infinite;}
+.k64{animation:k64 16.0s linear infinite;}
+.k65{animation:k65 16.0s linear infinite;}
+.k66{animation:k66 16.0s linear infinite;}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}.k1{transform:translate(298.8px,0px)}.k2{opacity:0}.k3{opacity:1;transform:translate(0px,0px)}.k4{opacity:1;transform:translate(0px,0px)}.k5{opacity:1;transform:translate(0px,0px)}.k6{opacity:1;transform:translate(0px,0px)}.k7{opacity:1;transform:translate(0px,0px)}.k8{opacity:0}.k9{opacity:0}.k10{opacity:0}.k11{opacity:0}.k12{opacity:1}.k13{opacity:1;transform:translate(0px,0px)}.k14{opacity:0}.k15{opacity:0}.k16{opacity:0}.k17{opacity:0}.k18{opacity:1}.k19{opacity:1;transform:translate(0px,0px)}.k20{opacity:0}.k21{opacity:0}.k22{opacity:1}.k23{opacity:1;transform:translate(0px,0px)}.k24{opacity:0}.k25{opacity:1}.k26{opacity:1;transform:translate(0px,0px)}.k27{opacity:1}.k28{opacity:1;transform:translate(0px,0px)}.k29{opacity:1}.k30{opacity:1;transform:translate(0px,0px)}.k31{opacity:1}.k32{opacity:1;transform:translate(0px,0px)}.k33{opacity:1}.k34{opacity:1;transform:translate(0px,0px)}.k35{opacity:1}.k36{opacity:1;transform:translate(0px,0px)}.k37{opacity:1}.k38{opacity:1;transform:translate(0px,0px)}.k39{opacity:1}.k40{opacity:1;transform:translate(0px,0px)}.k41{opacity:1}.k42{opacity:1;transform:translate(0px,0px)}.k43{opacity:1}.k44{opacity:1;transform:translate(0px,0px)}.k45{opacity:1;transform:translate(0px,0px)}.k46{opacity:1;transform:translate(0px,0px)}.k47{opacity:1;transform:translate(0px,0px)}.k48{opacity:1;transform:translate(0px,0px)}.k49{opacity:1;transform:translate(0px,0px)}.k50{opacity:1;transform:translate(0px,0px)}.k51{opacity:0}.k52{opacity:0}.k53{opacity:0}.k54{opacity:0}.k55{opacity:0}.k56{opacity:0}.k57{opacity:0}.k58{opacity:0}.k59{opacity:0}.k60{opacity:1}.k61{opacity:1;transform:translate(0px,0px)}.k62{opacity:1;transform:translate(0px,0px)}.k63{opacity:1;transform:translate(0px,0px)}.k64{opacity:1;transform:translate(0px,0px)}.k65{opacity:1;transform:translate(0px,0px)}.k66{opacity:1}}</style><rect x="0.5" y="0.5" width="1199" height="877" rx="14" fill="var(--term)" stroke="var(--line)"/><path d="M1 44.5H1199" stroke="var(--line)"/><circle cx="24" cy="22" r="6" fill="var(--line2)"/><circle cx="42" cy="22" r="6" fill="var(--line2)"/><circle cx="60" cy="22" r="6" fill="var(--line2)"/><text x="600.0" y="27" text-anchor="middle" class="dm">~/code: bulkhead scan</text><text x="36" y="82" class="fg"><tspan class="ac b">$ </tspan>bulkhead scan --path ./demo -n 1</text><g class="k1"><rect x="53.3" y="65" width="300.8" height="24" class="cv"/><rect x="53.3" y="68" width="9" height="18" class="ac k2"/></g><g class="k66"><g class="k3"><text x="36" y="104" class="fg"><tspan class="b">bulkhead scan</tspan>  replaying your Claude Code sessions against the guards</text></g><g class="k4"><text x="36" y="126" class="mu"><tspan class="dm">  read     </tspan>14 transcripts (338 KB), 14 sessions, 527 shell commands in 0.1s</text></g><g class="k5"><text x="36" y="148" class="mu"><tspan class="dm">  span     </tspan>Oct 14 .. Nov 06</text></g><g class="k6"><text x="36" y="170" class="mu"><tspan class="dm">  overlap  </tspan>up to <tspan class="fg b">4</tspan> sessions running at once (Oct 29), 4 days with two or more at once</text></g><g class="k7"><text x="36" y="214" class="fg b">GUARD           RULE                HITS  SESSIONS  STOPPED  LAST</text></g><g class="k13"><g class="k8"><text x="36" y="236" class="fg"><tspan class="rd">checkout-guard</tspan>  stage-all              1         5        3  Nov 06</text></g><g class="k9"><text x="36" y="236" class="fg"><tspan class="rd">checkout-guard</tspan>  stage-all              2         5        3  Nov 06</text></g><g class="k10"><text x="36" y="236" class="fg"><tspan class="rd">checkout-guard</tspan>  stage-all              3         5        3  Nov 06</text></g><g class="k11"><text x="36" y="236" class="fg"><tspan class="rd">checkout-guard</tspan>  stage-all              4         5        3  Nov 06</text></g><g class="k12"><text x="36" y="236" class="fg"><tspan class="rd">checkout-guard</tspan>  stage-all              5         5        3  Nov 06</text></g></g><g class="k19"><g class="k14"><text x="36" y="258" class="fg"><tspan class="rd">kill-guard</tspan>      pkill                  1         5        3  Oct 29</text></g><g class="k15"><text x="36" y="258" class="fg"><tspan class="rd">kill-guard</tspan>      pkill                  2         5        3  Oct 29</text></g><g class="k16"><text x="36" y="258" class="fg"><tspan class="rd">kill-guard</tspan>      pkill                  3         5        3  Oct 29</text></g><g class="k17"><text x="36" y="258" class="fg"><tspan class="rd">kill-guard</tspan>      pkill                  4         5        3  Oct 29</text></g><g class="k18"><text x="36" y="258" class="fg"><tspan class="rd">kill-guard</tspan>      pkill                  5         5        3  Oct 29</text></g></g><g class="k23"><g class="k20"><text x="36" y="280" class="fg"><tspan class="am">disk-guard</tspan>      disk-wide-scan         1         3        1  Oct 29</text></g><g class="k21"><text x="36" y="280" class="fg"><tspan class="am">disk-guard</tspan>      disk-wide-scan         2         3        1  Oct 29</text></g><g class="k22"><text x="36" y="280" class="fg"><tspan class="am">disk-guard</tspan>      disk-wide-scan         3         3        1  Oct 29</text></g></g><g class="k26"><g class="k24"><text x="36" y="302" class="fg"><tspan class="rd">checkout-guard</tspan>  git-checkout           1         2        1  Nov 06</text></g><g class="k25"><text x="36" y="302" class="fg"><tspan class="rd">checkout-guard</tspan>  git-checkout           2         2        1  Nov 06</text></g></g><g class="k28"><g class="k27"><text x="36" y="324" class="fg"><tspan class="am">basics</tspan>          agent-author           1         1        -  Oct 14</text></g></g><g class="k30"><g class="k29"><text x="36" y="346" class="fg"><tspan class="am">basics</tspan>          force-push-main        1         1        1  Oct 21</text></g></g><g class="k32"><g class="k31"><text x="36" y="368" class="fg"><tspan class="rd">checkout-guard</tspan>  git-reset              1         1        -  Oct 21</text></g></g><g class="k34"><g class="k33"><text x="36" y="390" class="fg"><tspan class="rd">checkout-guard</tspan>  git-stash              1         1        -  Oct 14</text></g></g><g class="k36"><g class="k35"><text x="36" y="412" class="fg"><tspan class="am">disk-guard</tspan>      disk-wide-find         1         1        -  Oct 14</text></g></g><g class="k38"><g class="k37"><text x="36" y="434" class="fg"><tspan class="am">disk-guard</tspan>      parallel-disk-scan     1         1        -  Oct 14</text></g></g><g class="k40"><g class="k39"><text x="36" y="456" class="fg"><tspan class="rd">kill-guard</tspan>      taskkill-im            1         1        -  Oct 21</text></g></g><g class="k42"><g class="k41"><text x="36" y="478" class="fg"><tspan class="am">wait-guard</tspan>      long-sleep             1         1        -  Oct 21</text></g></g><g class="k44"><g class="k43"><text x="36" y="500" class="fg"><tspan class="am">wait-guard</tspan>      poll-loop              1         1        1  Oct 29</text></g></g><g class="k45"><text x="36" y="544" class="fg"><tspan class="rd">checkout-guard  stage-all</tspan>  5 times in 5 sessions<tspan class="dm">  another session was active in the same tree at that minute</tspan></text></g><g class="k46"><text x="36" y="566" class="fg"><tspan class="dm">  $ </tspan>git add -A<tspan class="dm">  ~/code/billing-api  Nov 06</tspan><tspan class="ac">  [declined by you]</tspan></text></g><g class="k47"><text x="36" y="610" class="fg"><tspan class="rd">kill-guard  pkill</tspan>  5 times in 5 sessions<tspan class="dm">  kills by program name take down every session's servers</tspan></text></g><g class="k48"><text x="36" y="632" class="fg"><tspan class="dm">  $ </tspan>pkill node<tspan class="dm">  ~/code/acme-web  Oct 29</tspan><tspan class="ac">  [stopped by a hook]</tspan></text></g><g class="k49"><text x="36" y="676" class="fg"><tspan class="am">disk-guard  disk-wide-scan</tspan>  3 times in 3 sessions<tspan class="dm">  whole-disk and parallel scans stall every session's I/O</tspan></text></g><g class="k50"><text x="36" y="698" class="fg"><tspan class="dm">  $ </tspan>du -sh ~<tspan class="dm">  ~/code/acme-web  Oct 29</tspan><tspan class="ac">  [stopped by a hook]</tspan></text></g><g class="k61"><g class="k51"><text x="36" y="742" class="fg"><tspan class="b">5 commands in 2 sessions would have been stopped by bulkhead.</tspan> 10 of the hits were already stopped by a hook or</text></g><g class="k52"><text x="36" y="742" class="fg"><tspan class="b">9 commands in 5 sessions would have been stopped by bulkhead.</tspan> 10 of the hits were already stopped by a hook or</text></g><g class="k53"><text x="36" y="742" class="fg"><tspan class="b">12 commands in 7 sessions would have been stopped by bulkhead.</tspan> 10 of the hits were already stopped by a hook or</text></g><g class="k54"><text x="36" y="742" class="fg"><tspan class="b">15 commands in 8 sessions would have been stopped by bulkhead.</tspan> 10 of the hits were already stopped by a hook or</text></g><g class="k55"><text x="36" y="742" class="fg"><tspan class="b">18 commands in 10 sessions would have been stopped by bulkhead.</tspan> 10 of the hits were already stopped by a hook or</text></g><g class="k56"><text x="36" y="742" class="fg"><tspan class="b">20 commands in 11 sessions would have been stopped by bulkhead.</tspan> 10 of the hits were already stopped by a hook or</text></g><g class="k57"><text x="36" y="742" class="fg"><tspan class="b">22 commands in 12 sessions would have been stopped by bulkhead.</tspan> 10 of the hits were already stopped by a hook or</text></g><g class="k58"><text x="36" y="742" class="fg"><tspan class="b">23 commands in 12 sessions would have been stopped by bulkhead.</tspan> 10 of the hits were already stopped by a hook or</text></g><g class="k59"><text x="36" y="742" class="fg"><tspan class="b">24 commands in 13 sessions would have been stopped by bulkhead.</tspan> 10 of the hits were already stopped by a hook or</text></g><g class="k60"><text x="36" y="742" class="fg"><tspan class="b">24 commands in 13 sessions would have been stopped by bulkhead.</tspan> 10 of the hits were already stopped by a hook or</text></g></g><g class="k62"><text x="36" y="764" class="fg">declined by you.</text></g><g class="k63"><text x="36" y="786" class="dm">A hit means the command had the shape a guard blocks, not that damage was done. port-guard and the low-RAM check</text></g><g class="k64"><text x="36" y="808" class="dm">depend on what was running at that moment and are not replayed. checkout-guard is replayed from which sessions were</text></g><g class="k65"><text x="36" y="830" class="dm">active in the same folder.</text></g></g></svg>
