@@ -12,7 +12,7 @@ const ROOT = path.join(__dirname, '..', '..')
 const MOCK = path.join(__dirname, 'mock.js')
 
 // The PreToolUse guards, in the order hooks/hooks.json runs them.
-const GUARDS = ['kill-guard', 'wait-guard', 'memory-guard', 'port-guard', 'checkout-guard', 'basics']
+const GUARDS = ['kill-guard', 'wait-guard', 'memory-guard', 'port-guard', 'checkout-guard', 'disk-guard', 'basics']
 
 const PLENTY = { freeGb: 24, totalGb: 32, commitPct: 20 }
 const LOW = { freeGb: 0.8, totalGb: 32, commitPct: 20 }

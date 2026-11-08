@@ -4,7 +4,7 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 const { execFileSync } = require('child_process')
-const { check, changesTree } = require('../src/checkout-guard')
+const { check, classify, changesTree, linksIn } = require('../src/checkout-guard')
 const { runScript, tempDir } = require('./helpers')
 
 const repo = path.resolve('/work/shop')
@@ -94,4 +94,61 @@ test('hook fails open', () => {
   const env = { CLAUDE_CONFIG_DIR: tempDir() }
   assert.strictEqual(runScript('checkout-guard', { session_id: 'x', cwd: process.cwd(), tool_input: { command: 'git checkout main' } }, env).status, 0)
   assert.strictEqual(runScript('checkout-guard', 'not json').status, 0)
+})
+
+test('stage-all is blocked when another session shares a dirty tree', () => {
+  const dirty = ctx({ run: fakeGit({ status: ' M src/app.js\n?? web/new.ts' }) })
+  for (const cmd of ['git add -A', 'git add .', 'git add --all', 'git add -u', 'git commit -am "wip"', 'git commit -a -m wip', 'git commit --all -m x',
+    'cd web && git add .']) {
+    const msg = check(cmd, dirty)
+    assert.ok(msg, cmd)
+    assert.match(msg, /stages every change .* \(2 files\)/, cmd)
+    assert.match(msg, /git add src\/a.ts/, cmd)
+  }
+  assert.strictEqual(classify('git add -A', dirty).rule, 'stage-all')
+})
+
+test('stage-all passes for named files, a clean tree, or a tree nobody else is in', () => {
+  const dirty = ctx({ run: fakeGit({ status: ' M src/app.js' }) })
+  for (const cmd of ['git add src/app.js', 'git add -p', 'git commit -m "add all the things"', 'git commit --amend --no-edit', 'git add -- src/app.js']) {
+    assert.strictEqual(check(cmd, dirty), null, cmd)
+  }
+  assert.strictEqual(check('git add -A', ctx()), null)
+  assert.strictEqual(check('git add -A', { ...dirty, files: () => new Map([[300, sessions.get(300)]]) }), null)
+  assert.strictEqual(check('git add -A', { ...dirty, stageRule: () => false }), null)
+})
+
+test('deleting a folder another live session works in is blocked', () => {
+  for (const cmd of ['rm -rf web', 'rm -rf /work/shop', 'git worktree remove /work/shop/web', 'git worktree remove --force web', 'rm -rf ../shop']) {
+    const hit = classify(cmd, ctx())
+    assert.ok(hit, cmd)
+    assert.strictEqual(hit.rule, 'remove-session-dir', cmd)
+    assert.match(hit.why, /pid 200/, cmd)
+  }
+  // the blog session is in /work/blog
+  assert.strictEqual(classify('rm -rf /work/blog/dist', ctx()), null)
+  assert.strictEqual(classify('rm -rf /work/blog', ctx()).rule, 'remove-session-dir')
+  // dead sessions, deeper folders and other folders pass
+  for (const cmd of ['rm -rf web/dist', 'rm -rf /work/other', 'git worktree remove ../shop-fix', 'rm -rf "$TARGET"']) assert.strictEqual(classify(cmd, ctx()), null, cmd)
+  assert.strictEqual(classify('rm -rf web', ctx({ removeRule: () => false })), null)
+})
+
+test('git worktree remove --force on Windows checks for links first', () => {
+  const links = () => ['C:\\work\\shop-fix\\node_modules']
+  const win = { cwd: 'C:\\work\\shop', platform: 'win32', links, sessionId: null }
+  const hit = classify('git worktree remove --force ../shop-fix', win)
+  assert.strictEqual(hit.rule, 'worktree-force-links')
+  assert.match(hit.why, /node_modules/)
+  assert.strictEqual(classify('git worktree remove ../shop-fix', win), null)
+  assert.strictEqual(classify('git worktree remove --force ../shop-fix', { ...win, links: () => [] }), null)
+  assert.strictEqual(classify('git worktree remove --force ../shop-fix', { ...win, platform: 'linux' }), null)
+})
+
+test('linksIn finds links two levels down', () => {
+  const dir = tempDir()
+  fs.mkdirSync(path.join(dir, 'pkg'))
+  fs.symlinkSync(tempDir(), path.join(dir, 'pkg', 'node_modules'), 'junction')
+  const found = linksIn(dir)
+  assert.strictEqual(found.length, 1)
+  assert.match(found[0], /node_modules$/)
 })

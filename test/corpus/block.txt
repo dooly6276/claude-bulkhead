@@ -542,6 +542,42 @@ checkout-guard	env GIT_PAGER=cat git checkout -b fix/login
 checkout-guard	sh -c 'git stash && git checkout main'
 checkout-guard	cmd /c "git checkout main"
 
+# == checkout-guard: staging every change in a shared tree ==
+checkout-guard	git add -A && git commit -m "wip"
+checkout-guard	git add .
+checkout-guard	git commit -am "wip"
+checkout-guard	git add --all
+checkout-guard	bash -c 'git add -u && git commit -m x'
+
+# == disk-guard: whole-drive and parallel scans ==
+disk-guard	du -sh ~
+disk-guard	du -sh ~/*
+disk-guard	sudo du -sh /
+disk-guard	ncdu /
+disk-guard	du -h -d 1 ~ | sort -h
+disk-guard	find / -name "*.sqlite"
+disk-guard	find ~ -name node_modules -type d
+disk-guard	ls ~ | xargs -P 10 -I{} du -sm ~/{}
+disk-guard	for d in ~/dev/*/; do du -sh "$d" & done; wait
+disk-guard	du -sh a & du -sh b & wait
+disk-guard	bash -c "du -sh ~"
+#@ tool PowerShell
+disk-guard	Get-ChildItem $env:USERPROFILE -Recurse | Measure-Object -Property Length -Sum
+disk-guard	Get-ChildItem C:\ -Recurse -Filter *.log
+#@ tool Bash
+
+# == basics: commits authored as the agent ==
+basics	git commit -m "fix" --author="Claude <noreply@anthropic.com>"
+basics	git config user.name "Claude"
+basics	git config --global user.email noreply@anthropic.com
+basics	GIT_AUTHOR_NAME=Claude git commit -m x
+basics	git -c user.name=Claude commit -m x
+
+# == basics: folders directly in home ==
+basics	rm -rf ~/Documents
+basics	rm -rf ~/old-exports
+basics	rm -rf /srv
+
 # == basics: casings, wrappers, settings ==
 basics	rm -fR /
 basics	bash -c "rm -rf ~"

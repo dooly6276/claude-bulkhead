@@ -21,6 +21,11 @@
     "ignorePorts": [9229]
   },
   "checkoutGuard": {
+    "enabled": true,
+    "stageAll": true,
+    "removeSessionDir": true
+  },
+  "diskGuard": {
     "enabled": true
   },
   "basics": {
@@ -28,7 +33,8 @@
     "protectedBranches": ["main", "master", "release"],
     "rmRoot": true,
     "forcePushMain": true,
-    "discardChanges": true
+    "discardChanges": true,
+    "agentAuthor": true
   },
   "orphanReaper": {
     "enabled": true,

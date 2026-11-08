@@ -2,14 +2,14 @@
   "name": "bulkhead",
   "description": "Hooks for running many Claude Code sessions on one machine.",
   "owner": {
-    "name": "Myeongseok-Kang",
-    "url": "https://github.com/Myeongseok-Kang"
+    "name": "Myeongseok Kang",
+    "url": "https://github.com/dooly6276"
   },
   "plugins": [
     {
       "name": "bulkhead",
       "source": "./",
-      "description": "Blocks name-based kills, port collisions, long foreground sleeps and git tree changes under another session, budgets RAM for heavy commands, and stops the servers, test workers and watchers that exited sessions leave behind."
+      "description": "Blocks name-based kills, port collisions, whole-disk and parallel scans, long foreground sleeps, and git commands that would move, sweep up or delete another session's tree; budgets RAM for heavy commands; stops what exited sessions leave running; and replays your past transcripts with bulkhead scan."
     }
   ]
 }

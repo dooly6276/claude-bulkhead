@@ -77,16 +77,25 @@ The built-in shared list is: node, python, python3, py, pythonw, ruby, java, jav
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Turns checkout-guard on or off |
+| `stageAll` | boolean | `true` | `git add -A`, `git add .` and `git commit -a` in a tree another live session works in |
+| `removeSessionDir` | boolean | `true` | `rm -rf` and `git worktree remove` on a folder another live session works in |
+
+### diskGuard
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Turns disk-guard on or off |
 
 ### basics
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `enabled` | boolean | `true` | Turns all three rules on or off |
+| `enabled` | boolean | `true` | Turns all four rules on or off |
 | `protectedBranches` | list of branch names | `["main", "master"]` | Branches the force-push rule protects |
-| `rmRoot` | boolean | `true` | `rm -rf` and its PowerShell and cmd forms at a root, the home directory, or a folder above the repository |
+| `rmRoot` | boolean | `true` | `rm -rf` and its PowerShell and cmd forms at a root, a top-level folder such as `/srv`, the home directory, a folder directly in it (caches excepted), or a folder above the repository |
 | `forcePushMain` | boolean | `true` | `git push --force` to a protected branch. `--force-with-lease` always passes |
 | `discardChanges` | boolean | `true` | `git reset --hard` or `git clean -fd` that would lose uncommitted work |
+| `agentAuthor` | boolean | `true` | Commits authored as Claude or Anthropic: `--author`, `git config user.name/user.email`, `GIT_AUTHOR_*` |
 
 ### orphanReaper
 

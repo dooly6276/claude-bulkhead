@@ -19,6 +19,7 @@ const BLOCK_STATE = {
   'memory-guard': 'low-ram',
   'port-guard': 'busy-ports',
   'checkout-guard': 'shared-tree',
+  'disk-guard': 'quiet',
   basics: 'dirty',
 }
 

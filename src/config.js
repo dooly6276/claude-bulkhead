@@ -17,11 +17,19 @@ const GUARDS = {
   'memory-guard': 'memoryGuard',
   'port-guard': 'portGuard',
   'checkout-guard': 'checkoutGuard',
+  'disk-guard': 'diskGuard',
   basics: 'basics',
   'orphan-reaper': 'orphanReaper',
 }
-// basics rules that can be turned off one at a time
-const RULES = { 'rm-root': 'basics.rmRoot', 'force-push-main': 'basics.forcePushMain', 'discard-changes': 'basics.discardChanges' }
+// rules that can be turned off one at a time, inside a guard that stays on
+const RULES = {
+  'rm-root': 'basics.rmRoot',
+  'force-push-main': 'basics.forcePushMain',
+  'discard-changes': 'basics.discardChanges',
+  'agent-author': 'basics.agentAuthor',
+  'stage-all': 'checkoutGuard.stageAll',
+  'remove-session-dir': 'checkoutGuard.removeSessionDir',
+}
 
 const bool = (def, doc) => ({ type: 'boolean', default: def, doc })
 const on = g => bool(true, `Turn ${g} on or off.`)
@@ -39,11 +47,15 @@ const KEYS = {
   'portGuard.enabled': on('port-guard'),
   'portGuard.ignorePorts': { type: 'number[]', default: [], doc: 'Ports port-guard never checks, for starting servers or for kills by port.' },
   'checkoutGuard.enabled': on('checkout-guard'),
+  'checkoutGuard.stageAll': bool(true, 'Block git add -A, git add . and git commit -a when another live session works in the same tree.'),
+  'checkoutGuard.removeSessionDir': bool(true, 'Block rm -rf and git worktree remove on a folder another live session works in.'),
+  'diskGuard.enabled': on('disk-guard'),
   'basics.enabled': on('basics'),
   'basics.protectedBranches': { type: 'string[]', default: ['main', 'master'], doc: 'Branches force-push-main protects.' },
-  'basics.rmRoot': bool(true, 'Block rm -rf at roots, the home directory and folders above the repository.'),
+  'basics.rmRoot': bool(true, 'Block rm -rf at roots, top-level system folders, the home directory, folders directly in it (caches excepted) and folders above the repository.'),
   'basics.forcePushMain': bool(true, 'Block force-pushes to the protected branches.'),
   'basics.discardChanges': bool(true, 'Block git reset --hard and git clean -fd that would lose work.'),
+  'basics.agentAuthor': bool(true, 'Block commits authored as Claude or Anthropic (--author, git config user.*, GIT_AUTHOR_*), so the work counts as yours.'),
   'orphanReaper.enabled': on('orphan-reaper'),
   'orphanReaper.onSessionEnd': bool(true, 'Also reap right after a session exits, not only when the next session starts.'),
   'orphanReaper.extraNames': { type: 'string[]', default: [], doc: 'More program names orphan-reaper stops once the session that started them has exited.' },

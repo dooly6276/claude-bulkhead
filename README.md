@@ -5,7 +5,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/hero.svg" alt="Three Claude Code sessions on one repository in three git worktrees. port-guard moves a second dev server off port 3000, kill-guard blocks pkill node while both dev servers keep running, and bulkhead-slot queues a third heavy job so free RAM stays above the floor." width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/hero-light.svg">
+    <img src="docs/hero.svg" alt="Several Claude Code sessions in separate git worktrees on one machine. kill-guard blocks pkill node, port-guard moves a second dev server to a free port, disk-guard stops ten parallel du scans, checkout-guard stops git add -A from sweeping another session's edits into a commit, and bulkhead-slot queues a third heavy job so free RAM stays above the floor. bulkhead scan then counts what it would have stopped in past sessions." width="100%">
+  </picture>
 </p>
 
 <h1 align="center">claude-bulkhead</h1>
@@ -14,10 +17,10 @@
   <strong>Hooks that stop parallel Claude Code sessions on one machine from killing each other's servers or running it out of RAM.</strong>
 </p>
 
-<p align="center">7 guards, 9 commands, a status line, 5 slash commands, 1 skill, zero dependencies</p>
+<p align="center">8 guards, 10 commands, a status line, 6 slash commands, 1 skill, zero dependencies</p>
 
 <p align="center">
-  <a href="https://github.com/Myeongseok-Kang/claude-bulkhead/actions/workflows/test.yml"><img src="https://github.com/Myeongseok-Kang/claude-bulkhead/actions/workflows/test.yml/badge.svg" alt="tests"></a>
+  <a href="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml"><img src="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml/badge.svg" alt="tests"></a>
   <img src="https://img.shields.io/badge/node-18%2B-34d6b4?style=flat-square" alt="Node 18+">
   <img src="https://img.shields.io/badge/dependencies-0-34d6b4?style=flat-square" alt="zero dependencies">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-34d6b4?style=flat-square" alt="MIT license"></a>
@@ -25,6 +28,7 @@
 
 <p align="center">
   <a href="#what-is-it"><strong>What is it</strong></a> |
+  <a href="#do-you-need-it-ask-your-transcripts"><strong>Scan</strong></a> |
   <a href="#why-this-exists"><strong>Why</strong></a> |
   <a href="#what-it-does"><strong>Features</strong></a> |
   <a href="#install"><strong>Install</strong></a> |
@@ -35,7 +39,7 @@
   <a href="#faq"><strong>FAQ</strong></a>
 </p>
 
-> Release notes: [CHANGELOG.md](CHANGELOG.md).
+> **New in 0.2.0:** [`bulkhead scan`](#do-you-need-it-ask-your-transcripts) replays your past Claude Code sessions against the guards, a new [disk-guard](docs/guards/disk-guard.md) stops whole-disk and parallel scans, checkout-guard now stops `git add -A` from sweeping another session's edits into your commit and `rm -rf` of a folder another session works in, and basics stops commits authored as Claude. Release notes: [CHANGELOG.md](CHANGELOG.md).
 
 ## What is it?
 
@@ -55,6 +59,27 @@ bulkhead is a set of these hooks for one situation: several Claude Code sessions
 | A session checks out another branch in a tree that a second session is editing. | checkout-guard blocks it and suggests `git worktree add`. |
 | A session exits, and its dev servers, test workers and watchers keep running and holding RAM and ports. | orphan-reaper stops them within seconds of the session exiting. |
 | A subagent polls in the foreground for ten minutes. The session cannot answer you, and the prompt cache expires. | wait-guard blocks the loop and asks for `run_in_background: true`. |
+| An agent wants to know what is using disk space and runs ten `du` at once over your home folder. Every session's builds and `git status` crawl for minutes. | disk-guard blocks it and asks for one folder at a time. |
+| Two sessions share a checkout. One runs `git add -A && git commit`, and the other one's half-finished edits ship in that commit. | checkout-guard blocks it and asks for the file names. |
+| A "clean up the worktrees" task runs `git worktree remove` on a worktree a second session is still working in. | checkout-guard blocks it and names the session that is still there. |
+
+## Do you need it? Ask your transcripts
+
+You do not have to guess. Claude Code keeps every session's transcript in `~/.claude/projects`, and `bulkhead scan` replays the shell commands in them against the guards: how many sessions you really run at once, and how often they already did the things bulkhead blocks.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/scan-light.svg">
+    <img src="docs/scan.svg" alt="bulkhead scan reads a month of transcripts, reports the most sessions that ran at once, and lists per guard and rule how many commands would have been stopped, in how many sessions, and how many a hook or the user already stopped." width="100%">
+  </picture>
+</p>
+
+```
+/plugin install bulkhead@bulkhead      # then, inside Claude Code:
+/bulkhead:scan 30d
+```
+
+It only reads, masks anything that looks like a secret before printing, and sends nothing anywhere. port-guard and the low-RAM check are not replayed, because transcripts do not record which ports and how much RAM were in use; checkout-guard is rebuilt from which sessions were active in the same git tree at that minute. Details: [docs/commands.md](docs/commands.md#bulkhead-scan).
 
 ## Why this exists
 
@@ -81,10 +106,11 @@ claude-bulkhead is a set of small hooks that block or clean up each of these. Ea
 | | |
 |---|---|
 | **[kill-guard](docs/guards/kill-guard.md)**<br>Blocks `pkill node`, `taskkill /IM`, `Stop-Process -Name` and other kills by program name. Kills by PID pass. | **[port-guard](docs/guards/port-guard.md)**<br>Blocks starting a dev server on a port another session already serves, and killing that session's server by port. |
-| **[memory-guard and bulkhead-slot](docs/guards/memory-guard.md)**<br>Blocks heavy commands when RAM is low, and queues heavy jobs against one RAM budget shared by every session. | **[checkout-guard](docs/guards/checkout-guard.md)**<br>Blocks `git checkout`, `stash`, `reset --hard` and similar when another live session works in the same tree. |
+| **[memory-guard and bulkhead-slot](docs/guards/memory-guard.md)**<br>Blocks heavy commands when RAM is low, and queues heavy jobs against one RAM budget shared by every session. | **[checkout-guard](docs/guards/checkout-guard.md)**<br>Blocks `git checkout`, `stash`, `reset --hard`, `git add -A` and similar when another live session works in the same tree, and deleting a folder another session works in. |
 | **[wait-guard](docs/guards/wait-guard.md)**<br>Blocks foreground sleep loops longer than 3 minutes, which make the next request rewrite the whole prompt cache. | **[orphan-reaper](docs/guards/orphan-reaper.md)**<br>When a session exits, stops the dev servers, test workers, watchers and headless browsers it left running. |
-| **[basics](docs/guards/basics.md)**<br>Blocks `rm -rf` at a root or home, force-pushes to `main`, and resets that would lose uncommitted work. | **[`bulkhead status`, `top`, `log`, `doctor`](#see-what-is-running)**<br>Shows every session, its RAM, its ports, queued jobs, and what the guards have blocked. |
-| **[Status line](#status-line)**<br>`3 sessions  2 heavy  9.1 GB free` in the Claude Code status line, in under 100 ms. | **[Config and slash commands](#configuration)**<br>Per-machine and per-project config with allow lists, plus `/bulkhead:status`, `/bulkhead:log`, `/bulkhead:doctor` and `/bulkhead:reap`. |
+| **[disk-guard](docs/guards/disk-guard.md)** <sup>new</sup><br>Blocks `du -sh ~`, `find /` without `-maxdepth`, and disk scans run in parallel, which stall the disk every session shares. | **[`bulkhead scan`](#do-you-need-it-ask-your-transcripts)** <sup>new</sup><br>Replays your past Claude Code transcripts against the guards: what they would have stopped, and how many sessions ran at once. |
+| **[basics](docs/guards/basics.md)**<br>Blocks `rm -rf` at a root, home or a folder directly in it, force-pushes to `main`, resets that would lose uncommitted work, and commits authored as Claude. | **[`bulkhead status`, `top`, `log`, `doctor`](#see-what-is-running)**<br>Shows every session, its RAM, its ports, queued jobs, and what the guards have blocked. |
+| **[Status line](#status-line)**<br>`3 sessions  2 heavy  9.1 GB free` in the Claude Code status line, in under 100 ms. | **[Config and slash commands](#configuration)**<br>Per-machine and per-project config with allow lists, plus `/bulkhead:scan`, `/bulkhead:status`, `/bulkhead:log`, `/bulkhead:doctor` and `/bulkhead:reap`. |
 
 Optional: **[`bulkhead remote`](#run-heavy-jobs-on-another-machine-optional)** runs a test suite, a build or a browser run on another machine over SSH, when this one has no RAM to spare.
 
@@ -97,7 +123,7 @@ Recorded with [docs/demo.sh](docs/demo.sh). The two sessions are stand-in proces
 ## Install
 
 ```
-/plugin marketplace add Myeongseok-Kang/claude-bulkhead
+/plugin marketplace add dooly6276/claude-bulkhead
 /plugin install bulkhead@bulkhead
 ```
 
@@ -106,8 +132,9 @@ Node 18 or later must be on `PATH`. The native Claude Code installer does not in
 ## Quick start
 
 1. Install the plugin as above and start a new Claude Code session.
-2. Check the setup. Inside Claude Code run `/bulkhead:doctor`, or run `bulkhead doctor` in the Bash tool. Every line should say `OK`. A `WARN` or `FAIL` line names the guard and the reason.
-3. Open a terminal next to your sessions and run `bulkhead top` to watch sessions, RAM, ports and heavy jobs live. Press `q` to quit.
+2. See what it would have caught: run `/bulkhead:scan 30d`, or `bulkhead scan` in the Bash tool. It reads your last month of transcripts and changes nothing.
+3. Check the setup. Inside Claude Code run `/bulkhead:doctor`, or run `bulkhead doctor` in the Bash tool. Every line should say `OK`. A `WARN` or `FAIL` line names the guard and the reason.
+4. Open a terminal next to your sessions and run `bulkhead top` to watch sessions, RAM, ports and heavy jobs live. Press `q` to quit.
 
 After that there is nothing to do. The guards run on every Bash and PowerShell call. To see what they stopped, run `bulkhead log` or `/bulkhead:log`; `bulkhead log --summary` counts blocks per guard on your machine. To change a threshold or allow a command, see [docs/configuration.md](docs/configuration.md). All commands are listed in [docs/commands.md](docs/commands.md).
 
@@ -143,7 +170,7 @@ bulkhead remote run -- npm test
 
 ```mermaid
 flowchart LR
-  CC["Claude Code session"] -->|"PreToolUse: Bash, PowerShell"| G["kill-guard, wait-guard, memory-guard,<br>port-guard, checkout-guard, basics"]
+  CC["Claude Code session"] -->|"PreToolUse: Bash, PowerShell"| G["kill-guard, wait-guard, memory-guard,<br>port-guard, checkout-guard, disk-guard, basics"]
   CC -->|"SessionEnd, SessionStart"| R["orphan-reaper (background)"]
   G -->|"read"| P["process table, listening ports,<br>~/.claude/sessions"]
   G <-->|"read, append"| S[("state dir ~/.claude/bulkhead<br>slots, guards.log, events.jsonl")]
@@ -188,9 +215,17 @@ Turn off: `BULKHEAD_DISABLE=memory-guard`. Details: [docs/guards/memory-guard.md
 <details>
 <summary><strong>checkout-guard</strong>: two sessions in one git tree</summary>
 
-Blocks `git checkout <branch>`, `switch`, `stash`, `reset --hard`, `clean -f`, `rebase`, `merge`, `restore .` and a dirty `pull` when another live session works in the same tree, and suggests `git worktree add`.
+Blocks `git checkout <branch>`, `switch`, `stash`, `reset --hard`, `clean -f`, `rebase`, `merge`, `restore .` and a dirty `pull` when another live session works in the same tree, and suggests `git worktree add`. Also blocks `git add -A`, `git add .` and `git commit -a` there (`stage-all`), which would sweep the other session's half-finished edits into your commit, and `rm -rf` or `git worktree remove` of a folder another live session works in (`remove-session-dir`). On Windows it blocks `git worktree remove --force` on a worktree that holds junctions, which git has followed into the main checkout.
 
-Turn off: `BULKHEAD_DISABLE=checkout-guard`. Details: [docs/guards/checkout-guard.md](docs/guards/checkout-guard.md).
+Turn off: `BULKHEAD_DISABLE=checkout-guard`, or one rule with `BULKHEAD_DISABLE=stage-all` or `remove-session-dir`. Details: [docs/guards/checkout-guard.md](docs/guards/checkout-guard.md).
+</details>
+
+<details>
+<summary><strong>disk-guard</strong>: whole-disk and parallel scans</summary>
+
+Blocks `du`, `ncdu`, `dust`, `ls -R`, `Get-ChildItem -Recurse` and `dir /s` over the whole drive, the home folder or every user's home (`du -sh ~`, `du -sh ~/*`, `ncdu /`), `find /` and `find ~` without `-maxdepth`, and disk scans run in parallel wherever they point: `xargs -P 10 du`, GNU `parallel`, `du ... &` in a loop, `ForEach-Object -Parallel`. One folder at a time passes (`du -sh node_modules`, `du -sh ~/Library/Caches`).
+
+Turn off: `BULKHEAD_DISABLE=disk-guard`. Details: [docs/guards/disk-guard.md](docs/guards/disk-guard.md).
 </details>
 
 <details>
@@ -210,9 +245,9 @@ Turn off: `BULKHEAD_DISABLE=orphan-reaper`. Details: [docs/guards/orphan-reaper.
 </details>
 
 <details>
-<summary><strong>basics</strong>: three mistakes that cannot be undone</summary>
+<summary><strong>basics</strong>: four mistakes that cannot be undone</summary>
 
-`rm-root` (`rm -rf` at a root, home or above the repository), `force-push-main` (`git push --force` to `main` or `master`; `--force-with-lease` passes) and `discard-changes` (`git reset --hard` or `git clean -fd` that would lose uncommitted work).
+`rm-root` (`rm -rf` at a root, a top-level folder such as `/srv`, home, a folder directly in home such as `~/Documents`, or above the repository), `force-push-main` (`git push --force` to `main` or `master`; `--force-with-lease` passes), `discard-changes` (`git reset --hard` or `git clean -fd` that would lose uncommitted work) and `agent-author` (`--author="Claude <noreply@anthropic.com>"`, `git config user.name Claude` and the like, so your commits keep counting as yours).
 
 Turn off: `BULKHEAD_DISABLE=basics`, or one rule by name. Details: [docs/guards/basics.md](docs/guards/basics.md).
 </details>
@@ -221,7 +256,7 @@ Turn off: `BULKHEAD_DISABLE=basics`, or one rule by name. Details: [docs/guards/
 
 General safety packs protect a session from dangerous commands. For example, [claude-forge](https://github.com/sangrokjung/claude-forge) includes hooks that filter leaked secrets from output, block piped remote scripts and stop destructive SQL, and [dcg](https://github.com/Dicklesworthstone/destructive_command_guard) and [cc-safety-net](https://github.com/kenryu42/claude-code-safety-net) cover destructive shell and git commands broadly. They are worth using.
 
-bulkhead covers a different problem: sessions on one machine getting in each other's way through process ownership, ports, shared RAM and a shared git tree. Only its three `basics` rules overlap with those packs, and you can turn them off with `BULKHEAD_DISABLE=basics` if another pack already covers them. bulkhead runs alongside other hooks: Claude Code runs every hook that matches a tool call, and the call is stopped if any of them blocks it.
+bulkhead covers a different problem: sessions on one machine getting in each other's way through process ownership, ports, shared RAM and a shared git tree. Only its `basics` rules overlap with those packs, and you can turn them off with `BULKHEAD_DISABLE=basics` if another pack already covers them. bulkhead runs alongside other hooks: Claude Code runs every hook that matches a tool call, and the call is stopped if any of them blocks it.
 
 ## Configuration
 
@@ -245,7 +280,7 @@ Environment variables still work and win over both files. The simplest place for
 
 | Variable | Default | Same as |
 |---|---|---|
-| `BULKHEAD_DISABLE` | empty | Comma-separated guards to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `orphan-reaper`, `basics`, or `all`. The basics rules can also be turned off one at a time: `rm-root`, `force-push-main`, `discard-changes`. A name here is off whatever the files say |
+| `BULKHEAD_DISABLE` | empty | Comma-separated guards to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `disk-guard`, `orphan-reaper`, `basics`, or `all`. Single rules can be turned off too: `rm-root`, `force-push-main`, `discard-changes`, `agent-author`, `stage-all`, `remove-session-dir`. A name here is off whatever the files say |
 | `BULKHEAD_WAIT_MAX_SEC` | 180 | `waitGuard.limitSeconds` |
 | `BULKHEAD_MIN_FREE_GB` | 3, or 15% of RAM if less | `memory.minFreeGb` |
 | `BULKHEAD_SLOT_FLOOR_GB` | 5, or 25% of RAM if less | `memory.slotFloorGb` |
@@ -258,7 +293,7 @@ Environment variables still work and win over both files. The simplest place for
 
 ## See what is running
 
-`bulkhead` is on the Bash tool's `PATH` next to `bulkhead-slot`. Inside Claude Code, `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor` and `/bulkhead:reap` run the matching command and summarize it. To run it in your own terminal, call it by path, for example `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.1.1/bin/bulkhead top` (the cache path depends on your install; `/plugin` shows it). Every command that prints a table takes `--json`. The full reference is [docs/commands.md](docs/commands.md).
+`bulkhead` is on the Bash tool's `PATH` next to `bulkhead-slot`. Inside Claude Code, `/bulkhead:scan [30d]`, `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor` and `/bulkhead:reap` run the matching command and summarize it. To run it in your own terminal, call it by path, for example `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0/bin/bulkhead top` (the cache path depends on your install; `/plugin` shows it). Every command that prints a table takes `--json`. The full reference is [docs/commands.md](docs/commands.md).
 
 ### bulkhead status
 
@@ -341,7 +376,7 @@ Checks Node, the plugin files, the state directory, the config files, each guard
 ```
 $ bulkhead doctor
 OK    node            v24.11.0
-OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.1.1, hooks: 2 SessionStart, 1 SessionEnd, 6 PreToolUse
+OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
 OK    state dir       ~/.claude/bulkhead is writable
 OK    config          no config files, defaults in use
 OK    kill-guard      on
@@ -349,6 +384,7 @@ OK    wait-guard      on, limit 180s
 OK    memory-guard    on
 OK    port-guard      on
 OK    checkout-guard  on
+OK    disk-guard      on
 OK    basics          on, protected branches: main, master
 OK    orphan-reaper   on, at session start and after each session ends
 OK    hook run        kill-guard blocked a test command in 90 ms
@@ -359,7 +395,7 @@ OK    slots           none held
 OK    event log       ~/.claude/bulkhead/events.jsonl, empty so far
 OK    git             2.52.0.windows.1
 
-18 OK, 0 WARN, 0 FAIL
+19 OK, 0 WARN, 0 FAIL
 ```
 
 ### bulkhead port
@@ -397,7 +433,7 @@ A plugin cannot set the main status line (plugin settings only support `agent` a
 {
   "statusLine": {
     "type": "command",
-    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.1.1/bin/bulkhead-statusline",
+    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0/bin/bulkhead-statusline",
     "refreshInterval": 10
   }
 }
@@ -411,7 +447,7 @@ The path contains the plugin version, so update it after a plugin update. If you
 A little. Each guard is one short Node process. On a Windows 11 desktop with Node 24, `node scripts/bench-hooks.js 15` measured 40 to 49 ms per guard on an allowed command (median of 15 runs), and 33 ms for starting Node alone. Writing a block to the event log adds no measurable time. The guards only do slow work, such as reading the process list (a second or two on Windows), when the command matches: a dev server start on a port that already answers, a kill, a heavy command. The status line takes under 100 ms and is cached for 5 seconds.
 
 **It blocked something it should not have. What do I do?**
-Run `bulkhead log` to see the exact command and reason. Let it through in the project config, `<repo>/.claude/bulkhead.json`: `killGuard.allowNames` for a program name, `portGuard.ignorePorts` for a shared port, `waitGuard.limitSeconds` for a longer wait, or `"enabled": false` for the whole guard in that project. See [docs/configuration.md](docs/configuration.md). Then please open a [false positive issue](https://github.com/Myeongseok-Kang/claude-bulkhead/issues/new?template=false-positive.yml) with the line from `bulkhead log`, so the pattern can be fixed for everyone.
+Run `bulkhead log` to see the exact command and reason. Let it through in the project config, `<repo>/.claude/bulkhead.json`: `killGuard.allowNames` for a program name, `portGuard.ignorePorts` for a shared port, `waitGuard.limitSeconds` for a longer wait, or `"enabled": false` for the whole guard in that project. See [docs/configuration.md](docs/configuration.md). Then please open a [false positive issue](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml) with the line from `bulkhead log`, so the pattern can be fixed for everyone.
 
 **Is it useful with a single session?**
 Yes. kill-guard, wait-guard, memory-guard and basics protect one session and its subagents just as well. port-guard and checkout-guard only act when another session is alive, and orphan-reaper cleans up after sessions that have exited.
@@ -445,10 +481,10 @@ Then delete the state directory (`~/.claude/bulkhead`, or `BULKHEAD_STATE_DIR` i
 Add this badge to your project's README:
 
 ```markdown
-[![Guarded by bulkhead](https://img.shields.io/badge/guarded_by-bulkhead-34d6b4?style=flat-square)](https://github.com/Myeongseok-Kang/claude-bulkhead)
+[![Guarded by bulkhead](https://img.shields.io/badge/guarded_by-bulkhead-34d6b4?style=flat-square)](https://github.com/dooly6276/claude-bulkhead)
 ```
 
-It renders as [![Guarded by bulkhead](https://img.shields.io/badge/guarded_by-bulkhead-34d6b4?style=flat-square)](https://github.com/Myeongseok-Kang/claude-bulkhead)
+It renders as [![Guarded by bulkhead](https://img.shields.io/badge/guarded_by-bulkhead-34d6b4?style=flat-square)](https://github.com/dooly6276/claude-bulkhead)
 
 ## Contributing
 

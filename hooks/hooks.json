@@ -30,6 +30,7 @@
           { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/memory-guard.js"], "timeout": 15 },
           { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/port-guard.js"], "timeout": 20 },
           { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/checkout-guard.js"], "timeout": 15 },
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/disk-guard.js"], "timeout": 10 },
           { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/basics.js"], "timeout": 10 }
         ]
       }

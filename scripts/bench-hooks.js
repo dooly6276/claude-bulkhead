@@ -19,6 +19,7 @@ const cases = [
   ['memory-guard', 'ls -la', 'echo x > ~/.claude/bulkhead/slots/slot-1.json'],
   ['port-guard', 'ls -la', null],
   ['checkout-guard', 'git status', null],
+  ['disk-guard', 'du -sh dist', 'du -sh ~'],
   ['basics', 'ls -la', 'rm -rf /'],
 ]
 

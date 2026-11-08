@@ -2,6 +2,10 @@
 
 [Back to README](../README.md)
 
+## How do I know whether I need it?
+
+Run `bulkhead scan` once after installing. It replays the shell commands in your last month of Claude Code transcripts against the guards and prints how many would have been stopped, in how many sessions, and how many sessions you ran at once. If it finds nothing, you probably run one session at a time and do not need bulkhead. See [commands.md](commands.md#bulkhead-scan).
+
 ## Does it slow Claude Code down?
 
 A little. Each guard is one short Node process with no dependencies. On a Windows 11 desktop with Node 24, `node scripts/bench-hooks.js 15` measured 40 to 49 ms per guard on an allowed command (median of 15 runs), and 33 ms for starting Node alone. Writing a block to the event log adds no measurable time. The guards only do slow work after the command text matches: port-guard reads the process list (a second or two on Windows) only when a dev server start or a kill-by-port hits a port that already answers, checkout-guard runs git only when another session is alive, and basics runs `git status` only for `reset --hard` and `clean`. The status line takes under 100 ms and is cached for 5 seconds. See [architecture](architecture.md#performance).
@@ -11,7 +15,7 @@ A little. Each guard is one short Node process with no dependencies. On a Window
 1. Run `bulkhead log` (or `/bulkhead:log` inside Claude Code) to see the exact command and the reason.
 2. Let it through in the project config, `<repo>/.claude/bulkhead.json`: `killGuard.allowNames` for a program name, `portGuard.ignorePorts` for a port every session shares, `waitGuard.limitSeconds` for a longer wait, `basics.protectedBranches` for branches. Or turn the guard off for that project with `"<guard>": { "enabled": false }`. See [configuration](configuration.md).
 3. Or turn the guard off: `BULKHEAD_DISABLE=<guard>` in the `env` block of `~/.claude/settings.json`.
-4. Please open a [false positive issue](https://github.com/Myeongseok-Kang/claude-bulkhead/issues/new?template=false-positive.yml) with the line from `bulkhead log` and the command you expected to pass, so the pattern can be fixed for everyone.
+4. Please open a [false positive issue](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml) with the line from `bulkhead log` and the command you expected to pass, so the pattern can be fixed for everyone.
 
 ## Is it useful with a single session?
 
@@ -30,7 +34,7 @@ Node 18 or later is required on all three. On Windows, `bulkhead-slot` runs comm
 
 ## Does it send anything anywhere?
 
-No. There is no telemetry and no network call. The only socket it opens is port-guard's connection attempt to `localhost` to see whether a port answers. The block logs (`guards.log`, `events.jsonl`) stay in the state directory on your machine. The one exception is `bulkhead remote`, which connects over SSH to a machine you configured, and only when you run it.
+No. There is no telemetry and no network call. The only socket it opens is port-guard's connection attempt to `localhost` to see whether a port answers. The block logs (`guards.log`, `events.jsonl`) stay in the state directory on your machine. The one exception is `bulkhead remote`, which connects over SSH to a machine you configured, and only when you run it. `bulkhead scan` reads your transcripts in `~/.claude/projects` and prints to your terminal; it writes nothing and sends nothing.
 
 ## I have a second machine. Can the heavy jobs run there?
 

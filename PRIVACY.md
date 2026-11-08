@@ -26,4 +26,4 @@ Nothing else opens a network connection.
 
 ## Questions
 
-Open an issue at https://github.com/Myeongseok-Kang/claude-bulkhead/issues.
+Open an issue at https://github.com/dooly6276/claude-bulkhead/issues.

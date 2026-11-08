@@ -1,17 +1,17 @@
 {
   "name": "bulkhead",
-  "version": "0.1.1",
-  "description": "Keeps parallel Claude Code sessions and subagents on one machine from killing each other's processes, taking each other's ports, exhausting RAM or moving each other's git tree.",
+  "version": "0.2.0",
+  "description": "Keeps parallel Claude Code sessions and subagents on one machine from killing each other's processes, taking each other's ports, exhausting RAM, pegging the disk, or moving, sweeping up and deleting each other's git tree. bulkhead scan shows what it would have stopped in your past sessions.",
   "author": {
-    "name": "Myeongseok-Kang",
-    "url": "https://github.com/Myeongseok-Kang"
+    "name": "Myeongseok Kang",
+    "url": "https://github.com/dooly6276"
   },
-  "repository": "https://github.com/Myeongseok-Kang/claude-bulkhead",
-  "homepage": "https://github.com/Myeongseok-Kang/claude-bulkhead#readme",
-  "documentationUrl": "https://github.com/Myeongseok-Kang/claude-bulkhead/tree/main/docs",
-  "supportUrl": "https://github.com/Myeongseok-Kang/claude-bulkhead/issues",
-  "privacyPolicyUrl": "https://github.com/Myeongseok-Kang/claude-bulkhead/blob/main/PRIVACY.md",
-  "termsOfServiceUrl": "https://github.com/Myeongseok-Kang/claude-bulkhead/blob/main/LICENSE",
+  "repository": "https://github.com/dooly6276/claude-bulkhead",
+  "homepage": "https://github.com/dooly6276/claude-bulkhead#readme",
+  "documentationUrl": "https://github.com/dooly6276/claude-bulkhead/tree/main/docs",
+  "supportUrl": "https://github.com/dooly6276/claude-bulkhead/issues",
+  "privacyPolicyUrl": "https://github.com/dooly6276/claude-bulkhead/blob/main/PRIVACY.md",
+  "termsOfServiceUrl": "https://github.com/dooly6276/claude-bulkhead/blob/main/LICENSE",
   "license": "MIT",
-  "keywords": ["hooks", "processes", "ports", "memory", "subagents", "worktrees", "windows", "linux", "macos"]
+  "keywords": ["hooks", "processes", "ports", "memory", "subagents", "worktrees", "windows", "linux", "macos", "disk", "git", "parallel"]
 }

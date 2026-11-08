@@ -1242,7 +1242,8 @@ git stash list
 git stash show -p stash@{0}
 git branch -a
 git fetch origin
-git add -A && git commit -m "wip"
+git add src/app.js && git commit -m "wip"
+git commit -m "wip" -- src/app.js
 git restore --staged src/app.js
 git worktree add ../shop-fix -b fix/login
 git rebase --continue

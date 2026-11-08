@@ -1,6 +1,6 @@
 ---
 name: bulkhead
-description: How to work on a machine where other Claude Code sessions and subagents run at the same time. Use before starting a dev server, stopping or killing a process, freeing a port, running a build, test suite, browser run or other heavy command, switching branches or stashing, or waiting on a long job.
+description: How to work on a machine where other Claude Code sessions and subagents run at the same time. Use before starting a dev server, stopping or killing a process, freeing a port, running a build, test suite, browser run or other heavy command, switching branches, stashing, staging or committing, deleting a folder or worktree, measuring disk usage, or waiting on a long job.
 ---
 
 # Working on a shared machine
@@ -60,6 +60,14 @@ Do not sit in a foreground loop waiting for a long job: the session cannot do an
 ## Git trees
 
 When another session works in the same checkout, `git checkout`, `switch`, `stash`, `reset --hard`, `clean -f`, `rebase` and `merge` change its files under it. Work in your own worktree: `git worktree add ../<repo>-<task> -b <branch>`.
+
+- Commit only the files you changed, by name: `git add src/a.ts src/b.ts` or `git commit -m "..." -- src/a.ts`. In a shared checkout `git add -A`, `git add .` and `git commit -a` also take the other session's half-finished edits.
+- Never delete a folder or worktree another session works in. `bulkhead status` lists each session's project folder. When cleaning up worktrees, remove only the ones you created and that no live session uses.
+- Commit as the user's git identity. Do not set `user.name` or `user.email`, and do not pass `--author`; a `Co-Authored-By` line in the message is the place for the agent.
+
+## Disk
+
+The disk is shared too. Measure one folder at a time in the foreground (`du -sh node_modules`), starting from the folders you suspect. Never size or `find` the whole drive or home folder, and never run several scans at once (`xargs -P`, `parallel`, `&` in a loop): the disk sits at 100% and every session stalls. Use `find <folder> -maxdepth 3`, `git ls-files`, `mdfind` or `locate` to find a file.
 
 ## When a guard blocks you
 

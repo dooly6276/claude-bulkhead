@@ -8,6 +8,7 @@ Every command that prints a table also takes `--json`. Colors are used only when
 |---|---|
 | [`bulkhead status`](#bulkhead-status) | Sessions, their memory, ports, heavy jobs and free RAM, once |
 | [`bulkhead top`](#bulkhead-top) | The same, live, full screen |
+| [`bulkhead scan`](#bulkhead-scan) | Replays your Claude Code transcripts against the guards: what they would have stopped |
 | [`bulkhead log`](#bulkhead-log) | What the guards blocked and what orphan-reaper stopped |
 | [`bulkhead doctor`](#bulkhead-doctor) | Checks the install, the settings and this machine |
 | [`bulkhead config`](#bulkhead-config) | Effective settings and where each one came from |
@@ -16,7 +17,7 @@ Every command that prints a table also takes `--json`. Colors are used only when
 | [`bulkhead-slot`](#bulkhead-slot) | Queues heavy commands against a shared RAM budget |
 | [`bulkhead remote`](#bulkhead-remote) | Runs a heavy command on another machine over SSH (optional) |
 
-The plugin also adds slash commands that run these and summarize the result: `/bulkhead:status`, `/bulkhead:log [24h|7d|...]`, `/bulkhead:doctor`, `/bulkhead:reap` (a dry run) and `/bulkhead:remote <command>`.
+The plugin also adds slash commands that run these and summarize the result: `/bulkhead:scan [30d]`, `/bulkhead:status`, `/bulkhead:log [24h|7d|...]`, `/bulkhead:doctor`, `/bulkhead:reap` (a dry run) and `/bulkhead:remote <command>`.
 
 ## bulkhead status
 
@@ -78,6 +79,39 @@ RECENT BLOCKS
 - The terminal is restored on every exit path: the view runs in the alternate screen buffer, and quitting, `Ctrl-C`, `SIGTERM` and `SIGHUP` all leave it and show the cursor again.
 - On a narrow terminal, columns are dropped in this order: the RSS bar, the start time, the ports, the process count. Then the project column shrinks and long values end in `…`. Lines never wrap. When there are more sessions than rows, the list ends in `... N more`.
 - When the output is not a terminal (a pipe, a file, the Bash tool), or with `--once`, it prints one snapshot without colors and exits.
+
+## bulkhead scan
+
+```
+bulkhead scan [--since 30d|DATE] [--path DIR|FILE] [--project TEXT] [-n N] [--json]
+```
+
+Reads the transcripts Claude Code keeps in `~/.claude/projects` (subagent transcripts included), takes every Bash and PowerShell command your sessions ran, and replays each one against the guards. It is the quickest way to see whether bulkhead is worth installing: it answers "how often did my sessions already do this?" with your own history. It only reads; nothing is written and nothing leaves the machine.
+
+```
+$ bulkhead scan --since 30d
+bulkhead scan  replaying your Claude Code sessions against the guards
+  read     1,396 transcripts (6.4 GB), 165 sessions, 90,855 shell commands in 31.7s
+  span     Oct 27 .. Nov 08  (since 30d)
+  overlap  up to 11 sessions running at once (Nov 01), 11 days with two or more at once
+
+GUARD           RULE                HITS  SESSIONS  STOPPED  LAST
+wait-guard      poll-loop            338        56      337  Nov 08
+checkout-guard  stage-all             19         8        1  Nov 07
+checkout-guard  git-checkout          16         5        -  Nov 01
+...
+```
+
+- **HITS** is the number of commands with the shape a guard blocks; **SESSIONS** how many sessions ran them; **STOPPED** how many were already stopped by a PreToolUse hook (any hook, not only bulkhead) or declined by you in the permission prompt.
+- Under the table, each rule shows its newest examples (`-n`, default 3, `-n 0` for none) with the project and day. Secret-looking values (tokens, `-u user:pass`, `*_KEY=`, `Bearer ...`, URLs with a password) are masked before printing.
+- **overlap** is the most sessions running at the same time. A session counts as running between two of its events when they are at most 10 minutes apart.
+- **What is replayed:** kill-guard, wait-guard (with each call's own timeout; background calls skipped), disk-guard, basics except `discard-changes`, memory-guard's slot-file rule, and checkout-guard. checkout-guard needs to know which sessions were live at that moment, so scan rebuilds it from the transcripts: another session counts as live when it had activity within 10 minutes of the command in the same git tree, and for `git add -A` it assumes that session had edits there.
+- **What is not replayed:** port-guard and memory-guard's low-RAM check depend on which ports and how much RAM were in use at that moment, which transcripts do not record.
+- A hit means the command had the shape a guard blocks, not that damage was done.
+
+`--since` takes `24h`, `7d`, `2w` or a date. `--project acme` keeps sessions whose folder contains `acme`. `--path` reads another folder or a single `.jsonl`. `--json` prints every rule with its counts and up to five masked examples. It reads about 200 MB a second; 6 GB of transcripts take about half a minute.
+
+Claude Code deletes transcripts older than `cleanupPeriodDays` (30 by default), so scan sees at most that much history.
 
 ## bulkhead log
 
@@ -184,7 +218,7 @@ Runs every check and prints one line each, `OK`, `WARN` or `FAIL`. The exit code
 ```
 $ bulkhead doctor
 OK    node            v24.11.0
-OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.1.1, hooks: 2 SessionStart, 1 SessionEnd, 6 PreToolUse
+OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0, hooks: 2 SessionStart, 1 SessionEnd, 6 PreToolUse
 OK    state dir       ~/.claude/bulkhead is writable
 OK    config          no config files, defaults in use
 OK    kill-guard      on
@@ -192,6 +226,7 @@ OK    wait-guard      on, limit 180s
 OK    memory-guard    on
 OK    port-guard      on
 OK    checkout-guard  on
+OK    disk-guard      on
 OK    basics          on, protected branches: main, master
 OK    orphan-reaper   on, at session start and after each session ends
 OK    hook run        kill-guard blocked a test command in 90 ms
@@ -202,7 +237,7 @@ OK    slots           none held
 OK    event log       ~/.claude/bulkhead/events.jsonl, empty so far
 OK    git             2.52.0.windows.1
 
-18 OK, 0 WARN, 0 FAIL
+19 OK, 0 WARN, 0 FAIL
 ```
 
 ## bulkhead config
