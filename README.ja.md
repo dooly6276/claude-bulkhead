@@ -263,7 +263,11 @@ bulkhead が扱うのは別の問題です。1 台のマシン上のセッショ
 
 ## 設定
 
-既定値のままで、設定は不要です。変えたいときは設定ファイルを使います。マシン全体には `~/.claude/bulkhead/config.json`、1 つのプロジェクトには `<repo>/.claude/bulkhead.json`（`.git` のあるフォルダまで親をたどって探します）です。プロジェクトの設定がグローバルの設定より優先されます。たとえば、`ffmpeg` を意図的に実行し、時間のかかる結合テストがあるプロジェクトでは次のようにします。
+既定値のままで、設定は不要です。変えたいときは設定ファイルを使います。マシン全体には `~/.claude/bulkhead/config.json`、1 つのプロジェクトには `<repo>/.claude/bulkhead.json`（`.git` のあるフォルダまで親をたどって探します）です。プロジェクトの設定がグローバルの設定より優先されます。
+
+プロジェクトの設定ファイルは、kill-guard のブロック対象から名前を外したり、ポートを無視したり、そのリポジトリでガードをオフにしたりできます。他人のリポジトリを clone したら、ほかの設定ファイルと同じように、作業前に `.claude/bulkhead.json` も確認してください。`bulkhead config` はすべての設定と、その値がどのファイルから来たかを表示します。リモートのホストと ssh オプションはグローバルのファイルからだけ読みます。
+
+たとえば、`ffmpeg` を意図的に実行し、時間のかかる結合テストがあるプロジェクトでは次のようにします。
 
 ```json
 {
@@ -296,7 +300,7 @@ bulkhead が扱うのは別の問題です。1 台のマシン上のセッショ
 
 ## 実行中のものを確認する
 
-`bulkhead` は、`bulkhead-slot` と並んで Bash ツールの `PATH` に入っています。Claude Code 内では、`/bulkhead:scan [30d]`、`/bulkhead:status`、`/bulkhead:log [24h|7d]`、`/bulkhead:doctor`、`/bulkhead:reap` が対応するコマンドを実行し、結果を要約します。自分のターミナルで実行するには、パスを指定して呼び出します。たとえば `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0/bin/bulkhead top` です（キャッシュのパスはインストール状況によって変わります。`/plugin` で確認できます）。表を出力するコマンドはすべて `--json` を受け付けます。完全なリファレンスは [docs/commands.md](docs/commands.md) です。
+`bulkhead` は、`bulkhead-slot` と並んで Bash ツールの `PATH` に入っています。Claude Code 内では、`/bulkhead:scan [30d]`、`/bulkhead:status`、`/bulkhead:log [24h|7d]`、`/bulkhead:doctor`、`/bulkhead:reap` が対応するコマンドを実行し、結果を要約します。自分のターミナルで実行するには、パスを指定して呼び出します。たとえば `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead top` です（キャッシュのパスはインストール状況によって変わります。`/plugin` で確認できます）。表を出力するコマンドはすべて `--json` を受け付けます。完全なリファレンスは [docs/commands.md](docs/commands.md) です。
 
 ### bulkhead status
 
@@ -379,7 +383,7 @@ Node、プラグインのファイル、状態ディレクトリ、設定ファ�
 ```
 $ bulkhead doctor
 OK    node            v24.11.0
-OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
+OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
 OK    state dir       ~/.claude/bulkhead is writable
 OK    config          no config files, defaults in use
 OK    kill-guard      on
@@ -436,7 +440,7 @@ sessions は `~/.claude/sessions` にある生きたエントリ、heavy は bul
 {
   "statusLine": {
     "type": "command",
-    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0/bin/bulkhead-statusline",
+    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead-statusline",
     "refreshInterval": 10
   }
 }

@@ -263,7 +263,11 @@ O bulkhead cobre um problema diferente: sessões na mesma máquina atrapalhando 
 
 ## Configuração
 
-Os padrões não exigem nenhuma configuração. Para alterá-los, use um arquivo de configuração: `~/.claude/bulkhead/config.json` para a máquina e `<repo>/.claude/bulkhead.json` para um projeto (encontrado subindo até a pasta com `.git`). As configurações do projeto vencem o arquivo global. Por exemplo, um projeto que roda `ffmpeg` de propósito e tem uma suíte de integração lenta:
+Os padrões não exigem nenhuma configuração. Para alterá-los, use um arquivo de configuração: `~/.claude/bulkhead/config.json` para a máquina e `<repo>/.claude/bulkhead.json` para um projeto (encontrado subindo até a pasta com `.git`). As configurações do projeto vencem o arquivo global.
+
+Um arquivo de projeto pode tirar nomes da lista de bloqueio do kill-guard, ignorar portas ou desligar um guard naquele repositório. Leia o `.claude/bulkhead.json` de um repositório que você clonar antes de trabalhar nele, como faria com o resto da configuração; `bulkhead config` mostra cada ajuste e o arquivo de onde ele veio. Hosts remotos e opções de ssh só são lidos do arquivo global.
+
+Por exemplo, um projeto que roda `ffmpeg` de propósito e tem uma suíte de integração lenta:
 
 ```json
 {
@@ -296,7 +300,7 @@ As variáveis de ambiente continuam funcionando e vencem os dois arquivos. O lug
 
 ## Veja o que está rodando
 
-O `bulkhead` está no `PATH` da ferramenta Bash, ao lado do `bulkhead-slot`. Dentro do Claude Code, `/bulkhead:scan [30d]`, `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor` e `/bulkhead:reap` rodam o comando correspondente e resumem o resultado. Para rodá-lo no seu próprio terminal, chame-o pelo caminho, por exemplo `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0/bin/bulkhead top` (o caminho do cache depende da sua instalação; o `/plugin` mostra qual é). Todo comando que imprime uma tabela aceita `--json`. A referência completa está em [docs/commands.md](docs/commands.md).
+O `bulkhead` está no `PATH` da ferramenta Bash, ao lado do `bulkhead-slot`. Dentro do Claude Code, `/bulkhead:scan [30d]`, `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor` e `/bulkhead:reap` rodam o comando correspondente e resumem o resultado. Para rodá-lo no seu próprio terminal, chame-o pelo caminho, por exemplo `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead top` (o caminho do cache depende da sua instalação; o `/plugin` mostra qual é). Todo comando que imprime uma tabela aceita `--json`. A referência completa está em [docs/commands.md](docs/commands.md).
 
 ### bulkhead status
 
@@ -379,7 +383,7 @@ Verifica o Node, os arquivos do plugin, o diretório de estado, os arquivos de c
 ```
 $ bulkhead doctor
 OK    node            v24.11.0
-OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
+OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
 OK    state dir       ~/.claude/bulkhead is writable
 OK    config          no config files, defaults in use
 OK    kill-guard      on
@@ -436,7 +440,7 @@ Um plugin não consegue definir a status line principal (as configurações de p
 {
   "statusLine": {
     "type": "command",
-    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0/bin/bulkhead-statusline",
+    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead-statusline",
     "refreshInterval": 10
   }
 }

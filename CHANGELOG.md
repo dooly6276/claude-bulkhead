@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 - 2026-11-11
+
+- `/bulkhead:remote` now shows what a run will upload (the current commit and every uncommitted change, deletions included) and the remote it goes to, and waits for your yes before anything is sent.
+- The README says that a project's `.claude/bulkhead.json` can relax the guards for that repository, so read it in a repository you clone, and that `bulkhead config` shows where each setting came from.
+
 ## 0.2.0 - 2026-11-08
 
 ### New

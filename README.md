@@ -263,7 +263,11 @@ bulkhead covers a different problem: sessions on one machine getting in each oth
 
 ## Configuration
 
-The defaults need no setup. To change them, use a config file: `~/.claude/bulkhead/config.json` for the machine, and `<repo>/.claude/bulkhead.json` for one project (found by walking up to the folder with `.git`). Project settings win over the global file. For example, a project that runs `ffmpeg` on purpose and has a slow integration suite:
+The defaults need no setup. To change them, use a config file: `~/.claude/bulkhead/config.json` for the machine, and `<repo>/.claude/bulkhead.json` for one project (found by walking up to the folder with `.git`). Project settings win over the global file.
+
+A project file can take names off kill-guard's block list, ignore ports or turn a guard off for that repository. Read `.claude/bulkhead.json` in a repository you clone before you work in it, as you would its other config; `bulkhead config` shows every setting and the file it came from. Remote hosts and ssh options are read from the global file only.
+
+For example, a project that runs `ffmpeg` on purpose and has a slow integration suite:
 
 ```json
 {
@@ -296,7 +300,7 @@ Environment variables still work and win over both files. The simplest place for
 
 ## See what is running
 
-`bulkhead` is on the Bash tool's `PATH` next to `bulkhead-slot`. Inside Claude Code, `/bulkhead:scan [30d]`, `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor` and `/bulkhead:reap` run the matching command and summarize it. To run it in your own terminal, call it by path, for example `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0/bin/bulkhead top` (the cache path depends on your install; `/plugin` shows it). Every command that prints a table takes `--json`. The full reference is [docs/commands.md](docs/commands.md).
+`bulkhead` is on the Bash tool's `PATH` next to `bulkhead-slot`. Inside Claude Code, `/bulkhead:scan [30d]`, `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor` and `/bulkhead:reap` run the matching command and summarize it. To run it in your own terminal, call it by path, for example `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead top` (the cache path depends on your install; `/plugin` shows it). Every command that prints a table takes `--json`. The full reference is [docs/commands.md](docs/commands.md).
 
 ### bulkhead status
 
@@ -379,7 +383,7 @@ Checks Node, the plugin files, the state directory, the config files, each guard
 ```
 $ bulkhead doctor
 OK    node            v24.11.0
-OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
+OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
 OK    state dir       ~/.claude/bulkhead is writable
 OK    config          no config files, defaults in use
 OK    kill-guard      on
@@ -436,7 +440,7 @@ A plugin cannot set the main status line (plugin settings only support `agent` a
 {
   "statusLine": {
     "type": "command",
-    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0/bin/bulkhead-statusline",
+    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead-statusline",
     "refreshInterval": 10
   }
 }

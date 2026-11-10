@@ -263,7 +263,11 @@ bulkhead 解决的是另一个问题：同一台机器上的会话因为进程�
 
 ## 配置
 
-默认值不需要任何设置。要修改时使用配置文件：机器级 `~/.claude/bulkhead/config.json`，项目级 `<repo>/.claude/bulkhead.json`（从当前目录向上查找到含 `.git` 的目录）。项目设置优先于全局文件。比如一个有意使用 `ffmpeg`、集成测试又很慢的项目：
+默认值不需要任何设置。要修改时使用配置文件：机器级 `~/.claude/bulkhead/config.json`，项目级 `<repo>/.claude/bulkhead.json`（从当前目录向上查找到含 `.git` 的目录）。项目设置优先于全局文件。
+
+项目配置文件可以把名字从 kill-guard 的拦截列表中去掉、忽略端口，或在该仓库关闭某个 guard。clone 别人的仓库后，开始工作前请像查看其他配置一样看一下 `.claude/bulkhead.json`。`bulkhead config` 会列出每项设置及其来源文件。远程主机和 ssh 选项只从全局文件读取。
+
+比如一个有意使用 `ffmpeg`、集成测试又很慢的项目：
 
 ```json
 {
@@ -296,7 +300,7 @@ bulkhead 解决的是另一个问题：同一台机器上的会话因为进程�
 
 ## 查看正在运行的内容
 
-`bulkhead` 和 `bulkhead-slot` 一起位于 Bash 工具的 `PATH` 上。在 Claude Code 里，`/bulkhead:scan [30d]`、`/bulkhead:status`、`/bulkhead:log [24h|7d]`、`/bulkhead:doctor`、`/bulkhead:reap` 会运行对应命令并总结结果。在自己的终端里使用时按路径调用，例如 `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0/bin/bulkhead top`（缓存路径因安装而异，可在 `/plugin` 中查看）。所有输出表格的命令都支持 `--json`。完整说明见 [docs/commands.md](docs/commands.md)。
+`bulkhead` 和 `bulkhead-slot` 一起位于 Bash 工具的 `PATH` 上。在 Claude Code 里，`/bulkhead:scan [30d]`、`/bulkhead:status`、`/bulkhead:log [24h|7d]`、`/bulkhead:doctor`、`/bulkhead:reap` 会运行对应命令并总结结果。在自己的终端里使用时按路径调用，例如 `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead top`（缓存路径因安装而异，可在 `/plugin` 中查看）。所有输出表格的命令都支持 `--json`。完整说明见 [docs/commands.md](docs/commands.md)。
 
 ### bulkhead status
 
@@ -379,7 +383,7 @@ PROJECT                  COUNT
 ```
 $ bulkhead doctor
 OK    node            v24.11.0
-OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
+OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
 OK    state dir       ~/.claude/bulkhead is writable
 OK    config          no config files, defaults in use
 OK    kill-guard      on
@@ -436,7 +440,7 @@ sessions 是 `~/.claude/sessions` 里活着的会话数，heavy 是持有 bulkhe
 {
   "statusLine": {
     "type": "command",
-    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0/bin/bulkhead-statusline",
+    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead-statusline",
     "refreshInterval": 10
   }
 }

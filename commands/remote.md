@@ -11,7 +11,8 @@ The remotes bulkhead knows about and what runs on them now:
 The user's request: `$ARGUMENTS`
 
 - If the request is empty, summarize the status above in a few lines: which remotes are reachable, their free RAM, and which jobs and copies they hold. If no remote is configured, explain that one is added with `bulkhead remote add <name> <user@host> --ssh-option=IdentityFile=<key>` and point to docs/remote.md in the plugin.
-- Otherwise run it on the remote with the Bash tool, in the background (`run_in_background: true`), from this project's folder:
+- Otherwise, before anything is sent, show the user what the run uploads and wait for a yes. Run `git -C "$CLAUDE_PROJECT_DIR" log -1 --oneline` and `git -C "$CLAUDE_PROJECT_DIR" status --short`, then tell the user in a few lines: the remote it goes to, that the current commit (only commits the remote lacks) and every uncommitted change listed, deletions included, are sent over SSH, and the command it runs there. Ask whether to go ahead and end your turn. Run it only after the user says yes; if they say no, do not send anything.
+- Once the user agrees, run it on the remote with the Bash tool, in the background (`run_in_background: true`), from this project's folder:
 
   ```
   node "${CLAUDE_PLUGIN_ROOT}/bin/bulkhead" remote run --tail=60 -- '<the command>'

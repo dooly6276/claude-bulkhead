@@ -263,7 +263,11 @@ bulkhead 는 다른 문제를 다룹니다. 한 컴퓨터의 세션들이 프로
 
 ## 설정
 
-기본값 그대로 쓰면 따로 정할 것이 없습니다. 바꾸려면 설정 파일을 씁니다. 컴퓨터 단위는 `~/.claude/bulkhead/config.json`, 프로젝트 단위는 `<repo>/.claude/bulkhead.json` 입니다(`.git` 이 있는 폴더까지 위로 올라가며 찾습니다). 프로젝트 설정이 전역 설정보다 우선합니다. 예를 들어 일부러 `ffmpeg` 를 쓰고 통합 테스트가 오래 걸리는 프로젝트라면 이렇게 둡니다.
+기본값 그대로 쓰면 따로 정할 것이 없습니다. 바꾸려면 설정 파일을 씁니다. 컴퓨터 단위는 `~/.claude/bulkhead/config.json`, 프로젝트 단위는 `<repo>/.claude/bulkhead.json` 입니다(`.git` 이 있는 폴더까지 위로 올라가며 찾습니다). 프로젝트 설정이 전역 설정보다 우선합니다.
+
+프로젝트 설정 파일은 kill-guard 의 막는 목록에서 이름을 빼거나, 포트를 무시하거나, 그 저장소에서 가드를 끌 수 있습니다. 남의 저장소를 받았다면 작업하기 전에 다른 설정 파일처럼 `.claude/bulkhead.json` 도 읽어 보세요. `bulkhead config` 는 모든 설정과 그 값이 온 파일을 보여 줍니다. 원격 호스트와 ssh 옵션은 전역 파일에서만 읽습니다.
+
+예를 들어 일부러 `ffmpeg` 를 쓰고 통합 테스트가 오래 걸리는 프로젝트라면 이렇게 둡니다.
 
 ```json
 {
@@ -296,7 +300,7 @@ bulkhead 는 다른 문제를 다룹니다. 한 컴퓨터의 세션들이 프로
 
 ## 지금 도는 것 보기
 
-`bulkhead` 는 `bulkhead-slot` 과 함께 Bash 도구의 `PATH` 에 들어갑니다. Claude Code 안에서는 `/bulkhead:scan [30d]`, `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor`, `/bulkhead:reap` 이 해당 명령을 돌리고 결과를 정리해 줍니다. 내 터미널에서 쓰려면 경로로 부릅니다. 예: `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0/bin/bulkhead top`. 캐시 경로는 설치마다 다르니 `/plugin` 에서 확인하세요. 표를 내는 명령은 모두 `--json` 을 받습니다. 전체 설명은 [docs/commands.md](docs/commands.md) 에 있습니다.
+`bulkhead` 는 `bulkhead-slot` 과 함께 Bash 도구의 `PATH` 에 들어갑니다. Claude Code 안에서는 `/bulkhead:scan [30d]`, `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor`, `/bulkhead:reap` 이 해당 명령을 돌리고 결과를 정리해 줍니다. 내 터미널에서 쓰려면 경로로 부릅니다. 예: `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead top`. 캐시 경로는 설치마다 다르니 `/plugin` 에서 확인하세요. 표를 내는 명령은 모두 `--json` 을 받습니다. 전체 설명은 [docs/commands.md](docs/commands.md) 에 있습니다.
 
 ### bulkhead status
 
@@ -379,7 +383,7 @@ Node, 플러그인 파일, 상태 폴더, 설정 파일, 가드마다 켜졌는�
 ```
 $ bulkhead doctor
 OK    node            v24.11.0
-OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
+OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
 OK    state dir       ~/.claude/bulkhead is writable
 OK    config          no config files, defaults in use
 OK    kill-guard      on
@@ -436,7 +440,7 @@ sessions 는 `~/.claude/sessions` 에서 살아 있는 세션 수, heavy 는 bul
 {
   "statusLine": {
     "type": "command",
-    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.0/bin/bulkhead-statusline",
+    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead-statusline",
     "refreshInterval": 10
   }
 }
