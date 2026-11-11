@@ -79,11 +79,11 @@ const realFs = {
   link: p => fs.readlinkSync(p),
 }
 
-function readLinux(io = realFs, clockTicks = 100, pageSize = 4096) {
+function readLinux(io = realFs, clockTicks = 100, pageSize = 4096, { withPorts = true } = {}) {
   const bootMs = Number(io.read('/proc/stat').match(/^btime (\d+)/m)[1]) * 1000
   const tryRead = p => { try { return io.read(p) } catch { return null } }
   const listenInodes = new Map()
-  for (const f of ['/proc/net/tcp', '/proc/net/tcp6']) {
+  for (const f of withPorts ? ['/proc/net/tcp', '/proc/net/tcp6'] : []) {
     const t = tryRead(f)
     if (t) for (const [inode, port] of parseNetTcp(t)) listenInodes.set(inode, port)
   }
@@ -199,10 +199,12 @@ function readMac(run = execFileSync, { withEnv = false, withPorts = true } = {})
   return { procs, listening: new Set(ports.map(l => l.pid)), ports }
 }
 
-function readProcesses(platform = process.platform, { withEnv = false, ports = true } = {}) {
+// withPorts: false (or ports: false) skips the listening sockets, the slowest part, for callers that need processes only.
+function readProcesses(platform = process.platform, { withEnv = false, withPorts, ports } = {}) {
+  const wantPorts = withPorts !== undefined ? withPorts : ports !== undefined ? ports : true
   if (platform === 'win32') return readWindows()
-  if (platform === 'linux') return readLinux()
-  if (platform === 'darwin') return readMac(execFileSync, { withEnv, withPorts: ports })
+  if (platform === 'linux') return readLinux(realFs, 100, 4096, { withPorts: wantPorts })
+  if (platform === 'darwin') return readMac(execFileSync, { withEnv, withPorts: wantPorts })
   return null
 }
 

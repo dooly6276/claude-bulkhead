@@ -62,7 +62,10 @@ function stateDirFor(config) {
 const PRINTS_SECRETS = new Set(['grep -v "^#" .env', 'env | sort'])
 
 // secrets-guard is off by default; the corpus runs it switched on, so every ordinary command is checked for false positives.
-const withSecrets = config => JSON.stringify({ ...JSON.parse(config || '{}'), secretsGuard: { enabled: true } })
+const withSecrets = config => {
+  const c = JSON.parse(config || '{}')
+  return JSON.stringify({ ...c, secretsGuard: { ...c.secretsGuard, enabled: true } })
+}
 
 function run(guard, command, { state, tool, timeout, config }) {
   const { repos, configDir } = setup()

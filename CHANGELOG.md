@@ -36,11 +36,18 @@
 - New basics rule **`protected-delete`** blocks deleting a protected branch: `git push origin :main`, `git push --delete origin main`, `git branch -D main`. `git branch -d` passes, because git itself refuses to lose unmerged work.
 - checkout-guard compares a session file's start time with the process's, so a reused PID no longer counts as a live session.
 
+- kill-guard sees through more indirection: `echo pkill node | sh`, `source <(...)`, `bash <(...)`, `eval "$(...)"`, `xargs pkill`, `busybox`, shell functions and variables (`cmd=pkill; $cmd node`), `tmux`, `screen`, `script`, `parallel`, shell commands that python, node, perl, ruby or php run from a string, and `ssh localhost`. Dev-server and tool names (`next-server`, `uvicorn`, `gunicorn`, `rails`, `expo`, `metro`, `tsc`, `playwright`, Google Chrome and its helpers) are on the shared list, versions included (`node22`, `python3.11`), and so are other coding agents (`codex`, `gemini`, `copilot`, `cursor-agent`).
+- While another Claude session is alive, kill-guard also blocks: `kill <pid>`, `taskkill /PID` and `Stop-Process -Id` of a process in another session's tree; `pkill -f <path>` that matches another session's command line; `pkill -u`, `kill -1` and `kill 0`; `docker ... $(docker ps -q)`, `docker system prune`, `pm2 kill` and `docker compose down` in another session's project; `adb kill-server`, `adb emu kill` without a serial and `simctl shutdown all`; quitting shared apps (Slack, Finder, Dock) and stopping shared services (`brew services stop`, `launchctl bootout`, `systemctl stop`). Each rule has its own switch: `killGuard.massKill`, `dockerMass`, `deviceKill`, `appQuit`, `serviceStop` and `ownerCheck`. The process table is read only for these commands.
+- kill-guard messages are two lines: who owns what you were about to stop, and the command that stops only yours.
+
 ### Fixed
 
 - checkout-guard lets these through: `git add -A src` and other stage-all forms with a path, `git add -n`, `git stash push -- <paths>`, `--help` of any git command, and single-file `restore`. In a sample of 20,000 real commands in a shared, dirty tree, it blocked 1,432 instead of 1,962; the 39 newly blocked ones were all tree-changing commands.
 - basics advice for `git clean` no longer suggests `git stash push -u`, which checkout-guard blocks in a shared tree.
 - port-guard no longer reads quoted text as a command: `grep -E "next dev|vite"` and `ps | grep -E 'next start|playwright'` pass, as do `vite --version`, `vite build` and any tool run with `--help`. Heredoc bodies fed to python, node or cat are data, not commands. In 160,288 real commands from transcripts, it blocked 12 instead of 28 under the same conditions, and every one of the 12 was a real conflict.
+- A heredoc is shell code only when a shell reads it (`bash <<EOF`, `cat <<EOF | sh`, `ssh localhost bash`). Bodies fed to `while read`, `git`, `psql` or a script are data; bodies fed to python or node are read in that language. In 161,188 real commands, kill-guard blocked 4 instead of 14 when no other session ran, and wait-guard blocked 1,009 instead of 1,123 at a 10-minute timeout, with no new blocks.
+- wait-guard reads python `time.sleep` and node `sleep`/`setTimeout` waits inside heredocs in their own units, ignores them inside strings and comments, and no longer multiplies a script's waits by an earlier shell loop.
+- `pkill -f "ssh -N -L 9333"` and other specific `-f` patterns pass; `pkill -f server` and `pkill -f "next dev"` still block.
 - Claude Code sessions started by the macOS desktop app were not seen as sessions.
 - `bulkhead doctor` reported the plugin as installed when run through `npx` from an unrelated copy.
 

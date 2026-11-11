@@ -63,8 +63,16 @@ An unknown key, or a value of the wrong type, is dropped on its own with a warni
 | `enabled` | boolean | `true` | Turns kill-guard on or off |
 | `allowNames` | list of names | `[]` | Names taken off the shared list, so killing them by name passes. `ffmpeg` and `ffmpeg.exe` are the same name |
 | `extraSharedNames` | list of names | `[]` | More names that must not be killed by name, such as `postgres` or `redis-server` |
+| `massKill` | boolean | `true` | `pkill -u`, `killall -u`, `kill -1` and `kill 0`, while another Claude session is alive |
+| `dockerMass` | boolean | `true` | `docker system prune`, `docker rm -f $(docker ps -aq)`, `pm2 kill` and `docker compose down` in a folder another session works in, while another session is alive |
+| `deviceKill` | boolean | `true` | `adb kill-server`, `adb emu kill`, `xcrun simctl shutdown all` and `erase all`, while another session is alive |
+| `appQuit` | boolean | `true` | Quitting shared apps (`osascript` quit, `pkill Slack`, `killall Finder`), while another session is alive |
+| `serviceStop` | boolean | `true` | `brew services stop`, `launchctl bootout`, `systemctl stop` and `pkill redis-server` for shared services, while another session is alive |
+| `ownerCheck` | boolean | `true` | `kill <pid>` and `pkill -f <pattern>` that reach another Claude session's processes |
 
-The built-in shared list is: node, python, python3, py, pythonw, ruby, java, javaw, dotnet, chrome, chromium, chrome-headless-shell, msedge, firefox, bash, sh, zsh, powershell, pwsh, cmd, conhost, git, ssh, sshd, code, claude, npm, npx, pnpm, yarn, deno, bun, tsx, ts-node, gradle, adb, ffmpeg, docker, vitest, jest, next, vite, esbuild, webpack.
+The five rules that say "while another session is alive" never stop anything when you work with one session. `ownerCheck` reads the process table once, and only for a command with a literal PID or a pkill pattern.
+
+The built-in shared list is: node, python, python3, py, pythonw, ruby, java, javaw, dotnet, chrome, chromium, chrome-headless-shell, msedge, firefox, bash, sh, zsh, powershell, pwsh, cmd, conhost, git, ssh, sshd, code, claude, npm, npx, pnpm, yarn, deno, bun, tsx, ts-node, gradle, adb, ffmpeg, docker, vitest, jest, next, vite, esbuild, webpack, and the dev servers and browsers behind them: next-server, next-router-worker, uvicorn, gunicorn, rails, puma, flask, expo, metro, storybook, turbo, tsc, nodemon, qemu, emulator, playwright, puppeteer, php, Google Chrome (and its Helper processes), headless_shell, chromedriver. A version suffix counts as the same name: node22, nodejs and python3.11.
 
 ### waitGuard
 

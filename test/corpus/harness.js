@@ -77,11 +77,19 @@ function busySnapshot() {
   return { procs, ports: BUSY_PORTS.map(port => ({ port, pid: 900111 })) }
 }
 
+// As busySnapshot, but the other session's server runs a script by path.
+function sameDirSnapshot() {
+  const snap = busySnapshot()
+  snap.procs[2] = proc(900111, 900110, 'node', 'node /srv/other/server.js', t0 + 11e3)
+  return snap
+}
+
 // State names used by the corpus: what the machine looks like while the hooks run.
 //   quiet: plenty of RAM, no other Claude session anywhere, nothing listening.
 //   low-ram: as quiet, but RAM is nearly gone.
 //   busy-ports: another session holds every default dev port.
 //   shared-tree: another live session works in the same (dirty) repository.
+//   same-dir: another live session (with a dev server) whose working folder is the hook's folder.
 function stateFor(name, { cleanRepo, dirtyRepo }) {
   const base = { memory: PLENTY, cwd: cleanRepo, mock: { listening: false, self: null, sessionFiles: [] } }
   switch (name) {
@@ -93,6 +101,9 @@ function stateFor(name, { cleanRepo, dirtyRepo }) {
       return { ...base, memory: LOW }
     case 'busy-ports':
       return { ...base, mock: { listening: true, self: 900200, sessionFiles: [[900100, { cwd: '/srv/other-project', startedAt: 0, sessionId: 'other' }]], snapshot: busySnapshot() } }
+    case 'same-dir':
+      // another live session whose working folder is the folder the hook runs in
+      return { ...base, mock: { listening: false, self: 900200, sessionFiles: [[900100, { cwd: cleanRepo, startedAt: 0, sessionId: 'other' }]], snapshot: sameDirSnapshot() } }
     case 'shared-tree':
       return { ...base, cwd: dirtyRepo, mock: { listening: false, self: null, sessionFiles: [[process.pid, { cwd: dirtyRepo, startedAt: Math.round(Date.now() - process.uptime() * 1000), sessionId: 'other-session' }]] } }
     case 'dirty':

@@ -85,9 +85,9 @@ test('prepare removes commit and pull request text', () => {
   }
 })
 
-test('prepare keeps heredocs that a shell or interpreter runs', () => {
+test('prepare keeps heredocs that a shell runs and drops the rest', () => {
   assert.match(shell.prepare("bash <<'EOF'\npkill node\nEOF"), /pkill node/)
-  assert.match(shell.prepare("python3 - <<'EOF'\nimport time\nEOF"), /import time/)
+  assert.doesNotMatch(shell.prepare("python3 - <<'EOF'\nimport time\nEOF"), /import time/)
   assert.doesNotMatch(shell.prepare("cat > run.sh <<'EOF'\npkill node\nEOF"), /pkill node/)
 })
 
@@ -105,4 +105,75 @@ test('nested openers stay linear', () => {
     shell.commands(src, 'ps')
     assert.ok(Date.now() - t < 2000, `${unit} x 100000 took ${Date.now() - t} ms`)
   }
+})
+
+test('a heredoc is code only for a shell; everything else reads it as data', () => {
+  const kind = src => {
+    const at = src.indexOf('<<')
+    return shell.consumerOf(src.slice(0, at), src.slice(at).replace(/^<<-?\s*['"]?\w+['"]?/, ''), 'sh').kind
+  }
+  for (const [src, want] of [
+    ["bash <<'E'", 'shell'], ['sh -s <<E', 'shell'], ['sudo zsh <<E', 'shell'], ['cat <<E | bash', 'shell'], ["cat <<'E' | sh -s", 'shell'],
+    ["ssh localhost bash <<'E'", 'shell'], ['cat <<E | ssh 127.0.0.1 sh', 'shell'], ['eval "$(cat <<\'E\'', 'shell'], ["source /dev/stdin <<'E'", 'shell'],
+    ["xargs sh -c 'x' <<E", 'shell'], ["ssh host bash <<'E'", 'remote'], ["cat <<'E' | ssh host bash", 'remote'], ["docker exec -i web sh <<'E'", 'remote'],
+    ["python3 - <<'E'", 'interp'], ["node - <<'E'", 'interp'], ['cat <<E | python3', 'interp'], ['ruby <<E', 'interp'],
+    ["cat <<'E'", 'data'], ["cat > f <<'E'", 'data'], ['tee f <<E', 'data'], ['cat <<E | wc -l', 'data'], ['cat <<E | sort | uniq', 'data'],
+    ['while read c; do echo "$c"; done <<\'E\'', 'data'], ["node test.js <<'E'", 'data'], ['read -r x <<E', 'data'], ["git commit -F - <<'E'", 'data'],
+    ["gh pr create --body-file - <<'E'", 'data'], ['psql db <<E', 'data'], ['./run.sh <<E', 'data'],
+  ]) assert.strictEqual(kind(src), want, src)
+})
+
+test('prepare drops heredoc data for every guard and keeps what a shell runs', () => {
+  assert.doesNotMatch(shell.prepare("while read c; do echo \"$c\"; done <<'E'\npkill node\nE"), /pkill/)
+  assert.doesNotMatch(shell.prepare("node test.js <<'E'\npkill node\nE"), /pkill/)
+  assert.doesNotMatch(shell.prepare('cat <<E | wc -l\npkill node\nE'), /pkill/)
+  assert.doesNotMatch(shell.prepare("python3 - <<'E'\nimport time\nE"), /import time/)
+  assert.doesNotMatch(shell.prepare("cat <<'E' | ssh host bash\npkill node\nE"), /pkill/)
+  assert.match(shell.prepare("bash <<'E'\npkill node\nE"), /pkill node/)
+  assert.match(shell.prepare("cat <<'E' | sh\npkill node\nE"), /pkill node/)
+  assert.match(shell.prepare("ssh localhost bash <<'E'\npkill node\nE"), /pkill node/)
+  // wait-guard also keeps what another machine runs, since the session waits for it
+  assert.match(shell.prepare("ssh host bash <<'E'\nsleep 600\nE", 'sh', ['shell', 'remote']), /sleep 600/)
+  assert.match(shell.prepare("python3 - <<'E'\nimport time\nE", 'sh', ['shell', 'interp']), /import time/)
+})
+
+test('ssh to this machine is a local shell; ssh to another machine is not', () => {
+  for (const host of ['localhost', 'user@localhost', '127.0.0.1', 'me@127.0.0.5', '::1']) {
+    assert.deepStrictEqual(shell.commands(`ssh -p 22 ${host} "echo hi"`).map(c => c.argv.join(' ')), ['echo hi'], host)
+  }
+  const far = shell.commands('ssh prod "echo hi"')
+  assert.strictEqual(far.length, 1)
+  assert.strictEqual(far[0].remote, true)
+})
+
+test('commands opens indirect shells', () => {
+  const run = src => shell.commands(src).map(c => c.argv.join(' '))
+  assert.ok(run('echo "ls -la" | sh').includes('ls -la'))
+  assert.ok(run("printf 'ls -la' | bash").includes('ls -la'))
+  assert.ok(run('source <(echo "ls -la")').includes('ls -la'))
+  assert.ok(run("tmux new -d 'ls -la'").includes('ls -la'))
+  assert.ok(run('screen -dmS x ls -la').includes('ls -la'))
+  assert.ok(run('script -q /dev/null ls -la').includes('ls -la'))
+  assert.ok(run('parallel ls ::: -la').includes('ls -la'))
+  assert.ok(run('busybox ls -la').includes('ls -la'))
+  assert.ok(run('function f() { ls -la; }; f').includes('ls -la'))
+  assert.ok(!run('echo "ls -la" | cat').includes('ls -la'))
+  assert.ok(!run('echo ls -la | wc -l').includes('ls -la'))
+})
+
+test('embeddedShell reads shell strings out of interpreter code', () => {
+  assert.deepStrictEqual(shell.embeddedShell("import os; os.system('ls -la')"), ['ls -la'])
+  assert.deepStrictEqual(shell.embeddedShell("subprocess.run(['ls', '-la'], check=True)"), ['ls -la'])
+  assert.deepStrictEqual(shell.embeddedShell('require("child_process").execSync("ls -la")'), ['ls -la'])
+  assert.deepStrictEqual(shell.embeddedShell("spawn('ls', ['-la'])"), ['ls -la'])
+  assert.deepStrictEqual(shell.embeddedShell('system("ls -la")'), ['ls -la'])
+  assert.deepStrictEqual(shell.embeddedShell('print("ls -la")'), [])
+  assert.deepStrictEqual(shell.embeddedShell('os.system(cmd)'), [])
+  // a call that sits inside a string or a comment is text, not a call
+  assert.deepStrictEqual(shell.embeddedShell('s = "run os.system(\'ls -la\') here"'), [])
+  assert.deepStrictEqual(shell.embeddedShell("s = '''\\nos.system('ls -la')\\n'''"), [])
+  assert.deepStrictEqual(shell.embeddedShell("# os.system('ls -la')\nx = 1"), [])
+  assert.deepStrictEqual(shell.embeddedShell("const cmd = 'python3 - <<\\\\'E\\\\'\\\\nos.system(\"ls -la\")\\\\nE'"), [])
+  assert.deepStrictEqual(shell.embeddedShell("t = open('x').read().replace('a', \"\"\"`ls -la`\"\"\")"), [])
+  assert.deepStrictEqual(shell.embeddedShell("os.system('ls -la')  # then\nos.system('ls -lh')"), ['ls -la', 'ls -lh'])
 })

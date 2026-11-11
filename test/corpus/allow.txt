@@ -797,7 +797,6 @@ pkill -f "python scripts/worker.py"
 pkill -f "node server.js"
 pkill -f node_modules/.bin/vite
 pkill -P $$
-pkill -f gunicorn
 pkill nginx
 pkill -HUP nginx
 pkill redis-server
@@ -1497,3 +1496,115 @@ $env:NODE_ENV = "production"
 Set-Content .env "A=1"
 Add-Content .env "B=2"
 #@ tool Bash
+# == heredoc bodies that are data, not commands ==
+# Only a shell (or eval, source, ssh to this machine) runs a heredoc as shell. A loop, a pipe to
+# wc, a program with its own input, or python and node reading code in their own language do not.
+while read c; do echo "$c"; done <<'E'<NL>pkill node<NL>E
+while read c; do echo "$c"; done <<'E'<NL>git add -A<NL>E
+node test.js <<'E'<NL>pkill node<NL>E
+cat <<E | wc -l<NL>pkill node<NL>E
+cat <<'E' | ssh host bash<NL>pkill node<NL>E
+cat <<'E' | ssh prod sh<NL>killall -9 node<NL>E
+ssh host bash <<'E'<NL>pkill node<NL>E
+python3 - <<'E'<NL>print("pkill node")<NL>E
+python3 - <<'E'<NL>open("t.js").write("await sleep(300)")<NL>E
+node - <<'E'<NL>const s = "pkill node"; console.log(s)<NL>E
+cat <<'E' | sort<NL>sleep 600<NL>E
+read -r line <<'E'<NL>sleep 900<NL>E
+python3 - <<'E'<NL>s = "await sleep(300)"<NL>print(s)<NL>E
+node - <<'E'<NL>const sleep = ms => new Promise(r => setTimeout(r, ms))<NL>await sleep(500)<NL>E
+node -e "const sleep = ms => new Promise(r => setTimeout(r, ms)); sleep(500)"
+python3 -c "s = 'sleep 600'; print(s)"
+python3 -c "import time; time.sleep(5)"
+# a specific pkill pattern that matches nobody else's process, and names nobody shares
+pkill -f "ssh -N -L 9333"
+pkill -f "python scripts/worker.py"
+pkill -f "my-bot --profile alpha"
+pkill my-private-daemon
+killall my-private-daemon
+# ssh to another machine, or a pipe that never reaches a shell
+ssh prod 'pkill node'
+echo "pkill node" > stop.sh
+echo "pkill node" | tee stop.sh
+echo "pkill node" | grep kill
+printf '%s\n' "pkill node" | wc -l
+
+# == single session: mass kills and apps are the user's own business ==
+pkill -u $USER
+killall -u kms
+kill -9 0
+docker rm -f $(docker ps -aq)
+docker stop $(docker ps -q)
+docker system prune -af
+docker compose down
+pm2 kill
+adb kill-server
+adb emu kill
+xcrun simctl shutdown all
+osascript -e 'quit app "Safari"'
+brew services stop postgresql@16
+launchctl bootout gui/501/homebrew.mxcl.redis
+pkill Slack
+killall Finder
+killall Dock
+pkill redis-server
+pkill nginx
+pkill tmux
+kill 900111
+pkill -f server.js
+
+#@ state busy-ports
+# == another session is alive: scoped commands still pass ==
+kill 4242
+kill -0 900111
+kill -l
+pkill -f ./scripts/worker.py
+pkill -f "ssh -N -L 9333"
+pkill -f "my-bot --profile alpha"
+pkill my-private-daemon
+docker stop web
+docker rm -f web
+docker ps
+docker ps -q
+docker stop $(docker ps -q --filter name=shop-)
+docker compose up -d
+docker compose down
+docker system df
+adb -s emulator-5554 emu kill
+adb devices
+xcrun simctl shutdown 1A2B3C4D-0000-0000-0000-000000000000
+xcrun simctl list devices
+osascript -e 'display dialog "done"'
+osascript -e 'quit app "My Own Tool"'
+brew services list
+brew services stop my-own-thing
+launchctl list
+launchctl bootout gui/501/com.example.my-own-agent
+pm2 list
+pm2 restart my-api
+while read c; do echo "$c"; done <<'E'<NL>pkill node<NL>E
+node test.js <<'E'<NL>kill -9 0<NL>E
+cat <<'E' | ssh host bash<NL>pkill node<NL>E
+#@ state default
+
+#@ state shared-tree
+# == heredoc data in a tree another session shares ==
+while read c; do echo "$c"; done <<'E'<NL>git add -A<NL>E
+while read c; do echo "$c"; done <<'E'<NL>git checkout .<NL>git reset --hard<NL>E
+node test.js <<'E'<NL>git add -A<NL>git stash<NL>E
+cat <<E | wc -l<NL>git checkout -- .<NL>git clean -fd<NL>E
+python3 - <<'E'<NL>print("git add -A")<NL>E
+cat <<'E' | ssh host bash<NL>git add -A<NL>git reset --hard<NL>E
+ssh host bash <<'E'<NL>git checkout .<NL>E
+#@ state busy-ports
+# == heredoc data while another session holds the ports ==
+while read c; do echo "$c"; done <<'E'<NL>npx next dev<NL>E
+node test.js <<'E'<NL>npm run dev<NL>vite --port 5173<NL>E
+cat <<E | wc -l<NL>npx next dev -p 3000<NL>E
+cat <<'E' | ssh host bash<NL>npx next dev<NL>E
+#@ state dirty
+# == heredoc data in a dirty repository ==
+while read c; do echo "$c"; done <<'E'<NL>git checkout .<NL>rm -rf ~<NL>E
+node test.js <<'E'<NL>git reset --hard<NL>git push --force origin main<NL>E
+cat <<E | wc -l<NL>git checkout -- .<NL>E
+#@ state default

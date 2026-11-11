@@ -24,6 +24,8 @@ Start-Sleep -Seconds 240
 bash -c "sleep 300"                                              # wrappers are opened, as in kill-guard
 python -c "import time; time.sleep(300)"                         # also node -e, deno eval, ruby -e, perl -e, php -r
 node -e "setTimeout(() => {}, 300000)"
+sleep 4m                                                         # also 1h, 2.5m, 181s: 3m is the limit itself, like sleep 180
+python3 - <<'EOF' ... time.sleep(300) ... EOF                   # python reads seconds, node reads milliseconds
 timeout /t 300 /nobreak
 ping -n 301 127.0.0.1                                            # about 300 s; ping -t and posix ping without -c never end
 tail -f server.log                                               # also docker logs -f, kubectl logs -f, journalctl -f, Get-Content -Wait
@@ -37,6 +39,8 @@ sleep 5 && curl -s localhost:3000                 # short wait for a server
 for i in 1 2 3; do sleep 10; done                 # 30 s
 until [ -f out/DONE ]; do sleep 15; done          # with run_in_background: true
 cat > poll.sh <<'EOF' ... EOF                     # a heredoc that only writes a script
+python3 - <<'EOF' ... await sleep(300) in a quoted string ... EOF   # text that a script edits is not a wait
+node - <<'EOF' ... await sleep(500) ... EOF       # 500 ms
 echo "sleep 600"                                  # sleep only in echo, grep or git text
 git commit -m "drop the sleep 900 poll"           # commit and pull request text is never run
 docker exec -d web sleep 600                      # detached
@@ -73,4 +77,5 @@ For a one-off check, skip the sleep and read the output file now.
 ## Limits
 
 - It cannot know how long a loop that waits on a condition will run, so it assumes the worst and relies on the tool timeout as the cap.
+- A heredoc is read by what reads it: a shell, here or over ssh, runs it as shell text; python and node read it as code in their language, where `time.sleep(300)` waits seconds, `await sleep(500)` and `setTimeout(f, 500)` in JavaScript wait milliseconds, and quoted text or a comment is not a wait; `cat`, `wc` or a loop read it as data.
 - A sleep inside a script file is not seen. Inline code (`python -c`, `node -e`) is read for its sleep and timer calls, not run.
