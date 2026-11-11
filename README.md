@@ -4,7 +4,9 @@
   <strong>Stop Claude Code from running <code>pkill node</code> on your other dev servers, taking their ports, and committing another session's edits with <code>git add -A</code>.</strong>
 </p>
 
-<p align="center">Hooks that know which processes, ports and git trees belong to which Claude Code session and subagent, so they block only what would hurt something else, and tell Claude the safe command to run instead. Zero dependencies, no telemetry.</p>
+<p align="center">Hooks that know which processes, ports and git trees belong to which Claude Code session and subagent, so they block only what would hurt something else, and tell Claude the safe command to run instead.</p>
+
+<p align="center">Windows, macOS and Linux. No tmux, no sudo, no background daemon, no network calls, no dependencies. Also guards Codex, Gemini CLI, Copilot CLI, Cursor and six more agents.</p>
 
 <p align="center">
   <a href="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml"><img src="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml/badge.svg" alt="tests"></a>
@@ -34,7 +36,14 @@ Then see what it would have stopped in your own last month, without changing any
 /bulkhead:scan 30d
 ```
 
-Node 18 or later must be on `PATH` (the native Claude Code installer does not install it; check with `node --version`). For the terminal commands and the status line, also run `npm install -g claude-bulkhead`, or use `npx claude-bulkhead status` without installing.
+Node 18 or later must be on `PATH` (the native Claude Code installer does not install it; check with `node --version`).
+
+| Install | What you get |
+|---|---|
+| The plugin (above) | The guards, which run on every Bash, PowerShell, Read and Edit call; the slash commands `/bulkhead:scan`, `status`, `log`, `doctor`, `reap`, `remote`; the skill that teaches Claude the safe habits. This is the part that protects you. |
+| `npm install -g claude-bulkhead` (optional) | The `bulkhead` command in your own terminal (`status`, `top`, `explain`, `allow`, `worktree`, `scan`, `doctor`), the status line, `bulkhead-slot`, and `bulkhead setup <agent>` for Codex, Gemini and the others. `npx claude-bulkhead status` works without installing. |
+
+Unsure whether it is working? `bulkhead doctor` runs a harmless command through each guard and shows that it was blocked, and how long it took.
 
 ## What it stops
 
@@ -116,9 +125,11 @@ claude-bulkhead is a set of small hooks that block or clean up each of these. Ea
 | **[kill-guard](docs/guards/kill-guard.md)**<br>Blocks `pkill node`, `taskkill /IM`, `Stop-Process -Name` and other kills by program name. Kills by PID pass. | **[port-guard](docs/guards/port-guard.md)**<br>Blocks starting a dev server on a port another session already serves, and killing that session's server by port. |
 | **[memory-guard and bulkhead-slot](docs/guards/memory-guard.md)**<br>Blocks heavy commands when RAM is low, and queues heavy jobs against one RAM budget shared by every session. | **[checkout-guard](docs/guards/checkout-guard.md)**<br>Blocks `git checkout`, `stash`, `reset --hard`, `git add -A` and similar when another live session works in the same tree, and deleting a folder another session works in. |
 | **[wait-guard](docs/guards/wait-guard.md)**<br>Blocks foreground sleep loops longer than 3 minutes, which make the next request rewrite the whole prompt cache. | **[orphan-reaper](docs/guards/orphan-reaper.md)**<br>When a session exits, stops the dev servers, test workers, watchers and headless browsers it left running. Keep one on purpose with `BULKHEAD_KEEP=1`; tunnels and databases are kept already. |
-| **[disk-guard](docs/guards/disk-guard.md)** <sup>new</sup><br>Blocks `du -sh ~`, `find /` without `-maxdepth`, and disk scans run in parallel, which stall the disk every session shares. | **[`bulkhead scan`](#do-you-need-it-ask-your-transcripts)** <sup>new</sup><br>Replays your past Claude Code transcripts against the guards: what they would have stopped, and how many sessions ran at once. |
+| **[disk-guard](docs/guards/disk-guard.md)**<br>Blocks `du -sh ~`, `find /` without `-maxdepth`, and disk scans run in parallel, which stall the disk every session shares. | **[`bulkhead scan`](#do-you-need-it-ask-your-transcripts)**<br>Replays your past Claude Code transcripts against the guards: what they would have stopped, and how many sessions ran at once. |
 | **[basics](docs/guards/basics.md)**<br>Blocks `rm -rf` at a root, home or a folder directly in it, force-pushes to `main`, resets that would lose uncommitted work, and commits authored as Claude. | **[`bulkhead status`, `top`, `log`, `doctor`](#see-what-is-running)**<br>Shows every session, its RAM, its ports, queued jobs, and what the guards have blocked. |
 | **[edit-guard](docs/guards/edit-guard.md)** <sup>new</sup><br>Tells the agent when another live session edited the same file in the last 30 minutes, in this tree or another worktree of the repository. Advisory by default, no server. | **[secrets-guard](docs/guards/secrets-guard.md)** <sup>new, off by default</sup><br>Blocks reading or printing `.env`, private keys, cloud credentials and the whole environment, by the Read tool or a shell command, while `.env.example`, `ls ~/.ssh` and `.pub` files pass. |
+| **[`bulkhead explain` and `bulkhead allow`](#when-it-blocks-something-you-meant)** <sup>new</sup><br>See what every guard would say about a command before it runs, and let one blocked command through once with the code in the block message. Claude cannot approve its own blocks. | **[`bulkhead worktree`](#worktrees-in-one-step)** <sup>new</sup><br>A new worktree in one step, with your `.env` files copied, dependencies installed and its own stable port; `prune` removes merged ones, squash merges included, and never one a session works in. |
+| **[Auto-queue](docs/commands.md#auto-queue)** <sup>new</sup><br>With `memoryGuard.autoQueue`, heavy commands are not refused but put in line: the hook wraps them in `bulkhead-slot`, and they start when there is room. | **[Codex, Gemini and other agents](#codex-gemini-and-other-agents)** <sup>new</sup><br>The same guards for Codex, Gemini CLI, Copilot CLI, Cursor, Windsurf, Droid, Devin, Cline, opencode and Amp, set up with `bulkhead setup <agent>`. |
 | **[Status line](#status-line)**<br>`3 sessions  2 heavy  9.1 GB free` in the Claude Code status line, in about 100 ms. | **[Config and slash commands](#configuration)**<br>Per-machine and per-project config with allow lists, plus `/bulkhead:scan`, `/bulkhead:status`, `/bulkhead:log`, `/bulkhead:doctor` and `/bulkhead:reap`. |
 
 Optional: **[`bulkhead remote`](#run-heavy-jobs-on-another-machine-optional)** runs a test suite, a build or a browser run on another machine over SSH, when this one has no RAM to spare.
