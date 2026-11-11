@@ -536,6 +536,99 @@ port-guard	Stop-Process -Id (Get-NetTCPConnection -LocalPort 5173).OwningProcess
 port-guard	Start-Process npm -ArgumentList 'run','dev'
 #@ tool Bash
 
+# == port-guard: more kill-by-port forms and dev servers (11-11) ==
+port-guard	lsof -i :3000 | grep LISTEN | awk '{print $2}' | xargs kill
+port-guard	lsof -iTCP:3000 -sTCP:LISTEN | awk 'NR==2{print $2}' | xargs kill
+port-guard	kill -9 $(lsof -i :3000 | awk 'NR>1{print $2}')
+port-guard	PID=$(lsof -ti :3000); kill $PID
+port-guard	for p in $(lsof -ti :3000); do kill $p; done
+port-guard	lsof -ti :3000 | while read p; do kill -9 $p; done
+port-guard	for port in 3999 3000; do kill $(lsof -ti :$port); done
+port-guard	PORT=3000; kill $(lsof -ti :$PORT)
+port-guard	pids=$(lsof -ti :3000); for p in $pids; do kill -9 $p; done
+port-guard	npx fkill :3000
+port-guard	fkill :3000
+port-guard	netstat -anv | grep '\.3000 ' | awk '{print $9}' | xargs kill
+port-guard	ss -ltnp 'sport = :3000' | awk 'NR>1{print $6}' | grep -o 'pid=[0-9]*' | cut -d= -f2 | xargs kill
+port-guard	fuser -n tcp -k 3000
+port-guard	fuser -k -n tcp 3000
+port-guard	npx -y kill-port 3999 3000
+port-guard	sudo lsof -ti:3000 | xargs -r kill -9
+port-guard	npx serve -l 3000
+port-guard	npx serve -s build
+port-guard	live-server
+port-guard	live-server --port=8080
+port-guard	json-server --port 3000 db.json
+port-guard	json-server db.json
+port-guard	php -S localhost:3000
+port-guard	php -S 0.0.0.0:8080 -t public
+port-guard	ruby -run -e httpd . -p 3000
+port-guard	ruby -run -ehttpd .
+port-guard	puma -p 3000
+port-guard	puma
+port-guard	puma -b tcp://0.0.0.0:3000
+port-guard	gunicorn -b :3000 app:app
+port-guard	gunicorn --bind=0.0.0.0:8000 app:app
+port-guard	gunicorn app:app
+port-guard	hypercorn app:app
+port-guard	fastapi dev
+port-guard	fastapi run main.py --port 3000
+port-guard	django-admin runserver 3000
+port-guard	python manage.py runserver 3000
+port-guard	streamlit run app.py
+port-guard	streamlit run app.py --server.port 3000
+port-guard	jupyter notebook
+port-guard	jupyter lab --port 3000
+port-guard	trunk serve
+port-guard	dotnet run --urls http://localhost:3000
+port-guard	dotnet watch run --urls "http://localhost:5000;https://localhost:5001"
+port-guard	java -jar app.jar --server.port=3000
+port-guard	java -Dserver.port=3000 -jar app.jar
+port-guard	PORT=3000 java -jar app.jar
+port-guard	./gradlew bootRun
+port-guard	./gradlew bootRun --args='--server.port=3000'
+port-guard	mvn spring-boot:run
+port-guard	npx react-native start
+port-guard	metro start
+port-guard	eleventy --serve
+port-guard	vuepress dev docs
+port-guard	vitepress dev docs
+port-guard	vitepress preview
+port-guard	vite .
+port-guard	vite dev
+port-guard	docker run -p 3000:3000 app
+port-guard	docker run -d --name web -p 127.0.0.1:8080:80 nginx
+port-guard	docker run --publish=3000:80 nginx
+port-guard	PORT=3000 go run .
+port-guard	PORT=3000 cargo run
+port-guard	PORT=3000 python app.py
+port-guard	PORT=3000 ruby app.rb
+port-guard	pnpm vite
+port-guard	yarn vite
+port-guard	yarn next dev
+port-guard	pnpm next dev -p 3000
+port-guard	npm exec -- next dev
+port-guard	bunx --bun vite
+port-guard	pnpm dlx serve
+port-guard	npx -y next dev
+port-guard	timeout 60 npm run dev
+port-guard	setsid npm run dev
+port-guard	caffeinate -i npm run dev
+port-guard	nice -n 10 npm run dev
+port-guard	stdbuf -oL npm run dev
+port-guard	dotenv -e .env -- npm run dev
+port-guard	env-cmd -f .env npm run dev
+port-guard	cross-env PORT=3000 node server.js
+port-guard	cross-env NODE_ENV=development next dev
+port-guard	(npm run dev &)
+port-guard	(cd . && npm run dev)
+port-guard	cd . && (npm run dev &)
+port-guard	if true; then npm run dev; fi
+port-guard	for i in 1; do npm run dev & done
+port-guard	uv run uvicorn app:app
+port-guard	poetry run flask run
+port-guard	mix phx.server
+
 # == checkout-guard: wrapped ==
 checkout-guard	GIT_TRACE=1 git switch main
 checkout-guard	env GIT_PAGER=cat git checkout -b fix/login

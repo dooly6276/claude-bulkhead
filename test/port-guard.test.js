@@ -141,3 +141,58 @@ test('hook fails open', () => {
   assert.strictEqual(runScript('port-guard', 'not json').status, 0)
   assert.strictEqual(runScript('port-guard', { tool_input: { command: 'npx next dev' } }, { BULKHEAD_DISABLE: 'port-guard' }).status, 0)
 })
+
+test('finds kill-by-port through pipes, loops, variables and other tools', () => {
+  const cases = [
+    ["lsof -i :3000 | grep LISTEN | awk '{print $2}' | xargs kill", [3000]],
+    ["lsof -iTCP:3000 -sTCP:LISTEN | awk 'NR==2{print $2}' | xargs kill", [3000]],
+    ["kill -9 $(lsof -i :3000 | awk 'NR>1{print $2}')", [3000]],
+    ['PID=$(lsof -ti :3000); kill $PID', [3000]],
+    ['pids=$(lsof -ti :3000); for p in $pids; do kill -9 $p; done', [3000]],
+    ['for p in $(lsof -ti :3000); do kill $p; done', [3000]],
+    ['lsof -ti :3000 | while read p; do kill -9 $p; done', [3000]],
+    ['for port in 3000 3001; do kill $(lsof -ti :$port); done', [3000, 3001]],
+    ['PORT=3000; kill $(lsof -ti :$PORT)', [3000]],
+    ['npx fkill :3000', [3000]],
+    ['fkill -f :3000 :3001', [3000, 3001]],
+    ["netstat -anv | grep '\\.3000 ' | awk '{print $9}' | xargs kill", [3000]],
+    ["ss -ltnp 'sport = :3000' | awk 'NR>1{print $6}' | grep -o 'pid=[0-9]*' | cut -d= -f2 | xargs kill", [3000]],
+    ['fuser -n tcp -k 3000', [3000]],
+    ['fuser -k -n tcp 3000 3001', [3000, 3001]],
+    ['sudo lsof -nP -iTCP:3000 -sTCP:LISTEN -t | xargs kill -9', [3000]],
+    ['pnpm dlx kill-port 3000', [3000]],
+  ]
+  for (const [cmd, want] of cases) assert.deepStrictEqual(killPorts(cmd), want, cmd)
+  // looking is not killing, and a number in text or another statement is not a port
+  for (const cmd of ['lsof -i :3000 | grep LISTEN', 'lsof -ti :3000; kill 1234', 'lsof -i :3000 && kill 1234', 'kill -0 $(lsof -ti :3000)', 'echo "lsof -ti :3000 | xargs kill"',
+    'grep -rn "kill-port 3000" docs', 'ps aux | grep 3000', 'ss -ltnp "sport = :3000"', "netstat -anv | grep '\\.3000 '", 'fuser 3000/tcp', 'fkill --help', 'fkill 3000',
+    'lsof -i :3000 | xargs echo kill', 'git commit -m "kill $(lsof -ti :3000)"']) {
+    assert.deepStrictEqual(killPorts(cmd), [], cmd)
+  }
+})
+
+test('a dev server that publishes several ports is checked on each', async () => {
+  const dir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'pg-compose-'))
+  try {
+    require('fs').writeFileSync(require('path').join(dir, 'compose.yaml'), 'services:\n  a:\n    ports:\n      - "4999:80"\n      - "3001:5173"\n')
+    const msg = await check('docker compose up -d', { ...as(200), cwd: dir })
+    assert.match(msg, /port 3001 is already used by another Claude session/)
+    assert.match(await check('docker run -p 4998:80 -p 3000:80 nginx', as(200)), /port 3000 is already used/)
+    assert.strictEqual(await check('docker run -p 4998:80 nginx', as(200)), null)
+    assert.strictEqual(await check('grep -E "next dev|vite|playwright" f', as(200)), null)
+    assert.strictEqual(await check('vite --version', as(200)), null)
+  } finally {
+    require('fs').rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a heredoc is code only for a shell', async () => {
+  const body = 'import os\\ns = "PORT=3000 npm start; kill $(lsof -ti :3000)"\\n'
+  for (const consumer of ['python3 -', 'node -', 'cat > f', 'while read c; do echo "$c"; done']) {
+    assert.strictEqual(await check(`${consumer} <<'E'\n${body}E`, as(200)), null, consumer)
+    assert.strictEqual(await checkKill(`${consumer} <<'E'\n${body}E`, as(200)), null, consumer)
+  }
+  assert.ok(await checkKill("bash <<'E'\nkill $(lsof -ti :3000)\nE", as(200)))
+  assert.ok(await check("cat <<'E' | bash\nnpx next dev\nE", as(200)))
+  assert.ok(await check("ssh localhost bash <<'E'\nnpx next dev\nE", as(200)))
+})

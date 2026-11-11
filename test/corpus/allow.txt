@@ -1231,6 +1231,58 @@ fuser -k 3999/tcp
 npx next dev
 npx kill-port 3000
 #@ config none
+grep -E "next dev|next start|playwright" package.json
+ls node_modules/.bin | grep -i -E "playwright|vite|tsx"
+ps aux | grep -E "next dev|next start|vite"
+git log --oneline | grep -E "vite|next dev|storybook"
+echo "run next dev then vite"
+vite --version
+vite -v
+vite --help
+vite -h
+vite build
+vite optimize
+npx vite --version
+next --help
+next -v
+uvicorn --help
+flask --version
+npx serve --help
+php foo.php
+php -v
+dotnet run
+dotnet build
+java -jar app.jar
+go run .
+cargo run
+python app.py
+ruby app.rb
+./gradlew build
+mvn test
+docker ps
+docker run alpine echo hi
+docker run -p 3999:80 nginx
+docker compose down
+docker compose up
+trunk build
+eleventy
+jupyter notebook --help
+streamlit --version
+pnpm run build
+yarn build
+cat package.json
+curl localhost:3000
+open http://localhost:3000
+lsof -i :3000 | grep LISTEN
+lsof -ti :3000; kill 1234
+kill -0 $(lsof -ti :3000)
+echo "lsof -ti :3000 | xargs kill"
+grep -rn "kill-port 3000" docs
+ps aux | grep 3000
+fkill --help
+fuser 3000/tcp
+ss -ltnp 'sport = :3000'
+netstat -anv | grep '\.3000 '
 #@ state default
 
 #@ state shared-tree

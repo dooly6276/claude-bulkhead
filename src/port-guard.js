@@ -2,13 +2,34 @@
 const net = require('net')
 const { runHook, blocked, setting, oneLine } = require('./hook')
 const { detect } = require('./dev-servers')
+const { killPorts } = require('./port-kills')
 const { readProcesses } = require('./processes')
 const { readSessionFiles, findSessions, ownSession } = require('./sessions')
 const { agentLabel } = require('./agents')
 const shell = require('./shell')
 
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'ash', 'fish', 'eval', 'source', 'xargs'])
+
+// A heredoc is code for the shell only when a shell (or eval, source) reads it; python, node, cat,
+// a while loop and the like get it as data, and a command inside that text is not run.
+function readsShell(prefix) {
+  return prefix.split(/[;&|(]/).pop().trim().split(/\s+/).some(w => SHELLS.has(shell.bin(w)))
+}
+
+function withoutDataHeredocs(src) {
+  const docs = shell.heredocs(src, (prefix, after) => !readsShell(prefix) && !/\|\s*(?:[\w.-]+\s+)*(?:sh|bash|zsh|dash|ksh|fish|source|xargs)\b/.test(after))
+  if (!docs.length) return src
+  let out = ''
+  let last = 0
+  for (const d of docs) {
+    out += src.slice(last, d.start) + ' ' + d.rest
+    last = d.end
+  }
+  return out + src.slice(last)
+}
+
 // The command with heredoc bodies, commit messages and shell wrappers (bash -c "...") resolved.
-const opened = (cmd, mode = 'sh') => shell.unwrap(shell.prepare(String(cmd || ''), mode), mode)
+const opened = (cmd, mode = 'sh') => shell.unwrap(withoutDataHeredocs(shell.prepare(String(cmd || ''), mode)), mode)
 
 function freePort(port, taken) {
   for (let p = port + 1; p < port + 200 && p < 65536; p++) if (!taken.has(p)) return p
@@ -52,62 +73,32 @@ async function inspect(cmd, {
   cwd, probe = listening, snapshot = () => readProcesses(), files = () => readSessionFiles(), self = ownSession, ignore = setting('portGuard.ignorePorts', []), mode = 'sh',
 } = {}) {
   const server = detect(opened(cmd, mode), { cwd })
-  if (!server || !server.port || ignore.includes(server.port)) return null
-  if (!(await probe(server.port))) return null
+  const ports = server ? (server.ports || [server.port]).filter(p => p && !ignore.includes(p)) : []
+  if (!ports.length) return null
+  const live = []
+  for (const p of ports) if (await probe(p)) live.push(p)
+  if (!live.length) return null
   const snap = snapshot()
   if (!snap) return null
-  const holder = snap.ports.find(l => l.port === server.port)
-  if (!holder) return null
-  const owner = findSessions(snap, files()).find(s => s.ports.some(l => l.pid === holder.pid))
-  if (!owner) return null
+  const sessions = findSessions(snap, files())
   const me = self(snap.procs)
-  if (!me || me === owner.pid) return null
-  const name = (snap.procs.find(p => p.pid === holder.pid) || {}).name || 'a process'
-  const taken = new Set(snap.ports.map(l => l.port))
-  const stable = preferredPort(cwd, taken)
-  const free = stable || freePort(server.port, taken)
-  const message = `[bulkhead] port-guard: port ${server.port} is already used by another ${agentLabel(owner.agent)} session ` +
-    `(${describeSession(owner)}): ${name} pid ${holder.pid}.\n` +
-    'Leave that server alone; it is the other session\'s work. If you start yours anyway, it either fails or moves to the ' +
-    `next port, and requests to localhost:${server.port} reach the other project.\n` +
-    (free ? `Port ${free} is free${stable ? ' (this worktree\'s own port)' : ''}:\n  ${server.hint(free)}` : `Pick a free port and pass it explicitly; \`bulkhead port --near ${server.port}\` prints one.`)
-  return { rule: 'port-in-use', message, port: server.port, pid: holder.pid, name, owner: { pid: owner.pid, cwd: owner.cwd } }
-}
-
-const numbers = s => (String(s).match(/\d+/g) || []).map(Number).filter(n => n > 0 && n < 65536)
-const KILLS = /\b(?:kill|taskkill|Stop-Process|spps)\b(?!-port)/i
-
-// Ports a kill-by-port command aims at, or [] when the command does not kill by port.
-// Statements are split on ; && || and newlines, but not on pipes, which carry the PID along.
-function killPorts(cmd) {
-  const ports = new Set()
-  const add = list => list.forEach(p => ports.add(p))
-  for (const st of String(cmd || '').split(/\n|;|&&|\|\|/)) {
-    // npx kill-port 3000 3001, npx kill-port --port 3000,3001
-    const kp = /\bkill-port\b((?:\s+(?:--port\b|-p\b|[\d,]+)(?:[=\s]+[\d,]+)?)+)/i.exec(st)
-    if (kp) add(numbers(kp[1]))
-    // fuser -k 3000/tcp, fuser -k -n tcp 3000
-    if (/\bfuser\b/.test(st) && /(?:^|\s)-[a-zA-Z]*k/.test(st)) {
-      add([...st.matchAll(/\b(\d+)\/tcp\b/gi)].map(m => Number(m[1])))
-      const n = /-n\s+tcp\s+(\d+)/i.exec(st)
-      if (n) add([Number(n[1])])
-    }
-    // lsof -ti :3000 | xargs kill -9, kill $(lsof -t -i:3000)
-    if (/\blsof\b/.test(st) && /\blsof\b[^|)`]*\s-[a-zA-Z]*t/.test(st) && KILLS.test(st.replace(/\blsof\b[^|)`]*/g, ' '))) {
-      add([...st.matchAll(/-[a-zA-Z]*i\s*(?:tcp|TCP)?:(\d+)/g)].map(m => Number(m[1])))
-    }
-    // Stop-Process -Id (Get-NetTCPConnection -LocalPort 3000).OwningProcess
-    if (/Get-NetTCPConnection/i.test(st) && KILLS.test(st)) {
-      const lp = /-LocalPort\s+((?:\d+\s*,\s*)*\d+)/i.exec(st)
-      if (lp) add(numbers(lp[1]))
-    }
-    // netstat -ano | findstr :3000 ... taskkill /PID, for /f ... in ('netstat -aon ^| findstr :3000') do taskkill
-    if (/\bnetstat\b/i.test(st) && KILLS.test(st)) {
-      const f = /\b(?:findstr|grep|Select-String)\b[^|]*?:(\d+)/i.exec(st)
-      if (f) add([Number(f[1])])
-    }
+  if (!me) return null
+  for (const port of live) {
+    const holder = snap.ports.find(l => l.port === port)
+    const owner = holder && sessions.find(s => s.ports.some(l => l.pid === holder.pid))
+    if (!owner || me === owner.pid) continue
+    const name = (snap.procs.find(p => p.pid === holder.pid) || {}).name || 'a process'
+    const taken = new Set(snap.ports.map(l => l.port))
+    const stable = preferredPort(cwd, taken)
+    const free = stable || freePort(port, taken)
+    const message = `[bulkhead] port-guard: port ${port} is already used by another ${agentLabel(owner.agent)} session ` +
+      `(${describeSession(owner)}): ${name} pid ${holder.pid}.\n` +
+      'Leave that server alone; it is the other session\'s work. If you start yours anyway, it either fails or moves to the ' +
+      `next port, and requests to localhost:${port} reach the other project.\n` +
+      (free ? `Port ${free} is free${stable ? ' (this worktree\'s own port)' : ''}:\n  ${server.hint(free)}` : `Pick a free port and pass it explicitly; \`bulkhead port --near ${port}\` prints one.`)
+    return { rule: 'port-in-use', message, port, pid: holder.pid, name, owner: { pid: owner.pid, cwd: owner.cwd } }
   }
-  return [...ports].filter(p => p > 0 && p < 65536)
+  return null
 }
 
 // Resolves to a block message when a kill by port would hit another live session's server.
