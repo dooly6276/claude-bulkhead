@@ -43,7 +43,7 @@ Blocks `git reset --hard` when tracked files have uncommitted changes, and `git 
 
 ```
 [bulkhead] basics: `git reset --hard origin/main` would throw away 2 uncommitted changes (src/app.js, src/db.js).
-Commit them or run `git stash push -u` first, so they can be brought back.
+Commit them, or move the files somewhere else, first. `git clean -n` and `git status` show what would go.
 ```
 
 ## agent-author

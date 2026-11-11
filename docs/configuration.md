@@ -94,6 +94,7 @@ The built-in shared list is: node, python, python3, py, pythonw, ruby, java, jav
 | `protectedBranches` | list of branch names | `["main", "master"]` | Branches the force-push rule protects |
 | `rmRoot` | boolean | `true` | `rm -rf` and its PowerShell and cmd forms at a root, a top-level folder such as `/srv`, the home directory, a folder directly in it (caches excepted), or a folder above the repository |
 | `forcePushMain` | boolean | `true` | `git push --force` to a protected branch. `--force-with-lease` always passes |
+| `protectedDelete` | boolean | `true` | Deleting a protected branch: `git push origin :main`, `git push --delete origin main`, `git branch -D main` |
 | `discardChanges` | boolean | `true` | `git reset --hard` or `git clean -fd` that would lose uncommitted work |
 | `agentAuthor` | boolean | `true` | Commits authored as Claude or Anthropic: `--author`, `git config user.name/user.email`, `GIT_AUTHOR_*` |
 
@@ -151,7 +152,7 @@ An entry with a problem (a missing `host`, an unknown key, a value of the wrong 
 
 | Variable | Same as |
 |---|---|
-| `BULKHEAD_DISABLE` | Comma-separated names to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `basics`, `orphan-reaper`, the basics rules `rm-root`, `force-push-main`, `discard-changes`, or `all`. A name listed here is off whatever the files say |
+| `BULKHEAD_DISABLE` | Comma-separated names to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `basics`, `orphan-reaper`, the basics rules `rm-root`, `force-push-main`, `protected-delete`, `discard-changes`, or `all`. A name listed here is off whatever the files say |
 | `BULKHEAD_WAIT_MAX_SEC` | `waitGuard.limitSeconds` |
 | `BULKHEAD_MIN_FREE_GB` | `memory.minFreeGb` |
 | `BULKHEAD_SLOT_FLOOR_GB` | `memory.slotFloorGb` |

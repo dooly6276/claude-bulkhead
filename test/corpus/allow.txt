@@ -500,6 +500,15 @@ git archive --format=zip HEAD > src.zip
 git gc
 git fsck
 
+# == git: deleting branches that are not protected ==
+git push origin :feature
+git push origin --delete feature
+git push origin -d fix/main
+git branch -D feature
+git branch -d main
+git branch -D main-old
+git push -o ci.skip origin feature
+
 # == git: branches and history ==
 # The guards that watch shared trees see no other session here, so all of these pass.
 git checkout main
@@ -1251,6 +1260,56 @@ git merge --abort
 git show HEAD:src/app.js
 bash -c "git status"
 GIT_PAGER=cat git log -3
+# a pathspec, a dry run, usage output and a path-limited stash do not sweep up the other session's work
+git add -A src
+git add -u src/app.js
+git add --all src notes.txt
+git add -A -- src
+git add -n .
+git add --dry-run -A
+git add -An
+git add -nA
+git switch --help
+git rebase --help
+git merge -h
+git checkout --help
+git stash push -- src/app.js
+git stash push -m wip -- src/app.js
+git stash push -u -- notes.txt
+git stash -- src/app.js
+git stash show
+git stash create
+git add $(git ls-files -m -- src)
+git ls-files -m src | xargs git add
+echo src/app.js | xargs git add
+git restore src/app.js
+git checkout -- src/app.js
+git rm src/app.js
+git rm --cached src/app.js
+git cherry-pick --abort
+git revert --continue
+git am --abort
+git apply --check fix.patch
+git apply --cached fix.patch
+git apply --stat fix.patch
+git checkout-index file.txt
+git read-tree HEAD
+git submodule update --init
+git reset --soft HEAD~1
+git reset -- src/app.js
+git reset HEAD src/app.js
+git reset
+git reset .
+git reset HEAD~1
+git --no-pager log -3
+git -p status
+git --git-dir=.git --work-tree=. status
+git -c color.ui=never -C . diff --stat
+rm -rf dist/*
+rm -rf *.log
+find . -name "*.log" -delete
+find . -mtime +30 -delete
+find node_modules -delete
 #@ state default
 
 # == settings that change what a guard allows ==

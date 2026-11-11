@@ -150,4 +150,4 @@ function ownSession(procs, pid = process.pid, env = process.env) {
   return Number(env.CLAUDE_PID) || null
 }
 
-module.exports = { isClaudeCli, readSessionFiles, findSessions, assignOwners, ownSession, claudeDir }
+module.exports = { PID_REUSE_SLACK_MS, isClaudeCli, readSessionFiles, findSessions, assignOwners, ownSession, claudeDir }

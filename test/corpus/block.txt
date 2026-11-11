@@ -549,6 +549,72 @@ checkout-guard	git commit -am "wip"
 checkout-guard	git add --all
 checkout-guard	bash -c 'git add -u && git commit -m x'
 
+# == checkout-guard: flag clusters, global options, pipes (11-11 audit) ==
+checkout-guard	git add -Af
+checkout-guard	git add -Av
+checkout-guard	git add -uv
+checkout-guard	git add -fA
+checkout-guard	git add -A ':!notes.txt'
+checkout-guard	git add -A -- .
+checkout-guard	git add *
+checkout-guard	git add "*"
+checkout-guard	git add ./*
+checkout-guard	git add .*
+checkout-guard	git add ":(top)"
+checkout-guard	git add :/
+checkout-guard	git --no-pager add -A
+checkout-guard	git -p add -A
+checkout-guard	git --paginate add .
+checkout-guard	git --git-dir=.git --work-tree=. add -A
+checkout-guard	git -c color.ui=never --no-pager -C . add -A
+checkout-guard	git --literal-pathspecs add -A
+checkout-guard	GIT_WORK_TREE=. git add -A
+checkout-guard	git --no-pager checkout main
+checkout-guard	git -p stash
+checkout-guard	git ls-files -m | xargs git add
+checkout-guard	git diff --name-only | xargs git add
+checkout-guard	git status --porcelain | awk '{print $2}' | xargs git add
+checkout-guard	git add $(git ls-files -m)
+checkout-guard	git add "$(git diff --name-only)"
+checkout-guard	git add "$PWD"
+checkout-guard	git add "$(git rev-parse --show-toplevel)"
+checkout-guard	git add $(pwd)
+
+# == checkout-guard: discarding or moving files in a shared tree (11-11 audit) ==
+checkout-guard	git checkout -f
+checkout-guard	git checkout --force
+checkout-guard	git stash -a
+checkout-guard	git stash --all
+checkout-guard	git stash -q
+checkout-guard	git stash --quiet
+checkout-guard	git stash drop
+checkout-guard	git stash clear
+checkout-guard	git stash push -m wip
+checkout-guard	git rm -rf .
+checkout-guard	git rm -rf src
+checkout-guard	git restore :/
+checkout-guard	git restore src
+checkout-guard	git checkout -- src
+checkout-guard	git checkout HEAD -- src
+checkout-guard	git cherry-pick abc1234
+checkout-guard	git revert HEAD
+checkout-guard	git apply fix.patch
+checkout-guard	git am fix.patch
+checkout-guard	git checkout-index -af
+checkout-guard	git read-tree -u --reset HEAD
+checkout-guard	git submodule update --force
+checkout-guard	git reset --merge
+checkout-guard	git reset --keep HEAD~1
+
+# == checkout-guard: deleting the tree another session works in (11-11 audit) ==
+checkout-guard	rm -rf .git
+checkout-guard	rm -rf *
+checkout-guard	rm -rf ./*
+checkout-guard	rm -rf .*
+checkout-guard	find . -delete
+checkout-guard	find . -type f -delete
+checkout-guard	find . -exec rm -rf {} +
+
 # == disk-guard: whole-drive and parallel scans ==
 disk-guard	du -sh ~
 disk-guard	du -sh ~/*
@@ -593,3 +659,19 @@ basics	git push -f origin release
 #@ config {"waitGuard":{"limitSeconds":60}}
 wait-guard,timeout=600000	sleep 90
 #@ config none
+
+# == basics: deleting a protected branch (11-11 audit) ==
+basics	git push origin :main
+basics	git push origin :master
+basics	git push origin :refs/heads/main
+basics	git push origin --delete main
+basics	git push origin -d main
+basics	git push --delete origin master
+basics	git branch -D main
+basics	git branch -D master
+basics	git branch --delete --force main
+basics	git branch -df main
+basics	git --no-pager push origin --delete main
+basics	git --no-pager push --force origin main
+basics	git -p push -f origin master
+basics	git --paginate reset --hard

@@ -1,7 +1,7 @@
 'use strict'
 const test = require('node:test')
 const assert = require('node:assert')
-const { check } = require('../src/basics')
+const { check, ruleOf } = require('../src/basics')
 const fs = require('fs')
 const path = require('path')
 const { execFileSync } = require('child_process')
@@ -83,7 +83,7 @@ test('other pushes pass', () => {
 test('reset --hard and clean -fdx are blocked only when they would lose work', () => {
   const dirty = fakeGit({ status: ' M src/app.js\n?? notes.md\n' })
   assert.match(check('git reset --hard', linux(dirty)), /1 uncommitted change \(src\/app\.js\)/)
-  assert.match(check('git reset --hard origin/main', linux(dirty)), /git stash push -u/)
+  assert.match(check('git reset --hard origin/main', linux(dirty)), /git clean -n/)
   assert.match(check('git clean -fdx', linux(dirty)), /1 untracked file \(notes\.md\)/)
   const untrackedOnly = fakeGit({ status: '?? notes.md\n' })
   assert.strictEqual(check('git reset --hard', linux(untrackedOnly)), null)
@@ -155,4 +155,49 @@ test('agent-author can be turned off alone', () => {
   const r = runScript('basics', { tool_input: { command: 'git config user.name Claude' } }, { BULKHEAD_DISABLE: 'agent-author' })
   assert.strictEqual(r.status, 0)
   assert.strictEqual(runScript('basics', { tool_input: { command: 'git config user.name Claude' } }).status, 2)
+})
+
+test('deleting a protected branch is blocked', () => {
+  for (const cmd of ['git push origin :main', 'git push origin :master', 'git push origin :refs/heads/main', 'git push origin --delete main', 'git push --delete origin main',
+    'git push origin -d main', 'git push -d origin master', 'git push origin --del main', 'git push origin feature :main', 'git branch -D main', 'git branch -D master',
+    'git branch --delete --force main', 'git branch -d -f main', 'git branch -df main', 'git branch -fd master', 'git branch -D old main', 'git -C ../app push origin :main',
+    'git --no-pager push origin --delete main', 'git push origin --delete refs/heads/main']) {
+    const why = check(cmd, linux())
+    assert.ok(why, cmd)
+    assert.match(why, /deletes the protected branch \(main, master\)/, cmd)
+    assert.strictEqual(ruleOf(why), 'protected-delete', cmd)
+  }
+  for (const cmd of ['git push origin :feature', 'git push origin --delete feature', 'git push origin -d fix/main', 'git branch -D feature', 'git branch -d main', 'git branch -D main-old',
+    'git branch -m main old', 'git branch main', 'git push origin main', 'git push origin feature:main-x', 'git branch -D', 'git push -o ci.skip origin feature']) {
+    assert.strictEqual(check(cmd, linux()), null, cmd)
+  }
+  assert.ok(check('git push origin :release', { ...linux(), protectedBranches: ['release'] }))
+  assert.strictEqual(check('git push origin :main', { ...linux(), protectedBranches: ['release'] }), null)
+})
+
+test('the protected-delete rule can be turned off alone', () => {
+  const saved = process.env.BULKHEAD_DISABLE
+  try {
+    process.env.BULKHEAD_DISABLE = 'protected-delete'
+    assert.strictEqual(check('git push origin :main', linux()), null)
+    assert.ok(check('git push --force origin main', linux()))
+  } finally {
+    if (saved === undefined) delete process.env.BULKHEAD_DISABLE
+    else process.env.BULKHEAD_DISABLE = saved
+  }
+})
+
+test('git global options do not hide force-pushes, resets or the repository', () => {
+  for (const cmd of ['git --no-pager push --force origin main', 'git -p push -f origin master', 'git --paginate push origin +main', 'git -c push.default=simple push -f origin main',
+    'git --git-dir=.git --work-tree=. push -f origin main', 'git --literal-pathspecs push --force origin main']) {
+    assert.match(check(cmd, linux()), /force-pushing/, cmd)
+  }
+  const dirty = fakeGit({ status: ' M src/app.js\n' })
+  assert.match(check('git --no-pager reset --hard', linux(dirty)), /1 uncommitted change/)
+  assert.match(check('git -c core.pager=cat -C . reset --hard', linux(dirty)), /1 uncommitted change/)
+  // the git run sees the same --git-dir and --work-tree the command names
+  const seen = []
+  const run = args => { seen.push(args.join(' ')); return args.includes('status') ? ' M a.js\n' : '' }
+  check('git --git-dir=/srv/repo.git --work-tree=/srv/site reset --hard', { ...linux(), run })
+  assert.ok(seen.some(a => a === '--git-dir=/srv/repo.git --work-tree=/srv/site status --porcelain'), seen.join(' | '))
 })
