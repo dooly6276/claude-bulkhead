@@ -262,7 +262,8 @@ function classify(cmd, {
       rule: `git-${call.sub}`,
       why: `[bulkhead] checkout-guard: \`${oneLine(seg, 120)}\` ${what} in ${top}, and ${who}.\n` +
         'Its files and branch would change under it. Work in your own worktree instead:\n' +
-        `  git worktree add ../${name}-<task> -b <branch>`,
+        `  git worktree add ../${name}-<task> -b <branch>\n` +
+        'or in one step, with .env files, dependencies and a free port: bulkhead worktree add <name>',
     }
   }
   return null

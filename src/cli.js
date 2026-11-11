@@ -10,6 +10,7 @@ const USAGE = `usage:
   bulkhead doctor [--json] [--no-remote] check the install, settings and this machine
   bulkhead config [--json]              effective settings and where each one came from
   bulkhead port [--near PORT] [--json]  a port no process is listening on
+  bulkhead worktree add|list|prune     one-step worktrees: env files, install, stable port, safe cleanup
   bulkhead reap [--dry-run] [--json]    stop what exited sessions left running
   bulkhead slot run [--gb=N] [--wait=MINUTES] [--label=TEXT] -- <command...>
   bulkhead slot status [--gb=N]         same as bulkhead-slot
@@ -26,6 +27,7 @@ const COMMANDS = {
   config: './config-cli',
   port: './port-cli',
   reap: './reap-cli',
+  worktree: './worktree-cli',
   slot: './slot-cli',
   remote: './remote',
 }

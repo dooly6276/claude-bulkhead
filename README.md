@@ -137,6 +137,21 @@ A scripted run of `bulkhead status`, port-guard, kill-guard and wait-guard, reco
 
 After that there is nothing to do. The guards run on every Bash and PowerShell call. To see what they stopped, run `bulkhead log` or `/bulkhead:log`; `bulkhead log --summary` counts blocks per guard on your machine. To change a threshold or allow a command, see [docs/configuration.md](docs/configuration.md). All commands are listed in [docs/commands.md](docs/commands.md).
 
+## Worktrees in one step
+
+When another session works in your tree, checkout-guard sends the agent to a worktree. A plain worktree has no `.env`, no `node_modules` and the same dev server port as the main checkout. `bulkhead worktree add` fixes those three:
+
+```
+$ bulkhead worktree add fix-login
+created ~/dev/shop-fix-login on new branch fix-login from HEAD
+copied .env (default set)
+pnpm install --frozen-lockfile: done in 14.2s
+wrote PORT=3800 to .env.local
+next: cd ~/dev/shop-fix-login && claude
+```
+
+It copies the files named in `.worktreeinclude` (the file Claude Code reads too) or a safe default set of `.env` files, never `node_modules`, build output or anything over 5 MB; installs with the project's lockfile; and gives the worktree a port that stays the same every time. `bulkhead worktree list` shows each worktree with its branch, state, live session and port. `bulkhead worktree prune` lists the ones that are merged, clean and unused, and removes them with `--yes` using `git worktree remove` and `git branch -d`, never `--force`, never a live session's folder. Details in [docs/commands.md](docs/commands.md#bulkhead-worktree).
+
 ## Run heavy jobs on another machine (optional)
 
 When several sessions run test suites and builds at once, one machine runs out of RAM: memory-guard blocks the commands, or bulkhead-slot makes them queue. If you have a second machine that is mostly idle, `bulkhead remote` runs the heavy command there instead.

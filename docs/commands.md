@@ -13,6 +13,7 @@ Every command that prints a table also takes `--json`. Colors are used only when
 | [`bulkhead doctor`](#bulkhead-doctor) | Checks the install, the settings and this machine |
 | [`bulkhead config`](#bulkhead-config) | Effective settings and where each one came from |
 | [`bulkhead port`](#bulkhead-port) | A port nothing is listening on |
+| [`bulkhead worktree`](#bulkhead-worktree) | A worktree in one step (env files, install, stable port), a list of them, and safe cleanup |
 | [`bulkhead reap`](#bulkhead-reap) | Stops what sessions that have exited left running, or lists it with `--dry-run` |
 | [`bulkhead-slot`](#bulkhead-slot) | Queues heavy commands against a shared RAM budget |
 | [`bulkhead remote`](#bulkhead-remote) | Runs a heavy command on another machine over SSH (optional) |
@@ -277,6 +278,57 @@ npm run dev -- --port $(bulkhead port --near 3000)
 A port counts as free only when it can be bound on `127.0.0.1`, `0.0.0.0`, `::1` and `::`; on Windows a server on one of these does not stop a bind on another. Ports that browsers refuse to open (such as 5060, 6000 and 6665 to 6669) are skipped. It tries 1000 ports and exits 1 when none is free. No process scan is needed, so it answers in well under a second.
 
 port-guard's block messages suggest it.
+
+## bulkhead worktree
+
+```
+bulkhead worktree add <name> [--base REF] [--path DIR] [--install|--no-install] [--json]
+bulkhead worktree list [--json]
+bulkhead worktree prune [--merged-into REF] [--older-than 7d] [--yes] [--json]
+```
+
+checkout-guard suggests a worktree when another live session works in your tree. A bare `git worktree add` leaves you without `.env` files and `node_modules`, and with the same dev server port as the main checkout. `bulkhead worktree` does the setup and the cleanup.
+
+### add
+
+Creates `../<repo>-<name>` (or `--path`) on a new branch `<name>` from `--base` (default: the current HEAD). It refuses when the folder or the branch exists, and then changes nothing. A name like `feat/x` gives the folder `<repo>-feat-x`. Run from a linked worktree it still names the folder after the main checkout. Then, in order:
+
+1. **Copies untracked files.** With a `.worktreeinclude` in the project root, the files it matches. It is the file Claude Code reads for its own worktrees: gitignore syntax, and only files that are also gitignored are copied. Without it, a safe default set from the project root: `.env`, `.env.*` (not `.env.example`, `.sample`, `.template` or `.dist`), `.envrc`, `.tool-versions`, `.nvmrc`, unless they are tracked. Either way it never copies `node_modules`, build output (`dist`, `build`, `.next`, `target` and similar), links, or any file over 5 MB; each file left out is printed with the reason.
+2. **Installs dependencies** in the foreground when a lockfile exists and its package manager is on `PATH` (`--install` forces it and makes a missing lockfile or tool an error, `--no-install` skips it). The `packageManager` field of `package.json` decides when several lockfiles exist; otherwise: `bun.lock`/`bun.lockb` runs `bun install --frozen-lockfile`, `pnpm-lock.yaml` runs `pnpm install --frozen-lockfile`, `yarn.lock` runs `yarn install --immutable` (Yarn 2+, found by `.yarnrc.yml`) or `yarn install --frozen-lockfile`, `package-lock.json` runs `npm ci`. Output is summarized to one line, or the last 12 lines when it fails. `node_modules` is never symlinked, because tools resolve real paths and break on links.
+3. **Assigns a stable port.** The same worktree path always starts at the same port in 3000 to 3999 (sha1 of the absolute path modulo 1000, then forward to the first port nothing listens on) and `PORT=<n>` is written to the worktree's `.env.local`, only when that file has no `PORT` yet (a copied `.env.local` keeps its own).
+4. Prints the next step: `cd <path> && claude`.
+
+```
+$ bulkhead worktree add fix-login
+created ~/dev/shop-fix-login on new branch fix-login from HEAD
+copied .env (default set)
+pnpm install --frozen-lockfile: done in 14.2s
+wrote PORT=3800 to .env.local
+next: cd ~/dev/shop-fix-login && claude
+```
+
+`--json` prints `path`, `branch`, `copied`, `skipped`, `install`, `port`, `portWritten` and `next`. The exit code is 1 when the worktree could not be made, or when an install failed (the worktree is kept).
+
+### list
+
+Every worktree of this repository with its branch, the age of its last commit, `clean`, `dirty` or `missing`, commits ahead and behind the default branch (`origin/HEAD`, else `main` or `master`), the live Claude Code session that works in it (a session belongs to the deepest worktree around its working directory) and the `PORT` in its `.env.local`.
+
+```
+PATH                  BRANCH       AGE  STATE  VS origin/main  SESSION   PORT
+~/dev/shop            main (main)  2h   clean  +0/-0           pid 4181  -
+~/dev/shop-fix-login  fix-login    3d   clean  +2/-0           -         3800
+```
+
+### prune
+
+Lists the worktrees that are safe to remove, and removes them only with `--yes`. A worktree is safe when all of these hold, and the others are printed with the reason they are kept:
+
+- its branch is merged into `--merged-into` (default: the default branch) and has commits or is older than `--older-than`; a branch nobody has committed to yet is never called merged unless `--older-than` is given and met (`7d`, `12h`, `2w`, `30m`; last commit or last change to the folder, whichever is newer),
+- no uncommitted changes, no untracked files besides copied env files, and no ignored files besides rebuildable ones (`node_modules`, build output, caches, logs and the env files); an untracked env file counts only when it is identical to the main checkout's, or is the `PORT=` line this command wrote,
+- no live session works in it, and you are not standing in it,
+- it is not the main worktree, not locked, not missing, not a detached HEAD.
+
+With `--yes` it runs `git worktree remove <path>` (never `--force`) and then `git branch -d <branch>` (never `-D`); when git refuses, that worktree is reported and kept. Live sessions are read again right before each removal, and if they cannot be read at all nothing is removed. This path does not go through checkout-guard, so it checks sessions itself, the same way checkout-guard's `remove-session-dir` rule does.
 
 ## bulkhead reap
 
