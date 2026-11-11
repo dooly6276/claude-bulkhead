@@ -243,7 +243,7 @@ With `"memoryGuard": { "autoQueue": true }`, nobody has to remember the slot: me
 <details>
 <summary><strong>checkout-guard</strong>: two sessions in one git tree</summary>
 
-Blocks `git checkout <branch>`, `switch`, `stash`, `reset --hard`, `clean -f`, `rebase`, `merge`, `restore .` and a dirty `pull` when another live session works in the same tree, and suggests `git worktree add`. Also blocks `git add -A`, `git add .` and `git commit -a` there (`stage-all`), which would sweep the other session's half-finished edits into your commit, and `rm -rf` or `git worktree remove` of a folder another live session works in (`remove-session-dir`). On Windows it blocks `git worktree remove --force` on a worktree that holds junctions, which git has followed into the main checkout.
+Blocks `git checkout <branch>`, `switch`, `stash`, `reset --hard`, `clean -f`, `rebase`, `merge`, `restore .` and a dirty `pull` when another live session works in the same tree, and suggests `git worktree add`. Also blocks `git add -A`, `git add .` and `git commit -a` there (`stage-all`; `git add -A src/` and `git add -n` pass), which would sweep the other session's half-finished edits into your commit, and `rm -rf` or `git worktree remove` of a folder another live session works in (`remove-session-dir`). On Windows it blocks `git worktree remove --force` on a worktree that holds junctions, which git has followed into the main checkout.
 
 Turn off: `BULKHEAD_DISABLE=checkout-guard`, or one rule with `BULKHEAD_DISABLE=stage-all` or `remove-session-dir`. Details: [docs/guards/checkout-guard.md](docs/guards/checkout-guard.md).
 </details>
@@ -273,9 +273,9 @@ Turn off: `BULKHEAD_DISABLE=orphan-reaper`. Details: [docs/guards/orphan-reaper.
 </details>
 
 <details>
-<summary><strong>basics</strong>: four mistakes that cannot be undone</summary>
+<summary><strong>basics</strong>: five mistakes that cannot be undone</summary>
 
-`rm-root` (`rm -rf` at a root, a top-level folder such as `/srv`, home, a folder directly in home such as `~/Documents`, or above the repository), `force-push-main` (`git push --force` to `main` or `master`; `--force-with-lease` passes), `discard-changes` (`git reset --hard` or `git clean -fd` that would lose uncommitted work) and `agent-author` (`--author="Claude <noreply@anthropic.com>"`, `git config user.name Claude` and the like, so your commits keep counting as yours).
+`rm-root` (`rm -rf` at a root, a top-level folder such as `/srv`, home, a folder directly in home such as `~/Documents`, or above the repository), `force-push-main` (`git push --force` to `main` or `master`; `--force-with-lease` passes), `protected-delete` (`git push origin :main`, `git push --delete origin main`, `git branch -D main`), `discard-changes` (`git reset --hard` or `git clean -fd` that would lose uncommitted work) and `agent-author` (`--author="Claude <noreply@anthropic.com>"`, `git config user.name Claude` and the like, so your commits keep counting as yours).
 
 Turn off: `BULKHEAD_DISABLE=basics`, or one rule by name. Details: [docs/guards/basics.md](docs/guards/basics.md).
 </details>
@@ -323,7 +323,7 @@ Environment variables still work and win over both files. The simplest place for
 
 | Variable | Default | Same as |
 |---|---|---|
-| `BULKHEAD_DISABLE` | empty | Comma-separated guards to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `disk-guard`, `orphan-reaper`, `basics`, or `all`. Single rules can be turned off too: `rm-root`, `force-push-main`, `discard-changes`, `agent-author`, `stage-all`, `remove-session-dir`. A name here is off whatever the files say |
+| `BULKHEAD_DISABLE` | empty | Comma-separated guards to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `disk-guard`, `orphan-reaper`, `basics`, or `all`. Single rules can be turned off too: `rm-root`, `force-push-main`, `protected-delete`, `discard-changes`, `agent-author`, `stage-all`, `remove-session-dir`. A name here is off whatever the files say |
 | `BULKHEAD_PRESET` | `normal` | The preset: `quiet`, `normal` or `strict` |
 | `BULKHEAD_WAIT_MAX_SEC` | 180 | `waitGuard.limitSeconds` |
 | `BULKHEAD_MIN_FREE_GB` | 3, or 15% of RAM if less | `memory.minFreeGb` |

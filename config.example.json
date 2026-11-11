@@ -38,6 +38,7 @@
     "protectedBranches": ["main", "master", "release"],
     "rmRoot": true,
     "forcePushMain": true,
+    "protectedDelete": true,
     "discardChanges": true,
     "agentAuthor": true,
     "selfAllow": true

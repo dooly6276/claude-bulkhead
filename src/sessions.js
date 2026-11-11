@@ -233,4 +233,4 @@ function readLiveSessionFiles({
   return merged
 }
 
-module.exports = { isClaudeCli, readSessionFiles, readLiveSessionFiles, readCwds, sessionRoots, findSessions, assignOwners, ownSession, claudeDir }
+module.exports = { PID_REUSE_SLACK_MS, isClaudeCli, readSessionFiles, readLiveSessionFiles, readCwds, sessionRoots, findSessions, assignOwners, ownSession, claudeDir }

@@ -5,6 +5,7 @@ const { execFileSync } = require('child_process')
 const { runHook, enabled, setting, blocked, oneLine, ASK_USER } = require('./hook')
 const shell = require('./shell')
 const { realPath } = require('./paths')
+const { gitCall, gitEnv, parseArgs } = require('./gitargs')
 
 // Narrow rules for mistakes that cannot be undone. Each can be turned off on its own:
 // rm-root, force-push-main, discard-changes, agent-author, self-allow.
@@ -94,20 +95,6 @@ function git(args, cwd) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', timeout: 5000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }).trim()
 }
 
-function gitCwd(t, cwd) {
-  const i = t.indexOf('-C')
-  return i > 0 && t[i + 1] ? path.resolve(cwd, t[i + 1]) : cwd
-}
-
-function gitSub(t) {
-  const rest = []
-  for (let i = 1; i < t.length; i++) {
-    if (t[i] === '-C' || t[i] === '-c') i++
-    else rest.push(t[i])
-  }
-  return rest
-}
-
 function forcePushToMain(rest, branch, protectedBranches = ['main', 'master']) {
   if (rest[0] !== 'push') return false
   const args = rest.slice(1)
@@ -117,6 +104,26 @@ function forcePushToMain(rest, branch, protectedBranches = ['main', 'master']) {
   const refs = args.filter(a => !a.startsWith('-')).slice(1).map(r => r.replace(/^\+/, '').split(':').pop())
   const targets = refs.length ? refs.map(r => (r === 'HEAD' ? branch() : r)) : [branch()]
   return targets.some(r => protectedBranches.includes(String(r || '').replace(/^refs\/heads\//, '')))
+}
+
+// git push origin :main, git push --delete origin main, git push -d origin main, and
+// git branch -D main (or -d -f, --delete --force): removing a protected branch. A plain
+// git branch -d refuses unmerged work and is left alone.
+function deletesProtected(rest, protectedBranches = ['main', 'master']) {
+  const name = r => String(r || '').replace(/^\+/, '').replace(/^refs\/heads\//, '')
+  const isProtected = r => protectedBranches.includes(name(r))
+  if (rest[0] === 'push') {
+    const o = parseArgs(rest.slice(1), { valuedShort: 'o', valuedLong: ['repo', 'push-option', 'receive-pack', 'exec'] })
+    const del = o.short.has('d') || [...o.long].some(n => n.length >= 3 && 'delete'.startsWith(n))
+    return o.pos.slice(1).map(r => r.replace(/^\+/, '')).some(r => (r.startsWith(':') ? isProtected(r.slice(1)) : del && isProtected(r)))
+  }
+  if (rest[0] === 'branch') {
+    const o = parseArgs(rest.slice(1), { valuedShort: 'uts', valuedLong: ['set-upstream-to', 'track', 'sort', 'format', 'contains', 'merged', 'no-merged', 'points-at'] })
+    const del = o.short.has('D') || o.short.has('d') || o.long.has('delete')
+    const force = o.short.has('D') || o.short.has('f') || o.long.has('force')
+    return del && force && o.pos.some(isProtected)
+  }
+  return false
 }
 
 // An identity that is the agent, not the person: Claude <noreply@anthropic.com> and the like.
@@ -164,6 +171,7 @@ function check(cmd, {
   const rmRoot = once(() => enabled('rm-root'))
   const forcePush = once(() => enabled('force-push-main'))
   const discard = once(() => enabled('discard-changes'))
+  const protectedDelete = once(() => enabled('protected-delete'))
   const author = once(() => enabled('agent-author'))
   if (/allow/i.test(String(cmd || '')) && enabled('self-allow')) {
     const self = require('./self-allow').check(cmd, { mode })
@@ -196,25 +204,30 @@ function check(cmd, {
       }
     }
     if (path.basename(t[0]).replace(/\.exe$/i, '') !== 'git') continue
-    const dir = gitCwd(t, cwd)
-    const rest = gitSub(t)
+    const call = gitCall(t, cwd, c.depth === 0 ? gitEnv(prepared.slice(c.s, c.e)) : {})
+    const dir = call.dir
+    const rest = call.sub ? [call.sub, ...call.args] : []
     const who = author() && agentAuthor(t, rest)
     if (who) return agentMessage(who)
     if (rest[0] === 'push' && forcePush() && forcePushToMain(rest, () => { try { return run(['rev-parse', '--abbrev-ref', 'HEAD'], dir) } catch { return '' } }, protectedBranches)) {
       return `[bulkhead] basics: force-pushing to ${protectedBranches.join(' or ')} rewrites history other people and sessions have pulled.\n` +
         'Push to a branch, or use --force-with-lease if you are sure.'
     }
+    if (rest[0] && protectedDelete() && deletesProtected(rest, protectedBranches)) {
+      return `[bulkhead] basics: \`${oneLine(seg, 120)}\` deletes the protected branch (${protectedBranches.join(', ')}), and the work on it goes with it.\n` +
+        'Delete a feature branch instead, or turn the rule off for this project if you really mean it.'
+    }
     const reset = rest[0] === 'reset' && rest.includes('--hard')
     const clean = rest[0] === 'clean' && rest.some(a => /^-[a-z]*f/.test(a) || a === '--force') && rest.some(a => /^-[a-z]*[dx]/.test(a))
     if ((reset || clean) && discard()) {
       let status
-      try { status = run(['status', '--porcelain'], dir) } catch { continue }
+      try { status = run([...call.opts, 'status', '--porcelain'], dir) } catch { continue }
       const lines = status.split('\n').filter(Boolean)
       const lost = reset ? lines.filter(l => !l.startsWith('??')) : lines.filter(l => l.startsWith('??'))
       if (lost.length) {
         return `[bulkhead] basics: \`${oneLine(seg, 120)}\` would throw away ${lost.length} ${reset ? 'uncommitted change' : 'untracked file'}${lost.length === 1 ? '' : 's'}` +
           ` (${lost.slice(0, 3).map(l => l.slice(3)).join(', ')}${lost.length > 3 ? ', ...' : ''}).\n` +
-          'Commit them or run `git stash push -u` first, so they can be brought back.'
+          'Commit them, or move the files somewhere else, first. `git clean -n` and `git status` show what would go.'
       }
     }
   }
@@ -234,8 +247,9 @@ function ruleOf(message) {
   if (/cannot approve its own blocks/.test(message)) return 'self-allow'
   if (/makes the agent the author/.test(message)) return 'agent-author'
   if (/force-pushing/.test(message)) return 'force-push-main'
+  if (/deletes the protected branch/.test(message)) return 'protected-delete'
   if (/would throw away/.test(message)) return 'discard-changes'
   return 'rm-root'
 }
 
-module.exports = { handle, check, rmTargets, dangerousTarget, forcePushToMain, ruleOf, agentAuthor }
+module.exports = { handle, check, rmTargets, dangerousTarget, forcePushToMain, deletesProtected, ruleOf, agentAuthor }

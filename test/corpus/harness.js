@@ -94,7 +94,7 @@ function stateFor(name, { cleanRepo, dirtyRepo }) {
     case 'busy-ports':
       return { ...base, mock: { listening: true, self: 900200, sessionFiles: [[900100, { cwd: '/srv/other-project', startedAt: 0, sessionId: 'other' }]], snapshot: busySnapshot() } }
     case 'shared-tree':
-      return { ...base, cwd: dirtyRepo, mock: { listening: false, self: null, sessionFiles: [[process.pid, { cwd: dirtyRepo, startedAt: t0, sessionId: 'other-session' }]] } }
+      return { ...base, cwd: dirtyRepo, mock: { listening: false, self: null, sessionFiles: [[process.pid, { cwd: dirtyRepo, startedAt: Math.round(Date.now() - process.uptime() * 1000), sessionId: 'other-session' }]] } }
     case 'dirty':
       return { ...base, cwd: dirtyRepo }
     default:
