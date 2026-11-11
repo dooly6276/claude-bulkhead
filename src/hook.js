@@ -44,6 +44,10 @@ function log(name, line) {
 }
 
 // Records a block in guards.log and events.jsonl and returns the hook result that stops the call.
+// One line for the agent and the person reading it: a block can be intentional, and the answer
+// to that is a question to the user, not a way around the guard.
+const ASK_USER = 'If the user wants this on purpose, ask them: they can allow it in .claude/bulkhead.json (see docs/configuration.md).'
+
 function blocked(name, rule, input, message, command = input && input.tool_input && input.tool_input.command) {
   log(name, `blocked ${rule}: ${oneLine(command || '')}`)
   recordEvent(name, rule, input, command)
@@ -86,4 +90,5 @@ function runHook(name, handler) {
   })
 }
 
-module.exports = { runHook, enabled, setting, envNumber, log, oneLine, stateDir, blocked, recordEvent }
+module.exports = {
+  ASK_USER, runHook, enabled, setting, envNumber, log, oneLine, stateDir, blocked, recordEvent }

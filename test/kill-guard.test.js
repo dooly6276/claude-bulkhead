@@ -27,9 +27,22 @@ const blocked = [
   "ps aux | grep node | awk '{print $2}' | xargs kill -9",
   'npm run build; pkill node',
   'bash -c "pkill node"',
+  'pkill Electron',
+  'killall Electron',
+  'killall Simulator',
+  'killall Xcode',
+  'pkill postgres',
+  'killall "Docker Desktop"',
+  'killall "Code Helper"',
+  'killall Cursor',
+  'taskkill /F /IM Cursor.exe',
 ]
 
 const allowed = [
+  'xcrun simctl shutdown all',
+  'electron-builder --mac',
+  'pkill -f ./node_modules/electron/dist/electron',
+  'git log --grep=Simulator',
   'taskkill /PID 4312 /T /F',
   'taskkill //PID 4312 //T //F',
   'taskkill /F /FI "PID eq 4312"',
@@ -87,6 +100,8 @@ test('hook exits 2 on a block and 0 otherwise', () => {
   const hit = runScript('kill-guard', { tool_name: 'Bash', tool_input: { command: 'taskkill /F /IM node.exe' } })
   assert.strictEqual(hit.status, 2)
   assert.match(hit.stderr, /kill-guard/)
+  assert.match(hit.stderr, /If the user wants this on purpose, ask them/)
+  assert.doesNotMatch(hit.stderr, /BULKHEAD_DISABLE/)
   assert.strictEqual(runScript('kill-guard', { tool_name: 'Bash', tool_input: { command: 'ls' } }).status, 0)
   assert.strictEqual(runScript('kill-guard', 'not json').status, 0)
 })

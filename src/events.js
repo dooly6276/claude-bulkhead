@@ -67,7 +67,7 @@ function readEvents(dir) {
   const file = eventsFile(dir)
   const out = []
   for (const f of [file + '.1', file]) {
-    try { out.push(...parseLines(fs.readFileSync(f, 'utf8'))) } catch {}
+    try { for (const e of parseLines(fs.readFileSync(f, 'utf8'))) out.push(e) } catch {}
   }
   return out.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0))
 }

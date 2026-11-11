@@ -73,3 +73,16 @@ test('bulkhead status --json runs end to end', () => {
   assert.deepStrictEqual(j.slots, [])
   assert.strictEqual(j.memory.freeGb, 9.14)
 })
+
+test('every subcommand rejects what it does not know, with usage', () => {
+  const bin = path.join(__dirname, '..', 'bin', 'bulkhead')
+  for (const args of [['status', '--bogus'], ['status', 'now'], ['doctor', 'foo'], ['config', '-z'], ['log', '--bogus'], ['log', 'extra'], ['port', '--bogus'], ['top', '--bogus'], ['top', 'x']]) {
+    const r = spawnSync(process.execPath, [bin, ...args], { encoding: 'utf8' })
+    assert.strictEqual(r.status, 1, args.join(' '))
+    assert.match(r.stderr, new RegExp(`bulkhead ${args[0]}: (unknown option|unexpected argument)`), args.join(' '))
+    assert.match(r.stderr, /usage: bulkhead/, args.join(' '))
+  }
+  const ok = spawnSync(process.execPath, [bin, 'log', '-n', '3', '--since', '7d', '--summary', '--json'], { encoding: 'utf8' })
+  assert.strictEqual(ok.status, 0, ok.stderr)
+  assert.strictEqual(spawnSync(process.execPath, [bin, 'port', '--near=4000', '--json'], { encoding: 'utf8' }).status, 0)
+})

@@ -1,26 +1,10 @@
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.zh-CN.md">简体中文</a> |
-  <strong>日本語</strong> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.pt-BR.md">Português (Brasil)</a>
-</p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/hero-light.svg">
-    <img src="docs/hero.svg" alt="1台のマシン上で、別々の git worktree で動く複数の Claude Code セッション。kill-guard は pkill node を止め、port-guard は 2 つ目の dev server を空きポートに移し、disk-guard は 10 個並列の du スキャンを止め、checkout-guard は git add -A で他セッションの編集がコミットに紛れ込むのを止め、bulkhead-slot は 3 つ目の重いジョブをキューに入れて空き RAM を下限以上に保ちます。bulkhead scan は、過去のセッションで何を止めたはずかを数えます。" width="100%">
-  </picture>
-</p>
-
 <h1 align="center">claude-bulkhead</h1>
 
 <p align="center">
-  <strong>1台のマシンで並列に動く Claude Code セッション同士が、互いのサーバーを落としたり RAM を使い切ったりするのを防ぐ hook 集です。</strong>
+  <strong>Claude Code が他の dev server に <code>pkill node</code> を実行したり、そのポートを奪ったり、<code>git add -A</code> で別セッションの編集をコミットしたりするのを止めます。</strong>
 </p>
 
-<p align="center">ガード 8 種、コマンド 10 個、ステータスライン、スラッシュコマンド 6 個、スキル 1 個、依存ゼロ</p>
+<p align="center">どのプロセス、ポート、git ツリーがどの Claude Code セッションやサブエージェントのものかを把握する hook です。他に害が出るコマンドだけをブロックし、代わりに実行すべき安全なコマンドを Claude に伝えます。依存ゼロ、テレメトリなし。</p>
 
 <p align="center">
   <a href="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml"><img src="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml/badge.svg" alt="tests"></a>
@@ -30,41 +14,62 @@
 </p>
 
 <p align="center">
-  <a href="#bulkheadとは"><strong>概要</strong></a> |
-  <a href="#必要かどうかはトランスクリプトに聞く"><strong>スキャン</strong></a> |
-  <a href="#なぜ必要か"><strong>背景</strong></a> |
-  <a href="#できること"><strong>機能</strong></a> |
-  <a href="#インストール"><strong>インストール</strong></a> |
-  <a href="#クイックスタート"><strong>クイックスタート</strong></a> |
-  <a href="#別のマシンで重い処理を実行する-任意"><strong>リモート</strong></a> |
-  <a href="#仕組み"><strong>仕組み</strong></a> |
-  <a href="#ガード"><strong>ガード</strong></a> |
-  <a href="#faq"><strong>FAQ</strong></a>
+  <img src="docs/demo.gif" alt="1つのアプリの2つのworktreeで、2つのClaude Codeセッションが作業しています。セッションAはポート3000でcheckoutを動かしています。セッションBにnodeプロセスをすべて止めてsearchサーバーを再起動するよう指示すると、bulkheadのkill-guardがコマンドを止め、Claudeは自分のサーバーだけを再起動し、checkoutは同じPIDのまま動き続けます。" width="100%">
 </p>
 
-> **0.2.0 の新機能:** [`bulkhead scan`](#必要かどうかはトランスクリプトに聞く) が過去の Claude Code セッションをガードに照らして再生します。新しい [disk-guard](docs/guards/disk-guard.md) はディスク全体のスキャンと並列スキャンを止めます。checkout-guard は、`git add -A` で他セッションの編集が自分のコミットに紛れ込むことと、他セッションが作業中のフォルダへの `rm -rf` も止めるようになりました。basics は Claude を作者にしたコミットを止めます。リリースノート: [CHANGELOG.md](CHANGELOG.md)。
+<p align="center"><sub><a href="README.md">English</a> | <a href="README.ko.md">한국어</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.es.md">Español</a> | <a href="README.pt-BR.md">Português (Brasil)</a></sub></p>
 
-## bulkheadとは
+## インストール
 
-Claude Code の hook は、シェルコマンドの実行前など決まったタイミングで Claude Code が起動する小さなプログラムです。コマンドを止めて、その理由を Claude に伝えることもできます。
+Claude Code 内で実行します。
 
-bulkhead は、ひとつの状況に絞った hook 集です。同じコンピュータ上で、複数の Claude Code セッションとそのサブエージェントが同時に動いている状況です。各セッションは、マシンを自分だけで使っているつもりで動きます。bulkhead は、シェルコマンドごとに他のセッションの状況と照らし合わせます。どのプロセスとポートがどのセッションのものか、RAM がどれだけ残っているか、各セッションがどの git ツリーで作業しているか、などです。コマンドが他のセッションに害を及ぼしそうなときはブロックし、代わりに実行すべき安全なコマンドを Claude に伝えます。
+```
+/plugin marketplace add dooly6276/claude-bulkhead
+/plugin install bulkhead@bulkhead
+```
 
-**必要なのは次のような場合です。** Claude Code セッションを 2 つ以上同時に動かしている（多くは git worktree ごとに 1 つ）、またはセッションやサブエージェントが dev server、ビルド、テストを起動する。
+次に、何も変更せずに、直近 1 か月の自分の記録で何を止めていたかを確認します。
 
-**おそらく不要なのは次のような場合です。** 一度に動かすセッションが 1 つで、サーバーやビルドを起動させない。bulkhead の働きの大半は、セッション同士の衝突を防ぐものです。
+```
+/bulkhead:scan 30d
+```
+
+Node 18 以降が `PATH` に通っている必要があります（Claude Code のネイティブインストーラーは Node をインストールしないので、`node --version` で確認してください）。ターミナルのコマンドとステータスラインを使うには `npm install -g claude-bulkhead` も実行します。インストールせずに `npx claude-bulkhead status` を使うこともできます。
+
+## 止めるもの
 
 | bulkhead なし | bulkhead あり |
 |---|---|
 | エージェントが `pkill node` で dev server を再起動し、他の worktree のサーバーまで全部落ちる。 | kill-guard がコマンドをブロックし、自分の PID を探して止める方法を伝える。 |
+| 2 つのセッションが 1 つのチェックアウトを共有している。一方が `git add -A && git commit` を実行し、もう一方の書きかけの編集がそのコミットに入ってしまう。 | checkout-guard がブロックし、ファイル名を指定するよう求める。 |
 | 2 つの worktree が `npm run dev` を実行する。2 つ目は 3001 に移るが、エージェントは `localhost:3000` をテストし続け、別ブランチの画面を見てしまう。 | port-guard が 2 つ目の起動をブロックし、空きポートを示す。`bulkhead port` でいつでも空きポートを表示できる。 |
 | 3 つのセッションが同じ 1 分間に `next build`、`npm test`、Playwright を起動し、マシンがフリーズする。 | memory-guard は RAM が少ないとき、重いコマンドをブロックする。`bulkhead-slot` を通せば、3 つ目のジョブは空きができるまでキューで待つ。 |
+
+<details>
+<summary>さらに 5 件</summary>
+
+| bulkhead なし | bulkhead あり |
+|---|---|
 | あるセッションが、別のセッションが編集中のツリーで別のブランチをチェックアウトする。 | checkout-guard がブロックし、`git worktree add` を提案する。 |
 | セッションが終了しても、その dev server、テストワーカー、ウォッチャーが動き続け、RAM とポートを握ったままになる。 | orphan-reaper がセッション終了後、数秒以内にそれらを止める。 |
 | サブエージェントがフォアグラウンドで 10 分間ポーリングする。セッションはあなたに応答できず、プロンプトキャッシュも切れる。 | wait-guard がループをブロックし、`run_in_background: true` を使うよう求める。 |
 | エージェントがディスク使用量を調べようとして、ホームフォルダに対して `du` を 10 個同時に実行する。全セッションのビルドと `git status` が数分間ほとんど進まなくなる。 | disk-guard がブロックし、フォルダを 1 つずつ調べるよう求める。 |
-| 2 つのセッションが 1 つのチェックアウトを共有している。一方が `git add -A && git commit` を実行し、もう一方の書きかけの編集がそのコミットに入ってしまう。 | checkout-guard がブロックし、ファイル名を指定するよう求める。 |
 | 「worktree を整理して」というタスクが、別のセッションがまだ作業中の worktree に `git worktree remove` を実行する。 | checkout-guard がブロックし、まだそこにいるセッションを示す。 |
+
+</details>
+
+セッションが 1 つだけの場合でも、kill-guard、memory-guard、wait-guard、disk-guard、basics（`rm -rf ~`、`main` への force-push、未コミットの作業を消す `reset --hard` を禁止）は働きます。port-guard と checkout-guard は、2 つ目のセッションまたはサブエージェントが動いている間に働きます。
+
+## bulkheadとは
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/hero-light.svg">
+    <img src="docs/hero.svg" alt="1台のマシン上で、別々の git worktree で動く複数の Claude Code セッション。kill-guard は pkill node を止め、port-guard は 2 つ目の dev server を空きポートに移し、disk-guard は 10 個並列の du スキャンを止め、checkout-guard は git add -A で他セッションの編集がコミットに紛れ込むのを止め、bulkhead-slot は 3 つ目の重いジョブをキューに入れて空き RAM を下限以上に保ちます。bulkhead scan は、過去のセッションで何を止めたはずかを数えます。" width="100%">
+  </picture>
+</p>
+
+Claude Code の hook は、シェルコマンドを実行する前に Claude Code が毎回実行する小さなプログラムで、コマンドを止めて理由を Claude に伝えられます。bulkhead はその hook 集です。Bash や PowerShell を呼ぶ前に、そのコマンドを同じマシン上の他のセッションの動きと照らし合わせます。どのプロセスとポートがどのセッションのものか、RAM がどれだけ残っているか、各セッションがどの git ツリーで作業しているかを見ます。他のセッションに害が出るコマンドならブロックし、代わりに実行すべき安全なコマンドを Claude に伝えます。Claude はそれを読み、たいてい確認なしで作業を続けます。
 
 ## 必要かどうかはトランスクリプトに聞く
 
@@ -117,27 +122,18 @@ claude-bulkhead は、これらを一つずつブロックまたは後始末す�
 
 オプション: **[`bulkhead remote`](#別のマシンで重い処理を実行する-任意)** は、このマシンに RAM の余裕がないとき、テストスイート、ビルド、ブラウザ実行を SSH 経由で別のマシンで実行します。
 
-## デモ
+## その他のデモ
 
 ![bulkhead status のあと、port-guard、kill-guard、wait-guard がエージェントをブロックする様子](docs/demo.svg)
 
-[docs/demo.sh](docs/demo.sh) で録画しました。2 つのセッションは `claude` という名前の代役プロセスです。表示されている内容はすべて、hook スクリプトと `bulkhead status` の出力です。
-
-## インストール
-
-```
-/plugin marketplace add dooly6276/claude-bulkhead
-/plugin install bulkhead@bulkhead
-```
-
-Node 18 以降が `PATH` に通っている必要があります。Claude Code のネイティブインストーラーは Node をインストールしないので、まず `node --version` で確認してください。Node がないと、すべての hook が起動に失敗します。何もブロックされず、Claude Code はツール呼び出しのたびに hook ごとに `hook error` の通知を表示します。それ以外の依存はありません。
+`bulkhead status`、port-guard、kill-guard、wait-guard を順に実行するスクリプトを [docs/demo.sh](docs/demo.sh) で録画したものです。2 つのセッションは `claude` という名前の代役プロセスで、表示されている内容はすべて hook スクリプトと `bulkhead status` の出力です。このページ上部の録画は実際の Claude Code セッションで、作り方は [docs/demo.tape](docs/demo.tape) にあります。
 
 ## クイックスタート
 
 1. 上記の手順でプラグインをインストールし、新しい Claude Code セッションを開始します。
 2. 何を検出できたはずかを確認します。`/bulkhead:scan 30d` を実行するか、Bash ツールで `bulkhead scan` を実行します。直近 1 か月のトランスクリプトを読むだけで、何も変更しません。
 3. セットアップを確認します。Claude Code 内で `/bulkhead:doctor` を実行するか、Bash ツールで `bulkhead doctor` を実行します。すべての行が `OK` になるはずです。`WARN` や `FAIL` の行には、ガード名と理由が出ます。
-4. セッションの隣にターミナルを開き、`bulkhead top` を実行すると、セッション、RAM、ポート、重いジョブをリアルタイムで確認できます。`q` で終了します。
+4. セッションの隣にターミナルを開き、`npx claude-bulkhead top`（`npm install -g claude-bulkhead` の後なら `bulkhead top`）を実行すると、セッション、RAM、ポート、重いジョブをリアルタイムで確認できます。`q` で終了します。
 
 あとは何もする必要はありません。ガードは Bash と PowerShell の呼び出しごとに動きます。何が止められたかは `bulkhead log` または `/bulkhead:log` で確認できます。`bulkhead log --summary` は、このマシンでガードごとのブロック数を集計します。しきい値を変えたりコマンドを許可したりするには、[docs/configuration.md](docs/configuration.md) を参照してください。全コマンドの一覧は [docs/commands.md](docs/commands.md) にあります。
 
@@ -300,7 +296,7 @@ bulkhead が扱うのは別の問題です。1 台のマシン上のセッショ
 
 ## 実行中のものを確認する
 
-`bulkhead` は、`bulkhead-slot` と並んで Bash ツールの `PATH` に入っています。Claude Code 内では、`/bulkhead:scan [30d]`、`/bulkhead:status`、`/bulkhead:log [24h|7d]`、`/bulkhead:doctor`、`/bulkhead:reap` が対応するコマンドを実行し、結果を要約します。自分のターミナルで実行するには、パスを指定して呼び出します。たとえば `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead top` です（キャッシュのパスはインストール状況によって変わります。`/plugin` で確認できます）。表を出力するコマンドはすべて `--json` を受け付けます。完全なリファレンスは [docs/commands.md](docs/commands.md) です。
+`bulkhead` は、`bulkhead-slot` と並んで Bash ツールの `PATH` に入っています。Claude Code 内では、`/bulkhead:scan [30d]`、`/bulkhead:status`、`/bulkhead:log [24h|7d]`、`/bulkhead:doctor`、`/bulkhead:reap` が対応するコマンドを実行し、結果を要約します。自分のターミナルでは、`npx claude-bulkhead top` を実行するか、`npm install -g claude-bulkhead` で一度インストールしてから `bulkhead top` を実行します。npm パッケージはプラグインと同じコードです。表を出力するコマンドはすべて `--json` を受け付けます。完全なリファレンスは [docs/commands.md](docs/commands.md) です。
 
 ### bulkhead status
 
@@ -383,7 +379,7 @@ Node、プラグインのファイル、状態ディレクトリ、設定ファ�
 ```
 $ bulkhead doctor
 OK    node            v24.11.0
-OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
+OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.2, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
 OK    state dir       ~/.claude/bulkhead is writable
 OK    config          no config files, defaults in use
 OK    kill-guard      on
@@ -440,13 +436,13 @@ sessions は `~/.claude/sessions` にある生きたエントリ、heavy は bul
 {
   "statusLine": {
     "type": "command",
-    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead-statusline",
+    "command": "bulkhead-statusline",
     "refreshInterval": 10
   }
 }
 ```
 
-パスにはプラグインのバージョンが含まれるので、プラグインを更新したら書き換えてください。すでにステータスラインのスクリプトがあるなら、そこから `bulkhead-statusline` を呼び出して、出力を追記してください。
+これには `npm install -g claude-bulkhead` が必要で、`bulkhead-statusline` が `PATH` に入ります。すでにステータスラインのスクリプトがあるなら、そこから `bulkhead-statusline` を呼び出して、出力を追記してください。
 
 ## FAQ
 

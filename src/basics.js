@@ -2,7 +2,7 @@
 const os = require('os')
 const path = require('path')
 const { execFileSync } = require('child_process')
-const { runHook, enabled, setting, blocked, oneLine } = require('./hook')
+const { runHook, enabled, setting, blocked, oneLine, ASK_USER } = require('./hook')
 const shell = require('./shell')
 const { realPath } = require('./paths')
 
@@ -222,7 +222,7 @@ if (require.main === module) {
     const cmd = input.tool_input && input.tool_input.command
     const why = typeof cmd === 'string' && cmd && check(cmd, { cwd: input.cwd || process.cwd(), mode: shell.modeFor(input) })
     if (!why) return
-    return blocked('basics', ruleOf(why), input, why)
+    return blocked('basics', ruleOf(why), input, `${why}\n${ASK_USER}`)
   })
 }
 

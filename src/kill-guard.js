@@ -1,5 +1,5 @@
 'use strict'
-const { runHook, blocked, setting } = require('./hook')
+const { runHook, blocked, setting, ASK_USER } = require('./hook')
 const shell = require('./shell')
 
 // Programs that other sessions, editors and the user are likely running too.
@@ -10,6 +10,9 @@ const SHARED = [
   'git', 'ssh', 'sshd', 'code', 'claude',
   'npm', 'npx', 'pnpm', 'yarn', 'deno', 'bun', 'tsx', 'ts-node',
   'gradle', 'adb', 'ffmpeg', 'docker', 'vitest', 'jest', 'next', 'vite', 'esbuild', 'webpack',
+  // apps and servers the user or another session has open
+  'electron', 'simulator', 'xcode', 'postgres',
+  'docker desktop', 'code helper', 'cursor', 'cursor helper',
 ]
 const bare = n => String(n).trim().replace(/^["']+|["']+$/g, '').toLowerCase().replace(/\.exe$/, '')
 
@@ -425,7 +428,7 @@ if (require.main === module) {
     if (typeof cmd !== 'string' || !cmd) return
     const hit = classify(cmd, { allowNames: setting('killGuard.allowNames', []), extraSharedNames: setting('killGuard.extraSharedNames', []) }, shell.modeFor(input))
     if (!hit) return
-    return blocked('kill-guard', hit.rule, input, message(hit.why))
+    return blocked('kill-guard', hit.rule, input, `${message(hit.why)}\n${ASK_USER}`)
   })
 }
 

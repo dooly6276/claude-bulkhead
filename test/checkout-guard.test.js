@@ -119,7 +119,7 @@ test('stage-all passes for named files, a clean tree, or a tree nobody else is i
 })
 
 test('deleting a folder another live session works in is blocked', () => {
-  for (const cmd of ['rm -rf web', 'rm -rf /work/shop', 'git worktree remove /work/shop/web', 'git worktree remove --force web', 'rm -rf ../shop']) {
+  for (const cmd of ['rm -rf web', 'rm -rf /work/shop', 'git worktree remove /work/shop/web', 'git worktree remove --force web', 'rm -rf ../shop', 'rm -rf .', 'rm -rf ./', 'rm -rf $PWD', 'rm -rf "$PWD"', 'rm -rf ${PWD}', 'rm -rf "$(pwd)"', 'rm -rf `pwd`', 'rm -fr $PWD']) {
     const hit = classify(cmd, ctx())
     assert.ok(hit, cmd)
     assert.strictEqual(hit.rule, 'remove-session-dir', cmd)
@@ -129,8 +129,16 @@ test('deleting a folder another live session works in is blocked', () => {
   assert.strictEqual(classify('rm -rf /work/blog/dist', ctx()), null)
   assert.strictEqual(classify('rm -rf /work/blog', ctx()).rule, 'remove-session-dir')
   // dead sessions, deeper folders and other folders pass
-  for (const cmd of ['rm -rf web/dist', 'rm -rf /work/other', 'git worktree remove ../shop-fix', 'rm -rf "$TARGET"']) assert.strictEqual(classify(cmd, ctx()), null, cmd)
+  for (const cmd of ['rm -rf web/dist', 'rm -rf /work/other', 'git worktree remove ../shop-fix', 'rm -rf "$TARGET"', 'rm -rf $PWD/web/dist', 'rm -rf $(pwd)/web/dist']) assert.strictEqual(classify(cmd, ctx()), null, cmd)
   assert.strictEqual(classify('rm -rf web', ctx({ removeRule: () => false })), null)
+})
+
+test('a pull gets its own advice, not the worktree one', () => {
+  const hit = classify('git pull --rebase', ctx({ run: fakeGit({ status: ' M src/app.js' }) }))
+  assert.strictEqual(hit.rule, 'git-pull')
+  assert.match(hit.why, /pull/)
+  assert.doesNotMatch(hit.why, /git worktree add/)
+  assert.match(hit.why, /committed or stashed/)
 })
 
 test('git worktree remove --force on Windows checks for links first', () => {

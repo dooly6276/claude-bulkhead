@@ -1,26 +1,10 @@
-<p align="center">
-  <a href="README.md">English</a> |
-  <strong>한국어</strong> |
-  <a href="README.zh-CN.md">简体中文</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.pt-BR.md">Português (Brasil)</a>
-</p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/hero-light.svg">
-    <img src="docs/hero.svg" alt="한 컴퓨터에서 git worktree 로 나눠 일하는 Claude Code 세션 여러 개. kill-guard 가 pkill node 를 막고, port-guard 가 두 번째 개발 서버를 빈 포트로 옮기고, disk-guard 가 du 열 개를 동시에 돌리는 것을 막고, checkout-guard 가 git add -A 로 다른 세션의 수정이 커밋에 딸려 가는 것을 막고, bulkhead-slot 이 세 번째 무거운 작업을 대기열에 넣어 남은 램이 하한 아래로 내려가지 않는다. bulkhead scan 은 지난 세션에서 무엇을 막았을지 셉니다." width="100%">
-  </picture>
-</p>
-
 <h1 align="center">claude-bulkhead</h1>
 
 <p align="center">
-  <strong>한 컴퓨터에서 Claude Code 세션 여러 개를 돌릴 때, 서로의 서버를 죽이거나 램을 바닥내지 못하게 막는 훅 모음입니다.</strong>
+  <strong>Claude Code 가 <code>pkill node</code> 로 다른 개발 서버를 종료하거나, 다른 세션의 포트를 사용하거나, <code>git add -A</code> 로 다른 세션의 수정 사항을 커밋하는 일을 막습니다.</strong>
 </p>
 
-<p align="center">가드 8개, 명령 10개, 상태 줄, 슬래시 명령 6개, 스킬 1개, 의존성 0개</p>
+<p align="center">어느 프로세스, 포트, git 트리가 어느 Claude Code 세션과 서브에이전트 것인지 아는 훅입니다. 다른 세션에 영향을 주는 명령만 막고, 대신 실행할 안전한 명령을 Claude 에게 알려 줍니다. 의존성 없음, 텔레메트리 없음.</p>
 
 <p align="center">
   <a href="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml"><img src="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml/badge.svg" alt="tests"></a>
@@ -30,41 +14,62 @@
 </p>
 
 <p align="center">
-  <a href="#무엇인가"><strong>무엇인가</strong></a> |
-  <a href="#필요한지-기록에-물어보세요"><strong>스캔</strong></a> |
-  <a href="#왜-필요한가"><strong>왜</strong></a> |
-  <a href="#하는-일"><strong>기능</strong></a> |
-  <a href="#설치"><strong>설치</strong></a> |
-  <a href="#빠른-시작"><strong>빠른 시작</strong></a> |
-  <a href="#다른-컴퓨터에서-무거운-일-돌리기-선택"><strong>원격</strong></a> |
-  <a href="#동작-방식"><strong>동작 방식</strong></a> |
-  <a href="#가드"><strong>가드</strong></a> |
-  <a href="#자주-묻는-질문"><strong>FAQ</strong></a>
+  <img src="docs/demo.gif" alt="한 앱의 worktree 두 곳에서 Claude Code 세션 두 개가 작업합니다. 세션 A 는 3000 번 포트에서 checkout 을 실행합니다. 세션 B 에 node 프로세스를 모두 종료하고 search 서버를 다시 실행하라고 지시하자 bulkhead 의 kill-guard 가 명령을 막고, Claude 는 자기 서버만 다시 실행하며, checkout 은 같은 PID 로 계속 실행됩니다." width="100%">
 </p>
 
-> **0.2.0 새 기능:** [`bulkhead scan`](#필요한지-기록에-물어보세요) 은 지난 Claude Code 세션 기록을 가드에 대 보고, 새 [disk-guard](docs/guards/disk-guard.md) 는 디스크 전체 스캔과 병렬 스캔을 막습니다. checkout-guard 는 이제 `git add -A` 로 다른 세션의 수정이 내 커밋에 딸려 가는 것과 다른 세션이 일하는 폴더의 `rm -rf` 도 막고, basics 는 Claude 를 작성자로 한 커밋을 막습니다. 릴리스 노트: [CHANGELOG.md](CHANGELOG.md).
+<p align="center"><sub><a href="README.md">English</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.ja.md">日本語</a> | <a href="README.es.md">Español</a> | <a href="README.pt-BR.md">Português (Brasil)</a></sub></p>
 
-## 무엇인가
+## 설치
 
-Claude Code 훅은 Claude Code 가 정해진 순간(예를 들어 셸 명령을 실행하기 직전)마다 돌리는 작은 프로그램입니다. 훅은 그 명령을 멈추고 Claude 에게 이유를 알려 줄 수 있습니다.
+Claude Code 안에서 입력합니다.
 
-bulkhead 는 한 가지 상황을 위한 훅 모음입니다. Claude Code 세션 여러 개와 그 서브에이전트가 한 컴퓨터에서 동시에 일하는 상황입니다. 세션은 저마다 컴퓨터를 혼자 쓴다고 여깁니다. bulkhead 는 셸 명령마다 다른 세션이 하는 일과 맞춰 봅니다. 어떤 프로세스와 포트가 어느 세션 것인지, 램이 얼마나 남았는지, 각 세션이 어느 git 트리에서 일하는지를 봅니다. 다른 세션을 다치게 할 명령이면 막고, 대신 실행할 안전한 명령을 Claude 에게 알려 줍니다.
+```
+/plugin marketplace add dooly6276/claude-bulkhead
+/plugin install bulkhead@bulkhead
+```
 
-**이런 경우에 필요합니다.** Claude Code 세션을 동시에 두 개 이상 돌리는 경우입니다. 보통 git worktree 마다 하나씩 띄웁니다. 세션이나 서브에이전트가 개발 서버, 빌드, 테스트를 띄우는 경우도 해당합니다.
+그다음 아무것도 바꾸지 않고, 지난 한 달 기록에서 무엇을 막았을지 확인합니다.
 
-**이런 경우엔 아마 필요 없습니다.** 세션을 한 번에 하나만 쓰고, 서버나 빌드를 띄우게 하지 않는 경우입니다. bulkhead 가 하는 일 대부분은 세션끼리 부딪히는 문제입니다.
+```
+/bulkhead:scan 30d
+```
+
+`PATH` 에 Node 18 이상이 있어야 합니다(Claude Code 네이티브 설치 프로그램은 Node 를 깔지 않으니 `node --version` 으로 확인하세요). 터미널 명령과 상태 줄을 쓰려면 `npm install -g claude-bulkhead` 도 실행하거나, 설치 없이 `npx claude-bulkhead status` 를 쓰면 됩니다.
+
+## 막는 것
 
 | bulkhead 없이 | bulkhead 와 함께 |
 |---|---|
 | 에이전트가 `pkill node` 로 자기 개발 서버를 재시작하고, 다른 worktree 의 서버가 같이 죽습니다. | kill-guard 가 막고, 자기 PID 를 찾아 그것만 끄는 방법을 알려 줍니다. |
+| 세션 두 개가 한 체크아웃을 같이 씁니다. 한 세션이 `git add -A && git commit` 을 치면 다른 세션이 쓰던 수정이 그 커밋에 실려 나갑니다. | checkout-guard 가 막고 파일 이름을 적으라고 알려 줍니다. |
 | worktree 두 개가 `npm run dev` 를 칩니다. 두 번째는 3001 로 옮겨 가는데 에이전트는 계속 `localhost:3000` 을 보고 다른 브랜치 화면을 확인합니다. | port-guard 가 두 번째 실행을 막고 빈 포트를 알려 줍니다. `bulkhead port` 로도 빈 포트를 얻습니다. |
 | 세 세션이 같은 1분 안에 `next build`, `npm test`, Playwright 를 시작하고 컴퓨터가 멈춥니다. | memory-guard 가 램이 모자랄 때 무거운 명령을 막습니다. `bulkhead-slot` 을 거치면 세 번째 작업은 자리가 날 때까지 대기열에서 기다립니다. |
+
+<details>
+<summary>5개 더</summary>
+
+| bulkhead 없이 | bulkhead 와 함께 |
+|---|---|
 | 다른 세션이 고치고 있는 트리에서 한 세션이 다른 브랜치로 checkout 합니다. | checkout-guard 가 막고 `git worktree add` 를 권합니다. |
 | 세션이 끝났는데 그 세션의 개발 서버, 테스트 워커, 감시 프로세스가 램과 포트를 잡은 채 계속 돕니다. | 세션이 끝나고 몇 초 안에 orphan-reaper 가 끕니다. |
 | 서브에이전트가 포그라운드에서 10분 동안 기다립니다. 그동안 세션은 대답을 못 하고 프롬프트 캐시도 만료됩니다. | wait-guard 가 막고 `run_in_background: true` 로 돌리라고 알려 줍니다. |
 | 에이전트가 무엇이 디스크를 차지하는지 알아보겠다고 홈 폴더 전체에 `du` 를 열 개 동시에 돌립니다. 모든 세션의 빌드와 `git status` 가 몇 분씩 느려집니다. | disk-guard 가 막고 폴더를 하나씩 보라고 알려 줍니다. |
-| 세션 두 개가 한 체크아웃을 같이 씁니다. 한 세션이 `git add -A && git commit` 을 치면 다른 세션이 쓰던 수정이 그 커밋에 실려 나갑니다. | checkout-guard 가 막고 파일 이름을 적으라고 알려 줍니다. |
 | "worktree 정리" 작업이 다른 세션이 아직 일하는 worktree 에 `git worktree remove` 를 칩니다. | checkout-guard 가 막고 아직 그 안에 있는 세션을 알려 줍니다. |
+
+</details>
+
+세션이 하나뿐이어도 kill-guard, memory-guard, wait-guard, disk-guard, basics(`rm -rf ~`, `main` 강제 푸시, 커밋하지 않은 작업 위의 `reset --hard` 를 막음)는 적용됩니다. port-guard 와 checkout-guard 는 두 번째 세션이나 서브에이전트가 살아 있을 때 동작합니다.
+
+## 무엇인가
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/hero-light.svg">
+    <img src="docs/hero.svg" alt="한 컴퓨터에서 git worktree 로 나눠 일하는 Claude Code 세션 여러 개. kill-guard 가 pkill node 를 막고, port-guard 가 두 번째 개발 서버를 빈 포트로 옮기고, disk-guard 가 du 열 개를 동시에 돌리는 것을 막고, checkout-guard 가 git add -A 로 다른 세션의 수정이 커밋에 딸려 가는 것을 막고, bulkhead-slot 이 세 번째 무거운 작업을 대기열에 넣어 남은 램이 하한 아래로 내려가지 않는다. bulkhead scan 은 지난 세션에서 무엇을 막았을지 셉니다." width="100%">
+  </picture>
+</p>
+
+Claude Code 훅은 셸 명령을 실행하기 직전마다 Claude Code 가 돌리는 작은 프로그램으로, 명령을 멈추고 Claude 에게 이유를 알려 줄 수 있습니다. bulkhead 는 그런 훅 모음입니다. Bash 나 PowerShell 을 부르기 전에 그 명령을 같은 컴퓨터의 다른 세션이 하는 일과 맞춰 봅니다. 어떤 프로세스와 포트가 어느 세션 것인지, 램이 얼마나 남았는지, 각 세션이 어느 git 트리에서 일하는지를 봅니다. 다른 세션을 다치게 할 명령이면 막고, 대신 실행할 안전한 명령을 Claude 에게 알려 줍니다. Claude 는 그것을 읽고 대개 사용자에게 묻지 않고 이어 갑니다.
 
 ## 필요한지 기록에 물어보세요
 
@@ -117,27 +122,18 @@ claude-bulkhead 는 이런 일을 하나씩 막거나 치우는 작은 훅 모�
 
 선택 기능: **[`bulkhead remote`](#다른-컴퓨터에서-무거운-일-돌리기-선택)** 는 이 컴퓨터의 램이 모자랄 때 시험 묶음, 빌드, 브라우저 실행을 SSH 로 다른 컴퓨터에서 돌립니다.
 
-## 데모
+## 더 많은 데모
 
 ![bulkhead status 다음에 port-guard, kill-guard, wait-guard 가 에이전트를 막는 장면](docs/demo.svg)
 
-[docs/demo.sh](docs/demo.sh) 로 녹화했습니다. 두 세션은 이름만 `claude` 인 대역 프로세스입니다. 화면에 찍힌 글은 전부 실제 훅 스크립트와 `bulkhead status` 가 낸 것입니다.
-
-## 설치
-
-```
-/plugin marketplace add dooly6276/claude-bulkhead
-/plugin install bulkhead@bulkhead
-```
-
-`PATH` 에 Node 18 이상이 있어야 합니다. Claude Code 네이티브 설치 프로그램은 Node 를 깔지 않으니 먼저 `node --version` 으로 확인하세요. Node 가 없으면 훅이 하나도 뜨지 않습니다. 아무것도 막지 못하고, 도구를 부를 때마다 훅마다 `hook error` 알림이 뜹니다. 다른 의존성은 없습니다.
+`bulkhead status`, port-guard, kill-guard, wait-guard 를 차례로 돌리는 스크립트 실행을 [docs/demo.sh](docs/demo.sh) 로 녹화했습니다. 두 세션은 이름만 `claude` 인 대역 프로세스입니다. 화면에 찍힌 글은 전부 실제 훅 스크립트와 `bulkhead status` 가 낸 것입니다. 이 페이지 맨 위의 녹화는 실제 Claude Code 세션이며, 만든 방법은 [docs/demo.tape](docs/demo.tape) 에 있습니다.
 
 ## 빠른 시작
 
 1. 위처럼 플러그인을 설치하고 Claude Code 세션을 새로 엽니다.
 2. 무엇을 막았을지 봅니다. `/bulkhead:scan 30d` 를 치거나, Bash 도구로 `bulkhead scan` 을 실행합니다. 지난 한 달 치 기록을 읽기만 하고 아무것도 바꾸지 않습니다.
 3. 설정을 점검합니다. Claude Code 안에서 `/bulkhead:doctor` 를 치거나, Bash 도구로 `bulkhead doctor` 를 실행합니다. 모든 줄이 `OK` 여야 합니다. `WARN` 이나 `FAIL` 줄에는 가드 이름과 이유가 나옵니다.
-4. 세션 옆에 터미널을 하나 열고 `bulkhead top` 을 실행합니다. 세션, 램, 포트, 무거운 작업이 실시간으로 보입니다. `q` 로 나갑니다.
+4. 세션 옆에 터미널을 하나 열고 `npx claude-bulkhead top` (`npm install -g claude-bulkhead` 로 설치했다면 `bulkhead top`)을 실행합니다. 세션, 램, 포트, 무거운 작업이 실시간으로 보입니다. `q` 로 나갑니다.
 
 그다음은 할 일이 없습니다. Bash 와 PowerShell 호출마다 가드가 돕니다. 무엇을 막았는지는 `bulkhead log` 나 `/bulkhead:log` 로 봅니다. `bulkhead log --summary` 는 내 컴퓨터에서 가드별로 몇 번 막았는지 셉니다. 기준값을 바꾸거나 특정 명령을 허용하려면 [docs/configuration.md](docs/configuration.md) 를 보세요. 명령 전체 목록은 [docs/commands.md](docs/commands.md) 에 있습니다.
 
@@ -300,7 +296,7 @@ bulkhead 는 다른 문제를 다룹니다. 한 컴퓨터의 세션들이 프로
 
 ## 지금 도는 것 보기
 
-`bulkhead` 는 `bulkhead-slot` 과 함께 Bash 도구의 `PATH` 에 들어갑니다. Claude Code 안에서는 `/bulkhead:scan [30d]`, `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor`, `/bulkhead:reap` 이 해당 명령을 돌리고 결과를 정리해 줍니다. 내 터미널에서 쓰려면 경로로 부릅니다. 예: `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead top`. 캐시 경로는 설치마다 다르니 `/plugin` 에서 확인하세요. 표를 내는 명령은 모두 `--json` 을 받습니다. 전체 설명은 [docs/commands.md](docs/commands.md) 에 있습니다.
+`bulkhead` 는 `bulkhead-slot` 과 함께 Bash 도구의 `PATH` 에 들어갑니다. Claude Code 안에서는 `/bulkhead:scan [30d]`, `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor`, `/bulkhead:reap` 이 해당 명령을 돌리고 결과를 정리해 줍니다. 내 터미널에서는 `npx claude-bulkhead top` 을 실행하거나, `npm install -g claude-bulkhead` 로 한 번 설치한 뒤 `bulkhead top` 을 실행합니다. npm 패키지는 플러그인과 같은 코드입니다. 표를 내는 명령은 모두 `--json` 을 받습니다. 전체 설명은 [docs/commands.md](docs/commands.md) 에 있습니다.
 
 ### bulkhead status
 
@@ -383,7 +379,7 @@ Node, 플러그인 파일, 상태 폴더, 설정 파일, 가드마다 켜졌는�
 ```
 $ bulkhead doctor
 OK    node            v24.11.0
-OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
+OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.2, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
 OK    state dir       ~/.claude/bulkhead is writable
 OK    config          no config files, defaults in use
 OK    kill-guard      on
@@ -440,13 +436,13 @@ sessions 는 `~/.claude/sessions` 에서 살아 있는 세션 수, heavy 는 bul
 {
   "statusLine": {
     "type": "command",
-    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead-statusline",
+    "command": "bulkhead-statusline",
     "refreshInterval": 10
   }
 }
 ```
 
-경로에 플러그인 버전이 들어 있으니 업데이트하면 고쳐야 합니다. 이미 쓰는 상태 줄 스크립트가 있으면 그 안에서 `bulkhead-statusline` 을 불러 뒤에 붙이면 됩니다.
+이 설정에는 `npm install -g claude-bulkhead` 가 필요합니다. 이것이 `bulkhead-statusline` 을 `PATH` 에 넣습니다. 이미 쓰는 상태 줄 스크립트가 있으면 그 안에서 `bulkhead-statusline` 을 불러 뒤에 붙이면 됩니다.
 
 ## 자주 묻는 질문
 

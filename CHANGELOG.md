@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.2 - 2026-11-11
+
+### Fixed
+
+- `bulkhead scan` no longer crashes with `RangeError: Maximum call stack size exceeded` on a long history (hundreds of thousands of commands). The span is found with a loop, and a list append in the event log reader no longer spreads a whole file into one call.
+- `bulkhead scan 30d` now means `--since 30d`. It used to ignore the argument and scan everything. Every subcommand now rejects an option or argument it does not know, with its usage text, instead of ignoring it.
+- The status line counted session files whose pid was alive, so a reused pid counted as a session. It now counts Claude Code processes the way `bulkhead status` does, from one `ps` listing (Windows keeps the pid check).
+- `git pull` in a tree another session works in gets its own advice (wait for that session to commit or stash, or pull from a clone nobody uses) instead of the worktree advice.
+
+### Added
+
+- `bulkhead scan` reads about twice as fast and prints a progress line on stderr when it runs longer than 3 seconds in a terminal.
+- A block message from kill-guard, wait-guard, disk-guard, checkout-guard and basics ends with one line telling the agent to ask the user when the command was meant, and that the user can allow it in `.claude/bulkhead.json`.
+- checkout-guard `remove-session-dir` resolves `$PWD`, `${PWD}`, `$(pwd)` and `` `pwd` `` to the current folder, so `rm -rf "$(pwd)"` is caught like `rm -rf .`.
+- port-guard checks a `PORT=3000` set in the command for `npm start`, `npm run dev` and similar scripts, and for `node server.js`, `tsx`, `nodemon`, `bun` and `deno` running a file.
+- kill-guard also blocks killing by name Electron, Simulator, Xcode, postgres, Docker Desktop, Code Helper and Cursor.
+- The package can be run without the plugin: `npx claude-bulkhead status`, `top`, `scan`, `doctor`. It installs a `claude-bulkhead` command next to `bulkhead`. With `npm install -g claude-bulkhead`, the status line command no longer contains the plugin version.
+- The README opens with a real Claude Code recording of kill-guard blocking `pkill node` (`docs/demo.gif`, re-recorded with `docs/demo.tape`), and the install steps come first.
+
 ## 0.2.1 - 2026-11-11
 
 - `/bulkhead:remote` now shows what a run will upload (the current commit and every uncommitted change, deletions included) and the remote it goes to, and waits for your yes before anything is sent.

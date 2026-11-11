@@ -2,6 +2,7 @@
 const os = require('os')
 const path = require('path')
 const { stateDir } = require('./hook')
+const { rejectArgs } = require('./cli-util')
 const { readMemory } = require('./memory')
 const { readProcesses } = require('./processes')
 const { readSessionFiles, findSessions } = require('./sessions')
@@ -100,6 +101,7 @@ function toJson(st) {
 }
 
 function main(args, env = process.env, stdout = process.stdout) {
+  if (rejectArgs('status', args, { flags: ['json'], valued: [] }, process.stderr, null)) return
   const st = collect()
   if (args.includes('--json')) return stdout.write(JSON.stringify(toJson(st), null, 2) + '\n')
   const color = Boolean(stdout.isTTY) && !('NO_COLOR' in env) && env.TERM !== 'dumb'

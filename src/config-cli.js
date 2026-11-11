@@ -1,7 +1,7 @@
 'use strict'
 const fs = require('fs')
 const { load, KEYS } = require('./config')
-const { useColor, paint, shortPath, table } = require('./cli-util')
+const { useColor, paint, shortPath, table, rejectArgs } = require('./cli-util')
 
 function fileState(file, warnings) {
   if (!file) return 'none found'
@@ -37,6 +37,7 @@ function render(cfg, { color = false, home } = {}) {
 }
 
 function main(args, { env = process.env, stdout = process.stdout } = {}) {
+  if (rejectArgs('config', args, { flags: ['json'], valued: [] }, process.stderr, null)) return
   const cfg = load({ env })
   if (args.includes('--json')) {
     const settings = {}

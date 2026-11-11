@@ -48,4 +48,32 @@ function bytes(n) {
   return `${n} B`
 }
 
-module.exports = { useColor, paint, shortPath, option, fit, table, bytes }
+// The first argument a subcommand does not know, as a message, or null. flags take no value,
+// valued ones take `--name value` or `--name=value`, shorts are like { n: true } for `-n 5`.
+function unknownArg(args, { flags = [], valued = [], shorts = [] } = {}) {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]
+    if (a === '--help' || a === '-h') continue
+    if (a.startsWith('--')) {
+      const name = a.slice(2).split('=')[0]
+      if (flags.includes(name)) continue
+      if (valued.includes(name)) { if (!a.includes('=') && args[i + 1] !== undefined && !args[i + 1].startsWith('--')) i++; continue }
+      return `unknown option ${a}`
+    }
+    if (a.length === 2 && a[0] === '-' && shorts.includes(a[1])) { i++; continue }
+    return a.startsWith('-') ? `unknown option ${a}` : `unexpected argument ${a}`
+  }
+  return null
+}
+
+// Writes the complaint and the usage text and sets the exit code; true when args were rejected.
+function rejectArgs(cmd, args, spec, stderr, usage) {
+  const bad = unknownArg(args, spec)
+  if (!bad) return false
+  const line = usage || `usage: bulkhead ${cmd} ${[...spec.flags, ...spec.valued].map(f => `[--${f}${spec.valued.includes(f) ? ' X' : ''}]`).join(' ')}`
+  stderr.write(`bulkhead ${cmd}: ${bad}\n${line}\n`)
+  process.exitCode = 1
+  return true
+}
+
+module.exports = { unknownArg, rejectArgs, useColor, paint, shortPath, option, fit, table, bytes }

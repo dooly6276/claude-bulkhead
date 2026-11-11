@@ -109,7 +109,7 @@ checkout-guard  git-checkout          16         5        -  Nov 01
 - **What is not replayed:** port-guard and memory-guard's low-RAM check depend on which ports and how much RAM were in use at that moment, which transcripts do not record.
 - A hit means the command had the shape a guard blocks, not that damage was done.
 
-`--since` takes `24h`, `7d`, `2w` or a date. `--project acme` keeps sessions whose folder contains `acme`. `--path` reads another folder or a single `.jsonl`. `--json` prints every rule with its counts and up to five masked examples. It reads about 200 MB a second; 6 GB of transcripts take about half a minute.
+`--since` takes `24h`, `7d`, `2w` or a date, and the same value can be given without the flag (`bulkhead scan 30d`). `--project acme` keeps sessions whose folder contains `acme`. `--path` reads another folder or a single `.jsonl`. `--json` prints every rule with its counts and up to five masked examples. On a 2026 MacBook Pro it replays about 140 MB of transcripts a second, so a few GB take under a minute; it shows progress when it runs longer than 3 seconds in a terminal.
 
 Claude Code deletes transcripts older than `cleanupPeriodDays` (30 by default), so scan sees at most that much history.
 

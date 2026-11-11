@@ -6,7 +6,7 @@ const { detect } = require('../src/dev-servers')
 
 const packages = {
   [path.resolve('/w/app', 'package.json')]: {
-    scripts: { dev: 'next dev --turbopack', web: 'vite', both: 'npm run web', api: 'node server.js', fixed: 'next dev -p 3000', preview: 'vite preview' },
+    scripts: { dev: 'next dev --turbopack', web: 'vite', both: 'npm run web', api: 'node server.js', start: 'node server.js', serve: 'nodemon app.js', fixed: 'next dev -p 3000', preview: 'vite preview' },
   },
   [path.resolve('/w/app/site', 'package.json')]: { scripts: { dev: 'astro dev' } },
 }
@@ -70,6 +70,21 @@ test('follows package scripts, extra args and env', () => {
   assert.strictEqual(port('npm --prefix site run dev'), 4321)
   // the last port flag wins, as it does in the tools
   assert.strictEqual(port('npm run fixed -- -p 3001'), 3001)
+})
+
+test('a PORT in the command counts for scripts and files that read it', () => {
+  assert.strictEqual(port('PORT=3000 npm start'), 3000)
+  assert.strictEqual(port('PORT=3001 npm run serve'), 3001)
+  assert.strictEqual(port('export PORT=3002; npm start'), 3002)
+  assert.strictEqual(port('PORT=3003 node server.js'), 3003)
+  assert.strictEqual(port('PORT=3004 npx tsx src/index.ts'), 3004)
+  const hint = cmd => detect(cmd, { cwd: '/w/app', readFile }).hint(3009)
+  assert.strictEqual(hint('PORT=3000 npm start'), 'PORT=3009 npm run start')
+  assert.strictEqual(hint('PORT=3000 node server.js'), 'PORT=3009 node server.js')
+  // no PORT named, a script that is not a server, a one-liner: nothing to check
+  for (const cmd of ['npm start', 'node server.js', 'PORT=3000 npm run api', 'PORT=3000 node -e "1"', 'PORT=abc npm start', 'PORT=3000 npm test']) {
+    assert.strictEqual(port(cmd), undefined, cmd)
+  }
 })
 
 test('ports it cannot work out are null', () => {

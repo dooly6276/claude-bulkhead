@@ -1,6 +1,6 @@
 'use strict'
 const net = require('net')
-const { option } = require('./cli-util')
+const { option, rejectArgs } = require('./cli-util')
 
 const USAGE = `usage: bulkhead port [--near PORT] [--json]
 
@@ -39,6 +39,7 @@ async function findFree(near = 3000, { bind = canBind, span = 1000 } = {}) {
 
 async function main(args, { stdout = process.stdout, stderr = process.stderr } = {}) {
   if (args.includes('--help') || args.includes('-h')) return stdout.write(USAGE + '\n')
+  if (rejectArgs('port', args, { flags: ['json'], valued: ['near'] }, stderr, USAGE)) return
   const nearArg = option(args, 'near')
   const near = nearArg === undefined ? 3000 : Number(nearArg)
   if (!Number.isInteger(near) || near < 1 || near > 65535) {

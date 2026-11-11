@@ -173,15 +173,35 @@ function detect(cmd, { cwd = process.cwd(), readFile = fs.readFileSync, depth = 
       return { port: hit.port, portArg, hint: n => [...kept.map(quote), portArg(n)].join(' ') }
     }
     const call = scriptCall(t.slice(skip))
-    if (!call || depth > 2) continue
+    if (!call) {
+      // PORT=3000 node server.js: a script that reads PORT from the environment
+      const direct = envPortServer(t.slice(skip), env)
+      if (direct) return direct
+      continue
+    }
+    if (depth > 2) continue
     const runDir = prefixDir(t.slice(skip), dir)
     const body = readScripts(runDir, readFile)[call.script]
     if (!body) continue
     const inner = detect([body, ...call.extra].join(' '), { cwd: runDir, readFile, depth: depth + 1, env })
     if (!inner) continue
+    if (inner.viaEnv && !SERVER_SCRIPT.test(call.script)) continue
+    if (inner.viaEnv) return { port: inner.port, viaEnv: true, portArg: inner.portArg, hint: n => `PORT=${n} ${call.runner} run ${call.script}` }
     return { port: inner.port, portArg: inner.portArg, hint: n => `${call.runner} run ${call.script} -- ${inner.portArg(n)}` }
   }
   return null
+}
+
+const SERVER_SCRIPT = /^(?:start|dev|serve|server|develop|watch|(?:start|dev|serve):[\w:-]+)$/i
+const envPort = env => (/^\d+$/.test(env.PORT || '') && Number(env.PORT) > 0 && Number(env.PORT) < 65536 ? Number(env.PORT) : null)
+
+// node, nodemon, tsx, ts-node, bun or deno running a file, with PORT set in the command.
+function envPortServer(t, env) {
+  const bin = binName(t[0] || '')
+  const port = envPort(env)
+  if (port == null || !/^(?:node|nodemon|tsx|ts-node|bun|deno)$/.test(bin)) return null
+  if (!t.slice(1).some(a => !a.startsWith('-') && /\.(?:[cm]?[jt]s)$/.test(a))) return null
+  return { port, viaEnv: true, portArg: n => `PORT=${n}`, hint: n => `PORT=${n} ${t.map(quote).join(' ')}` }
 }
 
 const quote = a => (/[\s"]/.test(a) ? `'${a}'` : a)

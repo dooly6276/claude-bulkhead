@@ -4,7 +4,7 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
-const { scan, mask, outcomeOf, sessionKey, renderScan, toJson, concurrency } = require('../src/scan')
+const { scan, mask, outcomeOf, sessionKey, renderScan, toJson, concurrency, timeSpan } = require('../src/scan')
 const { tempDir } = require('./helpers')
 
 const T = Date.UTC(2026, 9, 20, 9, 0)
@@ -160,4 +160,41 @@ test('the CLI reads a folder, prints JSON, and explains a missing folder', () =>
   assert.match(missing.stderr, /does not exist/)
   const bad = spawnSync(process.execPath, [bin, 'scan', '--path', dir, '--since', 'soon'], { encoding: 'utf8' })
   assert.strictEqual(bad.status, 1)
+})
+
+test('timeSpan handles hundreds of thousands of commands without spreading them', () => {
+  const commands = []
+  for (let i = 0; i < 300000; i++) commands.push({ ts: T + i * 1000 })
+  commands.push({ ts: NaN })
+  assert.deepStrictEqual(timeSpan(commands), { first: T, last: T + 299999 * 1000 })
+  assert.deepStrictEqual(timeSpan([]), { first: null, last: null })
+})
+
+test('commands and folders survive chunk boundaries, long lines and non-ASCII text', async () => {
+  const dir = tempDir()
+  const lines = []
+  const cwd = '/work/프로젝트'
+  for (let i = 0; i < 40; i++) {
+    lines.push(call(i, cwd, `echo ${i} 한글 ${'x'.repeat(i === 7 ? 6 * 1024 * 1024 : 200000)}`).line, note(i, cwd))
+  }
+  write(dir, 'p/s.jsonl', lines)
+  const r = await scan({ dir, home: '/h' })
+  assert.strictEqual(r.commands, 40)
+  assert.strictEqual(r.sessions, 1)
+})
+
+test('the CLI takes a positional span and rejects what it does not know', () => {
+  const { dir } = fixture()
+  const bin = path.join(__dirname, '..', 'bin', 'bulkhead')
+  const run = (...a) => spawnSync(process.execPath, [bin, 'scan', '--path', dir, '--json', ...a], { encoding: 'utf8' })
+  assert.strictEqual(JSON.parse(run().stdout).commands, 12)
+  const none = run('1d')
+  assert.strictEqual(none.status, 0, none.stderr)
+  assert.strictEqual(JSON.parse(none.stdout).commands, 0, 'a 1d span excludes October transcripts')
+  assert.strictEqual(JSON.parse(run('--since', '1d').stdout).commands, 0)
+  for (const bad of [['--bogus'], ['nonsense'], ['7d', '30d'], ['7d', '--since', '1d']]) {
+    const r = run(...bad)
+    assert.strictEqual(r.status, 1, bad.join(' '))
+    assert.match(r.stderr, /usage: bulkhead scan|cannot read/)
+  }
 })

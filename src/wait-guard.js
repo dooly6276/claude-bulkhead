@@ -1,5 +1,5 @@
 'use strict'
-const { runHook, setting, blocked } = require('./hook')
+const { runHook, setting, blocked, ASK_USER } = require('./hook')
 const shell = require('./shell')
 
 const DEFAULT_TOOL_TIMEOUT_S = 120
@@ -256,7 +256,7 @@ if (require.main === module) {
     if (ti.run_in_background || typeof ti.command !== 'string') return
     const verdict = judge(ti.command, ti.timeout, setting('waitGuard.limitSeconds', 180), shell.modeFor(input))
     if (!verdict) return
-    return blocked('wait-guard', verdict.rule, input, message(verdict))
+    return blocked('wait-guard', verdict.rule, input, `${message(verdict)}\n${ASK_USER}`)
   })
 }
 

@@ -42,7 +42,7 @@ Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Invoke-CimMethod -Meth
 
 Wrappers are opened up to three levels deep: `bash -c`, `sh -c`, `zsh -c`, `powershell -Command`, `pwsh -c`, `powershell -EncodedCommand`, `cmd /c`, `eval`, `trap`, `watch`, `su -c`, `Start-Process`, and prefixes such as `env VAR=x`, `VAR=value`, `sudo`, `nohup`, `time`, `nice`, `timeout N` and `xargs`. So `sudo pkill node` and `cmd /c "taskkill /F /IM node.exe"` are blocked as well.
 
-Shared programs include `node`, `python`, `python3`, `py`, `ruby`, `java`, `dotnet`, `chrome`, `chromium`, `msedge`, `firefox`, `bash`, `sh`, `zsh`, `powershell`, `pwsh`, `cmd`, `git`, `ssh`, `code`, `claude`, `npm`, `npx`, `pnpm`, `yarn`, `deno`, `bun`, `tsx`, `gradle`, `adb`, `ffmpeg`, `docker`, `vitest`, `jest`, `next`, `vite`, `esbuild` and `webpack`, with or without `.exe`.
+Shared programs include `node`, `python`, `python3`, `py`, `ruby`, `java`, `dotnet`, `chrome`, `chromium`, `msedge`, `firefox`, `bash`, `sh`, `zsh`, `powershell`, `pwsh`, `cmd`, `git`, `ssh`, `code`, `claude`, `npm`, `npx`, `pnpm`, `yarn`, `deno`, `bun`, `tsx`, `gradle`, `adb`, `ffmpeg`, `docker`, `Docker Desktop`, `electron`, `Code Helper`, `cursor`, `Cursor Helper`, `Simulator`, `Xcode`, `postgres`, `vitest`, `jest`, `next`, `vite`, `esbuild` and `webpack`, with or without `.exe`.
 
 ## Allowed
 
@@ -80,7 +80,7 @@ On Linux and macOS the hints are `lsof -ti :<port>`, `pgrep -af '<your project d
 
 - `BULKHEAD_DISABLE=kill-guard`, or `"killGuard": { "enabled": false }` in a config file, turns it off.
 - `killGuard.allowNames` takes names off the shared list, so killing them by name passes, for example `["ffmpeg"]`.
-- `killGuard.extraSharedNames` adds names that must not be killed by name, for example `["postgres", "redis-server"]`.
+- `killGuard.extraSharedNames` adds names that must not be killed by name, for example `["redis-server", "mysqld"]`.
 
 See [configuration](../configuration.md).
 

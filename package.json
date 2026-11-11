@@ -1,15 +1,32 @@
 {
   "name": "claude-bulkhead",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Claude Code hooks for a machine shared by many sessions and subagents",
-  "private": true,
+  "keywords": [
+    "claude-code",
+    "claude",
+    "hooks",
+    "subagents",
+    "parallel",
+    "guard",
+    "processes",
+    "ports",
+    "memory",
+    "worktrees",
+    "cli"
+  ],
   "license": "MIT",
   "author": "Myeongseok Kang",
   "repository": "github:dooly6276/claude-bulkhead",
+  "homepage": "https://github.com/dooly6276/claude-bulkhead#readme",
+  "bugs": {
+    "url": "https://github.com/dooly6276/claude-bulkhead/issues"
+  },
   "engines": {
     "node": ">=18"
   },
   "bin": {
+    "claude-bulkhead": "bin/bulkhead",
     "bulkhead": "bin/bulkhead",
     "bulkhead-slot": "bin/bulkhead-slot",
     "bulkhead-statusline": "bin/bulkhead-statusline"
@@ -25,5 +42,13 @@
     "@eslint/js": "9.39.4",
     "eslint": "9.39.4",
     "globals": "16.5.0"
-  }
+  },
+  "files": [
+    "bin",
+    "src",
+    "hooks",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ]
 }

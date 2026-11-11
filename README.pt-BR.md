@@ -1,26 +1,10 @@
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.zh-CN.md">简体中文</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.es.md">Español</a> |
-  <strong>Português (Brasil)</strong>
-</p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/hero-light.svg">
-    <img src="docs/hero.svg" alt="Várias sessões do Claude Code em git worktrees separados na mesma máquina. O kill-guard bloqueia pkill node, o port-guard move um segundo dev server para uma porta livre, o disk-guard impede dez varreduras du em paralelo, o checkout-guard impede que git add -A leve para um commit as edições de outra sessão, e o bulkhead-slot enfileira um terceiro job pesado para que a RAM livre fique acima do mínimo. Depois o bulkhead scan conta o que teria sido bloqueado em sessões passadas." width="100%">
-  </picture>
-</p>
-
 <h1 align="center">claude-bulkhead</h1>
 
 <p align="center">
-  <strong>Hooks que impedem sessões paralelas do Claude Code na mesma máquina de derrubar os servidores umas das outras ou de esgotar a RAM.</strong>
+  <strong>Impede que o Claude Code rode <code>pkill node</code> nos seus outros servidores de desenvolvimento, tome as portas deles e faça commit das edições de outra sessão com <code>git add -A</code>.</strong>
 </p>
 
-<p align="center">8 guards, 10 comandos, uma status line, 6 slash commands, 1 skill, zero dependências</p>
+<p align="center">Hooks que sabem quais processos, portas e árvores git pertencem a cada sessão e subagent do Claude Code, então bloqueiam só o que prejudicaria outra coisa e dizem ao Claude qual comando seguro rodar no lugar. Zero dependências, sem telemetria.</p>
 
 <p align="center">
   <a href="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml"><img src="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml/badge.svg" alt="testes"></a>
@@ -30,41 +14,62 @@
 </p>
 
 <p align="center">
-  <a href="#o-que-é"><strong>O que é</strong></a> |
-  <a href="#você-precisa-disso-pergunte-às-suas-transcrições"><strong>Scan</strong></a> |
-  <a href="#por-que-isso-existe"><strong>Por quê</strong></a> |
-  <a href="#o-que-ele-faz"><strong>Recursos</strong></a> |
-  <a href="#instalação"><strong>Instalação</strong></a> |
-  <a href="#início-rápido"><strong>Início rápido</strong></a> |
-  <a href="#rode-tarefas-pesadas-em-outra-máquina-opcional"><strong>Remoto</strong></a> |
-  <a href="#como-funciona"><strong>Como funciona</strong></a> |
-  <a href="#guards"><strong>Guards</strong></a> |
-  <a href="#faq"><strong>FAQ</strong></a>
+  <img src="docs/demo.gif" alt="Duas sessões do Claude Code trabalham em duas worktrees do mesmo app. A sessão A serve checkout na porta 3000. A sessão B recebe a ordem de matar todos os processos node e reiniciar seu servidor de search; o kill-guard do bulkhead bloqueia o comando, o Claude reinicia só o próprio servidor e o checkout continua rodando com o mesmo PID." width="100%">
 </p>
 
-> **Novidades da 0.2.0:** o [`bulkhead scan`](#você-precisa-disso-pergunte-às-suas-transcrições) reproduz suas sessões passadas do Claude Code contra os guards, o novo [disk-guard](docs/guards/disk-guard.md) bloqueia varreduras do disco inteiro e em paralelo, o checkout-guard agora impede que `git add -A` leve as edições de outra sessão para o seu commit e bloqueia `rm -rf` em uma pasta onde outra sessão trabalha, e o basics bloqueia commits com Claude como autor. Notas da versão: [CHANGELOG.md](CHANGELOG.md).
+<p align="center"><sub><a href="README.md">English</a> | <a href="README.ko.md">한국어</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.ja.md">日本語</a> | <a href="README.es.md">Español</a></sub></p>
 
-## O que é?
+## Instalação
 
-Hooks do Claude Code são programas pequenos que o Claude Code executa em pontos fixos, por exemplo antes de cada comando de shell, e que podem bloquear o comando e explicar ao Claude o motivo.
+Dentro do Claude Code:
 
-O bulkhead é um conjunto desses hooks para uma situação específica: várias sessões do Claude Code, e seus subagents, trabalhando no mesmo computador ao mesmo tempo. Cada sessão age como se a máquina fosse só dela. O bulkhead confere cada comando de shell com o que as outras sessões estão fazendo: quais processos e portas pertencem a qual sessão, quanta RAM sobrou e em qual árvore git cada sessão trabalha. Quando um comando prejudicaria outra sessão, ele é bloqueado, e o Claude recebe uma mensagem com o comando mais seguro para rodar no lugar.
+```
+/plugin marketplace add dooly6276/claude-bulkhead
+/plugin install bulkhead@bulkhead
+```
 
-**Você precisa dele se** roda duas ou mais sessões do Claude Code ao mesmo tempo, geralmente uma por git worktree, ou se suas sessões e subagents iniciam dev servers, builds e execuções de testes.
+Depois, veja o que ele teria bloqueado no seu último mês, sem mudar nada:
 
-**Você provavelmente não precisa dele se** roda uma sessão por vez e não deixa que ela inicie servidores ou builds. A maior parte do que o bulkhead faz é sobre sessões atrapalhando umas às outras.
+```
+/bulkhead:scan 30d
+```
+
+O Node 18 ou mais recente precisa estar no `PATH` (o instalador nativo do Claude Code não o instala; confira com `node --version`). Para os comandos de terminal e a status line, rode também `npm install -g claude-bulkhead`, ou use `npx claude-bulkhead status` sem instalar.
+
+## O que ele bloqueia
 
 | Sem o bulkhead | Com o bulkhead |
 |---|---|
 | Um agente reinicia o próprio dev server com `pkill node`, e o servidor de todos os outros worktrees morre junto. | O kill-guard bloqueia o comando e ensina o agente a achar e encerrar o próprio PID. |
+| Duas sessões compartilham um checkout. Uma roda `git add -A && git commit`, e as edições pela metade da outra vão parar nesse commit. | O checkout-guard bloqueia e pede os nomes dos arquivos. |
 | Dois worktrees rodam `npm run dev`. O segundo passa para a 3001, mas o agente dele continua testando `localhost:3000` e vê a outra branch. | O port-guard bloqueia a segunda inicialização e indica uma porta livre. O `bulkhead port` imprime uma sob demanda. |
 | Três sessões iniciam `next build`, `npm test` e Playwright no mesmo minuto, e a máquina trava. | O memory-guard bloqueia comandos pesados quando a RAM está baixa. Pelo `bulkhead-slot`, o terceiro job espera na fila até haver espaço. |
+
+<details>
+<summary>Mais cinco</summary>
+
+| Sem o bulkhead | Com o bulkhead |
+|---|---|
 | Uma sessão troca de branch em uma árvore que uma segunda sessão está editando. | O checkout-guard bloqueia e sugere `git worktree add`. |
 | Uma sessão termina, e seus dev servers, test workers e watchers continuam rodando, ocupando RAM e portas. | O orphan-reaper os encerra segundos depois de a sessão terminar. |
 | Um subagent fica fazendo polling em primeiro plano por dez minutos. A sessão não consegue responder a você, e o prompt cache expira. | O wait-guard bloqueia o loop e pede `run_in_background: true`. |
 | Um agente quer saber o que está ocupando espaço em disco e roda dez `du` ao mesmo tempo na sua pasta pessoal. Os builds e o `git status` de todas as sessões se arrastam por minutos. | O disk-guard bloqueia e pede uma pasta por vez. |
-| Duas sessões compartilham um checkout. Uma roda `git add -A && git commit`, e as edições pela metade da outra vão parar nesse commit. | O checkout-guard bloqueia e pede os nomes dos arquivos. |
 | Uma tarefa de "limpar os worktrees" roda `git worktree remove` em um worktree onde uma segunda sessão ainda está trabalhando. | O checkout-guard bloqueia e informa qual sessão ainda está lá. |
+
+</details>
+
+Com uma única sessão, kill-guard, memory-guard, wait-guard, disk-guard e basics (sem `rm -rf ~`, sem force-push para `main`, sem `reset --hard` sobre trabalho não commitado) continuam valendo. port-guard e checkout-guard agem quando existe uma segunda sessão ou subagent ativo.
+
+## O que é?
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/hero-light.svg">
+    <img src="docs/hero.svg" alt="Várias sessões do Claude Code em git worktrees separados na mesma máquina. O kill-guard bloqueia pkill node, o port-guard move um segundo dev server para uma porta livre, o disk-guard impede dez varreduras du em paralelo, o checkout-guard impede que git add -A leve para um commit as edições de outra sessão, e o bulkhead-slot enfileira um terceiro job pesado para que a RAM livre fique acima do mínimo. Depois o bulkhead scan conta o que teria sido bloqueado em sessões passadas." width="100%">
+  </picture>
+</p>
+
+Hooks do Claude Code são programas pequenos que o Claude Code executa antes de cada comando de shell e que podem bloquear o comando e dizer ao Claude o motivo. O bulkhead é um conjunto deles. Antes de cada chamada ao Bash ou ao PowerShell, ele confere o comando com o que as outras sessões da máquina estão fazendo: quais processos e portas são de cada sessão, quanta RAM sobrou e em qual árvore git cada uma trabalha. Quando o comando prejudicaria outra sessão, ele é bloqueado, e o Claude recebe uma mensagem com o comando mais seguro para rodar. O Claude lê e segue em frente, em geral sem perguntar a você.
 
 ## Você precisa disso? Pergunte às suas transcrições
 
@@ -117,27 +122,18 @@ O claude-bulkhead é um conjunto de hooks pequenos que bloqueiam ou limpam cada 
 
 Opcional: o **[`bulkhead remote`](#rode-tarefas-pesadas-em-outra-máquina-opcional)** roda uma suíte de testes, um build ou uma execução de navegador em outra máquina via SSH, quando esta não tem RAM sobrando.
 
-## Demonstração
+## Mais demonstrações
 
 ![bulkhead status e, em seguida, port-guard, kill-guard e wait-guard bloqueando um agente](docs/demo.svg)
 
-Gravado com o [docs/demo.sh](docs/demo.sh). As duas sessões são processos de mentira chamados `claude`; tudo o que aparece vem dos scripts de hook e do `bulkhead status`.
-
-## Instalação
-
-```
-/plugin marketplace add dooly6276/claude-bulkhead
-/plugin install bulkhead@bulkhead
-```
-
-O Node 18 ou mais recente precisa estar no `PATH`. O instalador nativo do Claude Code não instala o Node, então confira antes com `node --version`. Sem o Node, todos os hooks falham ao iniciar: nada é bloqueado, e o Claude Code mostra um aviso de `hook error` para cada hook a cada chamada de ferramenta. Não há outras dependências.
+Uma execução roteirizada de `bulkhead status`, port-guard, kill-guard e wait-guard, gravada com o [docs/demo.sh](docs/demo.sh). As duas sessões são processos de mentira chamados `claude`; tudo o que aparece vem dos scripts de hook e do `bulkhead status`. A gravação no topo desta página é uma sessão real do Claude Code; como ela foi feita está em [docs/demo.tape](docs/demo.tape).
 
 ## Início rápido
 
 1. Instale o plugin como acima e inicie uma nova sessão do Claude Code.
 2. Veja o que ele teria pegado: rode `/bulkhead:scan 30d`, ou `bulkhead scan` na ferramenta Bash. Ele lê o último mês de transcrições e não altera nada.
 3. Verifique a instalação. Dentro do Claude Code, rode `/bulkhead:doctor`, ou rode `bulkhead doctor` na ferramenta Bash. Todas as linhas devem dizer `OK`. Uma linha `WARN` ou `FAIL` informa o guard e o motivo.
-4. Abra um terminal ao lado das suas sessões e rode `bulkhead top` para acompanhar ao vivo sessões, RAM, portas e jobs pesados. Pressione `q` para sair.
+4. Abra um terminal ao lado das suas sessões e rode `npx claude-bulkhead top` (ou `bulkhead top` depois de `npm install -g claude-bulkhead`) para acompanhar ao vivo sessões, RAM, portas e jobs pesados. Pressione `q` para sair.
 
 Depois disso não há mais nada a fazer. Os guards rodam em toda chamada de Bash e PowerShell. Para ver o que eles bloquearam, rode `bulkhead log` ou `/bulkhead:log`; `bulkhead log --summary` conta os bloqueios por guard na sua máquina. Para mudar um limite ou liberar um comando, veja [docs/configuration.md](docs/configuration.md). Todos os comandos estão listados em [docs/commands.md](docs/commands.md).
 
@@ -300,7 +296,7 @@ As variáveis de ambiente continuam funcionando e vencem os dois arquivos. O lug
 
 ## Veja o que está rodando
 
-O `bulkhead` está no `PATH` da ferramenta Bash, ao lado do `bulkhead-slot`. Dentro do Claude Code, `/bulkhead:scan [30d]`, `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor` e `/bulkhead:reap` rodam o comando correspondente e resumem o resultado. Para rodá-lo no seu próprio terminal, chame-o pelo caminho, por exemplo `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead top` (o caminho do cache depende da sua instalação; o `/plugin` mostra qual é). Todo comando que imprime uma tabela aceita `--json`. A referência completa está em [docs/commands.md](docs/commands.md).
+O `bulkhead` está no `PATH` da ferramenta Bash, ao lado do `bulkhead-slot`. Dentro do Claude Code, `/bulkhead:scan [30d]`, `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor` e `/bulkhead:reap` rodam o comando correspondente e resumem o resultado. No seu próprio terminal, rode `npx claude-bulkhead top`, ou instale uma vez com `npm install -g claude-bulkhead` e rode `bulkhead top`. O pacote npm é o mesmo código do plugin. Todo comando que imprime uma tabela aceita `--json`. A referência completa está em [docs/commands.md](docs/commands.md).
 
 ### bulkhead status
 
@@ -383,7 +379,7 @@ Verifica o Node, os arquivos do plugin, o diretório de estado, os arquivos de c
 ```
 $ bulkhead doctor
 OK    node            v24.11.0
-OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
+OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.2, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
 OK    state dir       ~/.claude/bulkhead is writable
 OK    config          no config files, defaults in use
 OK    kill-guard      on
@@ -440,13 +436,13 @@ Um plugin não consegue definir a status line principal (as configurações de p
 {
   "statusLine": {
     "type": "command",
-    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead-statusline",
+    "command": "bulkhead-statusline",
     "refreshInterval": 10
   }
 }
 ```
 
-O caminho contém a versão do plugin, então atualize-o depois de atualizar o plugin. Se você já tem um script de status line, chame o `bulkhead-statusline` a partir dele e acrescente a saída.
+Isso exige `npm install -g claude-bulkhead`, que coloca o `bulkhead-statusline` no `PATH`. Se você já tem um script de status line, chame o `bulkhead-statusline` a partir dele e acrescente a saída.
 
 ## FAQ
 

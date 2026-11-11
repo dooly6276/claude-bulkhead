@@ -10,7 +10,7 @@ Keeps one session from taking or killing a dev server port that another Claude s
 
 `npm run dev` and the same through pnpm, yarn and bun, `next dev`, `vite`, `astro dev`, `nuxt dev`, `remix dev`, `expo start`, `python -m http.server`, `uvicorn`, `flask run`, `rails s`, `manage.py runserver`, `ng serve`, `php artisan serve` and a few more.
 
-It works out the port from `--port`, `-p`, `PORT=` (for tools that read it) or the tool's default, following package.json scripts. If another Claude session's process tree is listening on that port, the call is blocked.
+It works out the port from `--port`, `-p`, a `PORT=3000` prefix on the command (`PORT=3000 npm start`, `PORT=3000 node server.js`), `PORT=` in the script or the tool's default, following package.json scripts. If another Claude session's process tree is listening on that port, the call is blocked.
 
 ### Why
 

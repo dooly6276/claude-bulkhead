@@ -1,6 +1,6 @@
 'use strict'
 const os = require('os')
-const { runHook, blocked, oneLine } = require('./hook')
+const { runHook, blocked, oneLine, ASK_USER } = require('./hook')
 const shell = require('./shell')
 
 // Disk scans that walk a whole drive or home folder, or several folders at once. The disk is
@@ -193,7 +193,7 @@ if (require.main === module) {
     const cmd = input.tool_input && input.tool_input.command
     const hit = check(cmd, { mode: shell.modeFor(input) })
     if (!hit) return
-    return blocked('disk-guard', hit.rule, input, hit.why)
+    return blocked('disk-guard', hit.rule, input, `${hit.why}\n${ASK_USER}`)
   })
 }
 

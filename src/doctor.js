@@ -10,7 +10,7 @@ const { readMemory } = require('./memory')
 const { readProcesses } = require('./processes')
 const { readSessionFiles, findSessions, claudeDir } = require('./sessions')
 const { limits, readSlots, slotDir, staleReason } = require('./slots')
-const { useColor, paint, shortPath, bytes } = require('./cli-util')
+const { useColor, paint, shortPath, bytes, rejectArgs } = require('./cli-util')
 const remote = require('./remote')
 
 const ROOT = path.resolve(__dirname, '..')
@@ -239,6 +239,7 @@ function render(checks, { color = false } = {}) {
 }
 
 function main(args, { stdout = process.stdout, env = process.env, checks = () => runAll({ remotes: !args.includes('--no-remote') }) } = {}) {
+  if (rejectArgs('doctor', args, { flags: ['json', 'no-remote'], valued: [] }, process.stderr, null)) return
   const list = checks()
   if (args.includes('--json')) {
     stdout.write(JSON.stringify({ ok: !list.some(c => c.status === 'FAIL'), checks: list }, null, 2) + '\n')

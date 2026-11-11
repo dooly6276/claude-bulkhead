@@ -40,7 +40,7 @@ Stage only the files you changed, by name: git add src/a.ts src/b.ts, or commit 
 
 ### Deleting another session's folder (`remove-session-dir`, new in 0.2.0)
 
-`rm -rf <dir>`, `Remove-Item -Recurse -Force <dir>`, `rd /s <dir>` and `git worktree remove [--force] <dir>` are blocked when `<dir>` is the folder another live session works in, or a folder above it. This is the usual way a "clean up the worktrees" task deletes a worktree that a second session is still using.
+`rm -rf <dir>`, `Remove-Item -Recurse -Force <dir>`, `rd /s <dir>` and `git worktree remove [--force] <dir>` are blocked when `<dir>` is the folder another live session works in, or a folder above it. `$PWD`, `${PWD}` and `$(pwd)` are resolved to the current folder first. This is the usual way a "clean up the worktrees" task deletes a worktree that a second session is still using.
 
 ```
 [bulkhead] checkout-guard: `git worktree remove ../acme-web-auth` removes /home/me/src/acme-web-auth, and another Claude session works in it (pid 21888, started 2026-10-13 10:52, in /home/me/src/acme-web-auth).

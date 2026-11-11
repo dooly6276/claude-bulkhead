@@ -1,7 +1,7 @@
 'use strict'
 const { stateDir } = require('./hook')
 const { readEvents, eventsFile } = require('./events')
-const { useColor, paint, shortPath, option, fit, table } = require('./cli-util')
+const { useColor, paint, shortPath, option, fit, table, rejectArgs } = require('./cli-util')
 
 const USAGE = `usage: bulkhead log [-n N] [--since 7d|24h|30m] [--guard NAME] [--summary] [--json]
 
@@ -110,6 +110,7 @@ function renderList(events, { color = false, home, width = 120, now = Date.now()
 
 function main(args, { env = process.env, stdout = process.stdout, stderr = process.stderr, now = Date.now(), dir = stateDir() } = {}) {
   if (args.includes('--help') || args.includes('-h')) return stdout.write(USAGE + '\n')
+  if (rejectArgs('log', args, { flags: ['json', 'summary'], valued: ['since', 'guard', 'limit'], shorts: ['n'] }, stderr, USAGE)) return
   const sinceArg = option(args, 'since')
   let since = null
   if (sinceArg !== undefined && sinceArg !== '') {

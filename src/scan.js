@@ -6,17 +6,16 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const readline = require('readline')
 const { claudeDir } = require('./sessions')
 const { setting } = require('./hook')
 const { useColor, paint, shortPath, option, fit, table, bytes } = require('./cli-util')
 const { parseSince } = require('./log-cli')
 
-const USAGE = `usage: bulkhead scan [--since 30d|DATE] [--path DIR|FILE] [--project TEXT] [-n N] [--json]
+const USAGE = `usage: bulkhead scan [30d|DATE] [--since 30d|DATE] [--path DIR|FILE] [--project TEXT] [-n N] [--json]
 
 Replays the shell commands in your Claude Code transcripts against bulkhead's guards and shows
 what they would have stopped. Read-only. Nothing leaves this machine.
-  --since SPAN     only commands newer than SPAN: 24h, 7d, 2w, or a date such as 2026-10-01
+  30d, --since SPAN  only commands newer than SPAN: 24h, 7d, 2w, or a date such as 2026-10-01
   --path P         transcripts to read (default: ~/.claude/projects)
   --project TEXT   only sessions whose folder contains TEXT
   -n N             examples to show per rule (default 3, 0 for none)
@@ -60,11 +59,47 @@ function sessionKey(file) {
   return path.basename(file, '.jsonl')
 }
 
-const TS = '"timestamp":"'
-function timestampOf(line) {
-  const i = line.lastIndexOf(TS)
+const TS = Buffer.from('"timestamp":"')
+const Q = 0x22
+// Timestamp of a transcript line held as bytes; the last "timestamp" key is the line's own.
+function timestampOf(buf) {
+  const i = buf.lastIndexOf(TS)
   if (i < 0) return NaN
-  return Date.parse(line.slice(i + TS.length, line.indexOf('"', i + TS.length)))
+  const start = i + TS.length
+  const end = buf.indexOf(Q, start)
+  if (end < 0) return NaN
+  return Date.parse(buf.toString('latin1', start, end))
+}
+const B_TOOL_USE = Buffer.from('"tool_use"')
+const B_BASH = Buffer.from('"Bash"')
+const B_PS = Buffer.from('"PowerShell"')
+const B_TOOL_RESULT = Buffer.from('"tool_result"')
+const B_IS_ERROR = Buffer.from('"is_error":true')
+const B_CWD = Buffer.from('"cwd":"')
+const CHUNK = 4 * 1024 * 1024
+
+// Calls fn(lineBuffer) for each line of a file, reading big chunks and never decoding to text.
+function eachLine(file, fn, onBytes) {
+  const fd = fs.openSync(file, 'r')
+  try {
+    const chunk = Buffer.allocUnsafe(CHUNK)
+    let carry = null
+    for (;;) {
+      const n = fs.readSync(fd, chunk, 0, CHUNK, null)
+      if (n <= 0) break
+      let pos = 0
+      let nl
+      while ((nl = chunk.indexOf(10, pos)) >= 0 && nl < n) {
+        let line = chunk.subarray(pos, nl)
+        if (carry) { line = Buffer.concat([carry, line]); carry = null }
+        fn(line)
+        pos = nl + 1
+      }
+      if (pos < n) carry = carry ? Buffer.concat([carry, chunk.subarray(pos, n)]) : Buffer.from(chunk.subarray(pos, n))
+      if (onBytes) onBytes(n)
+    }
+    if (carry && carry.length) fn(carry)
+  } finally { fs.closeSync(fd) }
 }
 
 // What became of a tool call that came back as an error: a PreToolUse hook stopped it, or the
@@ -77,26 +112,45 @@ function outcomeOf(text) {
 }
 
 // Reads one transcript into `state`: commands, outcomes, and the minutes each session was active.
-async function readTranscript(file, state, { since = null } = {}) {
+async function readTranscript(file, state, { since = null, onBytes = null } = {}) {
   const session = sessionKey(file)
-  const stream = fs.createReadStream(file, { encoding: 'utf8' })
-  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity })
   let lastCwd = null
-  for await (const line of rl) {
+  eachLine(file, buf => {
     state.lines++
-    const ts = timestampOf(line)
+    const ts = timestampOf(buf)
     if (Number.isFinite(ts) && (since == null || ts >= since)) {
       const minutes = state.activity.get(session) || new Map()
       const m = Math.floor(ts / 60000)
       if (!minutes.has(m)) minutes.set(m, lastCwd)
       state.activity.set(session, minutes)
     }
-    const call = line.includes('"tool_use"') && (line.includes('"Bash"') || line.includes('"PowerShell"'))
-    const result = line.includes('"tool_result"') && line.includes('"is_error":true')
-    const hasCwd = line.includes('"cwd":"')
-    if (!call && !result && !hasCwd) continue
+    const call = buf.includes(B_TOOL_USE) && (buf.includes(B_BASH) || buf.includes(B_PS))
+    const result = buf.includes(B_TOOL_RESULT) && buf.includes(B_IS_ERROR)
+    const hasCwd = buf.includes(B_CWD)
+    if (!call && !result && !hasCwd) return
+    if (!call && !result) {
+      // A line that only carries the folder: read it without parsing the whole line.
+      const at = buf.indexOf(B_CWD) + B_CWD.length
+      const end = buf.indexOf(Q, at)
+      // only when the key appears once: a nested "cwd" inside a tool result needs the parser
+      if (end > 0 && buf.indexOf(B_CWD, end) < 0) {
+        const raw = buf.toString('utf8', at, end)
+        if (!raw.includes('\\')) {
+          if (raw) {
+            lastCwd = raw
+            const minutes = state.activity.get(session)
+            if (minutes && Number.isFinite(ts)) minutes.set(Math.floor(ts / 60000), raw)
+          }
+          return
+        }
+      }
+    }
+    handleLine(buf.toString('utf8'), ts, call, result)
+  }, onBytes)
+
+  function handleLine(line, ts, call, result) {
     let obj
-    try { obj = JSON.parse(line) } catch { continue }
+    try { obj = JSON.parse(line) } catch { return }
     if (obj.cwd) {
       lastCwd = obj.cwd
       const minutes = state.activity.get(session)
@@ -104,7 +158,7 @@ async function readTranscript(file, state, { since = null } = {}) {
     }
     const items = obj.message && Array.isArray(obj.message.content) ? obj.message.content : []
     if (call && obj.type === 'assistant') {
-      if (since != null && !(ts >= since)) continue
+      if (since != null && !(ts >= since)) return
       for (const it of items) {
         if (!it || it.type !== 'tool_use' || (it.name !== 'Bash' && it.name !== 'PowerShell')) continue
         const input = it.input || {}
@@ -175,21 +229,36 @@ function replayGit({ assumeEdits = false } = {}) {
 function activeOthers(state, session, ts) {
   const files = new Map()
   if (!Number.isFinite(ts)) return files
-  const m = Math.floor(ts / 60000)
-  let pid = 1
-  for (const [other, minutes] of state.activity) {
-    if (other === session) continue
-    let cwd = null
-    for (let k = m - ACTIVE_WINDOW_MIN; k <= m + ACTIVE_WINDOW_MIN && !cwd; k++) {
-      if (minutes.has(k)) cwd = minutes.get(k)
+  if (!state.byMinute) {
+    // minute -> [[session, cwd]], so a command looks at 21 minutes instead of every session
+    state.byMinute = new Map()
+    for (const [other, minutes] of state.activity) {
+      for (const [k, cwd] of minutes) {
+        if (!cwd) continue
+        const list = state.byMinute.get(k)
+        if (list) list.push([other, cwd])
+        else state.byMinute.set(k, [[other, cwd]])
+      }
     }
-    if (cwd) files.set(pid++, { cwd, sessionId: other, startedAt: null })
+  }
+  const m = Math.floor(ts / 60000)
+  const seen = new Set([session])
+  let pid = 1
+  for (let k = m - ACTIVE_WINDOW_MIN; k <= m + ACTIVE_WINDOW_MIN; k++) {
+    const list = state.byMinute.get(k)
+    if (!list) continue
+    for (const [other, cwd] of list) {
+      if (seen.has(other)) continue
+      seen.add(other)
+      files.set(pid++, { cwd, sessionId: other, startedAt: null })
+    }
   }
   return files
 }
 
 // Every guard rule that would have stopped this command, as [{ guard, rule }].
-function replay(cmd, state, { home = os.homedir(), platform = process.platform } = {}) {
+function replay(cmd, state, { home = os.homedir(), platform = process.platform, settings = null } = {}) {
+  const cfg = settings || { allowNames: setting('killGuard.allowNames', []), extraSharedNames: setting('killGuard.extraSharedNames', []), waitLimit: setting('waitGuard.limitSeconds', 180) }
   const hits = []
   const mode = cmd.tool === 'PowerShell' ? 'ps' : 'sh'
   const text = cmd.command
@@ -198,12 +267,12 @@ function replay(cmd, state, { home = os.homedir(), platform = process.platform }
   const tryRun = fn => { try { fn() } catch {} }
 
   tryRun(() => {
-    const hit = require('./kill-guard').classify(text, { allowNames: setting('killGuard.allowNames', []), extraSharedNames: setting('killGuard.extraSharedNames', []) }, mode)
+    const hit = require('./kill-guard').classify(text, { allowNames: cfg.allowNames, extraSharedNames: cfg.extraSharedNames }, mode)
     if (hit) add('kill-guard', hit.rule)
   })
   tryRun(() => {
     if (cmd.background) return
-    const v = require('./wait-guard').judge(text, cmd.timeout, setting('waitGuard.limitSeconds', 180), mode)
+    const v = require('./wait-guard').judge(text, cmd.timeout, cfg.waitLimit, mode)
     if (v) add('wait-guard', v.rule)
   })
   tryRun(() => {
@@ -411,33 +480,95 @@ function toJson(r) {
 
 // ---------------------------------------------------------------------------------------------
 
-async function scan({ dir = path.join(claudeDir(), 'projects'), since = null, project = null, home = os.homedir(), platform = process.platform } = {}) {
+// Earliest and latest timestamp. A loop, not Math.min(...times): a heavy user has hundreds of
+// thousands of commands and spreading them into a call overflows the stack.
+function timeSpan(commands) {
+  let first = null
+  let last = null
+  for (const c of commands) {
+    if (!Number.isFinite(c.ts)) continue
+    if (first === null || c.ts < first) first = c.ts
+    if (last === null || c.ts > last) last = c.ts
+  }
+  return { first, last }
+}
+
+async function scan({ dir = path.join(claudeDir(), 'projects'), since = null, project = null, home = os.homedir(), platform = process.platform, onProgress = null } = {}) {
   const t0 = Date.now()
   const files = findTranscripts(dir, { since })
   const state = { commands: [], outcomes: new Map(), activity: new Map(), lines: 0 }
+  const total = files.reduce((n, f) => n + f.size, 0)
+  let done = 0
+  let doneFiles = 0
+  let tick = Date.now()
+  const report = () => {
+    if (!onProgress || Date.now() - tick < 500) return
+    tick = Date.now()
+    onProgress({ files: doneFiles, totalFiles: files.length, bytes: done, totalBytes: total, seconds: (tick - t0) / 1000 })
+  }
   for (const f of files) {
-    try { await readTranscript(f.file, state, { since }) } catch {}
+    try { await readTranscript(f.file, state, { since, onBytes: n => { done += n; report() } }) } catch {}
+    doneFiles++
+    report()
   }
   let commands = state.commands
   if (project) commands = commands.filter(c => String(c.cwd || '').toLowerCase().includes(project.toLowerCase()))
-  const hitsByCommand = commands.map(cmd => ({ cmd, hits: replay(cmd, state, { home, platform }) }))
-  const times = commands.map(c => c.ts).filter(Number.isFinite)
+  const settings = { allowNames: setting('killGuard.allowNames', []), extraSharedNames: setting('killGuard.extraSharedNames', []), waitLimit: setting('waitGuard.limitSeconds', 180) }
+  const tRead = Date.now()
+  const hitsByCommand = commands.map(cmd => ({ cmd, hits: replay(cmd, state, { home, platform, settings }) }))
+  const { first, last } = timeSpan(commands)
   return {
     files: files.length,
     bytes: files.reduce((n, f) => n + f.size, 0),
     sessions: new Set(commands.map(c => c.session)).size,
     commands: commands.length,
-    first: times.length ? Math.min(...times) : null,
-    last: times.length ? Math.max(...times) : null,
+    first,
+    last,
     concurrency: concurrency(state),
     summary: summarize(state, hitsByCommand),
     seconds: (Date.now() - t0) / 1000,
+    readSeconds: (tRead - t0) / 1000,
   }
+}
+
+const VALUE_FLAGS = ['since', 'path', 'project']
+const BOOL_FLAGS = ['json']
+// The first bare argument that is not a flag's value: `bulkhead scan 30d`.
+function positionals(args) {
+  const out = []
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]
+    if (a === '-n') { i++; continue }
+    if (a.startsWith('--')) {
+      if (!a.includes('=') && VALUE_FLAGS.includes(a.slice(2)) && args[i + 1] !== undefined && !args[i + 1].startsWith('--')) i++
+      continue
+    }
+    out.push(a)
+  }
+  return out
+}
+const positionalSince = args => positionals(args)[0] || null
+function checkArgs(args) {
+  for (const a of args) {
+    if (!a.startsWith('-') || a === '-n') continue
+    const name = a.startsWith('--') ? a.slice(2).split('=')[0] : null
+    if (!name || ![...VALUE_FLAGS, ...BOOL_FLAGS].includes(name)) return `unknown option ${a}`
+  }
+  const pos = positionals(args)
+  if (pos.length > 1) return `unexpected argument ${pos[1]}`
+  if (pos.length && option(args, 'since') !== undefined) return `give the time span once: --since ${option(args, 'since')} or ${pos[0]}, not both`
+  return null
 }
 
 async function main(args, { env = process.env, stdout = process.stdout, stderr = process.stderr, now = Date.now() } = {}) {
   if (args.includes('--help') || args.includes('-h')) return stdout.write(USAGE + '\n')
-  const sinceArg = option(args, 'since')
+  const bad = checkArgs(args)
+  if (bad) {
+    stderr.write(`bulkhead scan: ${bad}\n${USAGE}\n`)
+    process.exitCode = 1
+    return
+  }
+  const sinceArg = option(args, 'since') || positionalSince(args)
   let since = null
   if (typeof sinceArg === 'string' && sinceArg) {
     since = parseSince(sinceArg, now)
@@ -457,10 +588,17 @@ async function main(args, { env = process.env, stdout = process.stdout, stderr =
   const proj = option(args, 'project')
   const nIdx = args.indexOf('-n')
   const n = nIdx >= 0 && Number(args[nIdx + 1]) >= 0 ? Math.floor(Number(args[nIdx + 1])) : 3
-  const r = await scan({ dir, since, project: typeof proj === 'string' ? proj : null })
+  let shown = false
+  const onProgress = stderr.isTTY ? prog => {
+    if (prog.seconds < 3) return
+    shown = true
+    stderr.write(`\r\x1b[2Kscanning ${prog.files.toLocaleString('en-US')}/${prog.totalFiles.toLocaleString('en-US')} transcripts, ${bytes(prog.bytes)} of ${bytes(prog.totalBytes)}`)
+  } : null
+  const r = await scan({ dir, since, project: typeof proj === 'string' ? proj : null, onProgress })
+  if (shown) stderr.write('\r\x1b[2K')
   r.sinceLabel = typeof sinceArg === 'string' ? sinceArg : null
   if (args.includes('--json')) return stdout.write(JSON.stringify(toJson(r), null, 2) + '\n')
   stdout.write(renderScan(r, { color: useColor(stdout, env), examples: n, width: stdout.columns || 120 }) + '\n')
 }
 
-module.exports = { main, scan, replay, renderScan, toJson, mask, outcomeOf, sessionKey, findTranscripts, concurrency, USAGE }
+module.exports = { main, scan, timeSpan, replay, renderScan, toJson, mask, outcomeOf, sessionKey, findTranscripts, concurrency, USAGE }

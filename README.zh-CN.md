@@ -1,26 +1,10 @@
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.ko.md">한국어</a> |
-  <strong>简体中文</strong> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.pt-BR.md">Português (Brasil)</a>
-</p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/hero-light.svg">
-    <img src="docs/hero.svg" alt="同一台机器上，多个 Claude Code 会话分别在各自的 git worktree 里工作。kill-guard 拦下 pkill node，port-guard 让第二个开发服务器改用空闲端口，disk-guard 拦下同时运行的十个 du 扫描，checkout-guard 拦下会把其他会话的改动卷进提交的 git add -A，bulkhead-slot 让第三个重任务排队，使剩余内存不低于下限。bulkhead scan 则统计过去的会话里它本来会拦下什么。" width="100%">
-  </picture>
-</p>
-
 <h1 align="center">claude-bulkhead</h1>
 
 <p align="center">
-  <strong>一组 hook：同一台机器上并行运行多个 Claude Code 会话时，防止它们互相杀掉服务器，或把内存耗尽。</strong>
+  <strong>阻止 Claude Code 对你其他的开发服务器执行 <code>pkill node</code>、抢占它们的端口，以及用 <code>git add -A</code> 提交另一个会话的修改。</strong>
 </p>
 
-<p align="center">8 个 guard，10 个命令，一个状态栏，6 个斜杠命令，1 个 skill，零依赖</p>
+<p align="center">这组 hook 清楚哪些进程、端口和 git 工作树属于哪个 Claude Code 会话和子代理，只拦截会伤到其他东西的命令，并告诉 Claude 应该改用哪条安全的命令。零依赖，无遥测。</p>
 
 <p align="center">
   <a href="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml"><img src="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml/badge.svg" alt="tests"></a>
@@ -30,41 +14,62 @@
 </p>
 
 <p align="center">
-  <a href="#这是什么"><strong>这是什么</strong></a> |
-  <a href="#需要它吗让你的会话记录来回答"><strong>扫描</strong></a> |
-  <a href="#为什么需要它"><strong>为什么</strong></a> |
-  <a href="#功能"><strong>功能</strong></a> |
-  <a href="#安装"><strong>安装</strong></a> |
-  <a href="#快速开始"><strong>快速开始</strong></a> |
-  <a href="#在另一台机器上运行重任务可选"><strong>远程</strong></a> |
-  <a href="#工作原理"><strong>工作原理</strong></a> |
-  <a href="#各个-guard"><strong>Guard</strong></a> |
-  <a href="#常见问题"><strong>FAQ</strong></a>
+  <img src="docs/demo.gif" alt="两个 Claude Code 会话在同一个应用的两个 worktree 中工作。会话 A 在 3000 端口运行 checkout。会话 B 被要求结束所有 node 进程并重启 search 服务器，bulkhead 的 kill-guard 拦截了该命令，Claude 只重启了自己的服务器，checkout 以相同的 PID 继续运行。" width="100%">
 </p>
 
-> **0.2.0 新增：**[`bulkhead scan`](#需要它吗让你的会话记录来回答) 会用 guard 回放你过去的 Claude Code 会话；新的 [disk-guard](docs/guards/disk-guard.md) 拦截整盘扫描和并行扫描；checkout-guard 现在还会拦截把其他会话的改动卷进你提交的 `git add -A`，以及对其他会话正在使用的文件夹执行 `rm -rf`；basics 会拦截以 Claude 作为作者的提交。发布说明：[CHANGELOG.md](CHANGELOG.md)。
+<p align="center"><sub><a href="README.md">English</a> | <a href="README.ko.md">한국어</a> | <a href="README.ja.md">日本語</a> | <a href="README.es.md">Español</a> | <a href="README.pt-BR.md">Português (Brasil)</a></sub></p>
 
-## 这是什么
+## 安装
 
-Claude Code 的 hook 是 Claude Code 在固定时机（例如每次执行 shell 命令之前）运行的小程序，它可以拦下这条命令并告诉 Claude 原因。
+在 Claude Code 中执行：
 
-bulkhead 是针对一种场景的一组 hook：多个 Claude Code 会话及其子代理同时在同一台电脑上工作。每个会话都以为整台机器归它自己。bulkhead 会把每条 shell 命令和其他会话正在做的事对照：哪些进程和端口属于哪个会话、还剩多少内存、每个会话在哪个 git 工作树里。如果一条命令会伤到其他会话，它就会被拦下，Claude 会收到一条提示，告诉它该改用哪条更安全的命令。
+```
+/plugin marketplace add dooly6276/claude-bulkhead
+/plugin install bulkhead@bulkhead
+```
 
-**适合你，如果** 你同时运行两个或更多 Claude Code 会话（通常每个 git worktree 一个），或者你的会话和子代理会启动开发服务器、构建和测试。
+然后不改动任何东西，看看它在你过去一个月里会拦下什么：
 
-**大概不需要，如果** 你一次只开一个会话，也不让它启动服务器或构建。bulkhead 处理的主要是会话之间互相干扰的问题。
+```
+/bulkhead:scan 30d
+```
+
+`PATH` 里需要有 Node 18 或更高版本（Claude Code 的原生安装程序不会装 Node，请用 `node --version` 确认）。要使用终端命令和状态栏，还需运行 `npm install -g claude-bulkhead`，也可以不安装，直接用 `npx claude-bulkhead status`。
+
+## 它拦截什么
 
 | 没有 bulkhead | 有 bulkhead |
 |---|---|
 | 代理用 `pkill node` 重启自己的开发服务器，其他 worktree 的服务器也一起挂掉。 | kill-guard 拦下这条命令，并告诉代理如何找到并只结束自己的 PID。 |
+| 两个会话共用一个检出目录。其中一个运行 `git add -A && git commit`，另一个会话写到一半的改动就进了这次提交。 | checkout-guard 拦下它，并要求写出具体文件名。 |
 | 两个 worktree 都执行 `npm run dev`。第二个换到了 3001，但它的代理还在测 `localhost:3000`，看到的是另一个分支。 | port-guard 拦下第二次启动并给出空闲端口。`bulkhead port` 也能随时给出一个。 |
 | 三个会话在同一分钟里启动 `next build`、`npm test` 和 Playwright，机器卡死。 | 内存不足时 memory-guard 拦截重命令。通过 `bulkhead-slot`，第三个任务会排队，等有空间再运行。 |
+
+<details>
+<summary>再看 5 条</summary>
+
+| 没有 bulkhead | 有 bulkhead |
+|---|---|
 | 一个会话在另一个会话正在编辑的工作树里 checkout 了别的分支。 | checkout-guard 拦下它，并建议使用 `git worktree add`。 |
 | 会话结束了，它的开发服务器、测试 worker 和监视进程还在跑，占着内存和端口。 | 会话退出后几秒内，orphan-reaper 就会停掉它们。 |
 | 子代理在前台轮询了十分钟。这期间会话无法回应你，提示缓存也过期了。 | wait-guard 拦下这个循环，让它改用 `run_in_background: true`。 |
 | 代理想知道什么占了磁盘空间，在你的家目录上同时运行十个 `du`。所有会话的构建和 `git status` 都慢上好几分钟。 | disk-guard 拦下它，并要求一次只看一个文件夹。 |
-| 两个会话共用一个检出目录。其中一个运行 `git add -A && git commit`，另一个会话写到一半的改动就进了这次提交。 | checkout-guard 拦下它，并要求写出具体文件名。 |
 | 一个“清理 worktree”的任务对另一个会话还在使用的 worktree 运行 `git worktree remove`。 | checkout-guard 拦下它，并指出仍在里面的会话。 |
+
+</details>
+
+只有一个会话时，kill-guard、memory-guard、wait-guard、disk-guard 和 basics（禁止 `rm -rf ~`、禁止强制推送到 `main`、禁止在有未提交修改时 `reset --hard`）仍然生效。port-guard 和 checkout-guard 在出现第二个会话或子代理后才起作用。
+
+## 这是什么
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/hero-light.svg">
+    <img src="docs/hero.svg" alt="同一台机器上，多个 Claude Code 会话分别在各自的 git worktree 里工作。kill-guard 拦下 pkill node，port-guard 让第二个开发服务器改用空闲端口，disk-guard 拦下同时运行的十个 du 扫描，checkout-guard 拦下会把其他会话的改动卷进提交的 git add -A，bulkhead-slot 让第三个重任务排队，使剩余内存不低于下限。bulkhead scan 则统计过去的会话里它本来会拦下什么。" width="100%">
+  </picture>
+</p>
+
+Claude Code 的 hook 是 Claude Code 在每次执行 shell 命令之前运行的小程序，可以拦下命令并告诉 Claude 原因。bulkhead 就是一组这样的 hook。每次调用 Bash 或 PowerShell 之前，它会把命令和这台机器上其他会话正在做的事对照：哪些进程和端口属于哪个会话、还剩多少内存、每个会话在哪棵 git 工作树里工作。如果命令会伤到其他会话，就拦下它，并给 Claude 一条更安全的替代命令。Claude 读到后继续工作，通常不需要问你。
 
 ## 需要它吗？让你的会话记录来回答
 
@@ -117,27 +122,18 @@ claude-bulkhead 是一组小 hook，分别拦下或清理上面这些情况。�
 
 可选功能：当本机内存不够时，**[`bulkhead remote`](#在另一台机器上运行重任务可选)** 通过 SSH 在另一台机器上运行测试套件、构建或浏览器测试。
 
-## 演示
+## 更多演示
 
 ![bulkhead status，随后 port-guard、kill-guard、wait-guard 拦下代理](docs/demo.svg)
 
-用 [docs/demo.sh](docs/demo.sh) 录制。两个会话是名为 `claude` 的替身进程，屏幕上的输出全部来自真实的 hook 脚本和 `bulkhead status`。
-
-## 安装
-
-```
-/plugin marketplace add dooly6276/claude-bulkhead
-/plugin install bulkhead@bulkhead
-```
-
-`PATH` 里需要有 Node 18 或更高版本。Claude Code 的原生安装程序不会装 Node，请先用 `node --version` 确认。没有 Node 时所有 hook 都无法启动：什么都拦不住，而且每次调用工具时，每个 hook 都会显示一条 `hook error`。没有其他依赖。
+这是一段脚本化的演示，依次运行 `bulkhead status`、port-guard、kill-guard 和 wait-guard，用 [docs/demo.sh](docs/demo.sh) 录制。两个会话是名为 `claude` 的替身进程，屏幕上的输出全部来自真实的 hook 脚本和 `bulkhead status`。本页顶部的录像是真实的 Claude Code 会话，制作方法见 [docs/demo.tape](docs/demo.tape)。
 
 ## 快速开始
 
 1. 按上面的方式安装插件，然后新开一个 Claude Code 会话。
 2. 看看它本来会拦下什么：运行 `/bulkhead:scan 30d`，或在 Bash 工具里运行 `bulkhead scan`。它会读取你最近一个月的会话记录，不会改动任何东西。
 3. 检查安装。在 Claude Code 里执行 `/bulkhead:doctor`，或在 Bash 工具里运行 `bulkhead doctor`。每一行都应该是 `OK`。`WARN` 或 `FAIL` 行会写明是哪个 guard、什么原因。
-4. 在会话旁边开一个终端，运行 `bulkhead top`，实时查看会话、内存、端口和重任务。按 `q` 退出。
+4. 在会话旁边开一个终端，运行 `npx claude-bulkhead top`（执行 `npm install -g claude-bulkhead` 之后也可以用 `bulkhead top`），实时查看会话、内存、端口和重任务。按 `q` 退出。
 
 之后就不用再做什么。每次 Bash 和 PowerShell 调用都会经过 guard。想看拦下了什么，运行 `bulkhead log` 或 `/bulkhead:log`；`bulkhead log --summary` 按 guard 统计你这台机器上的拦截次数。要调整阈值或放行某条命令，见 [docs/configuration.md](docs/configuration.md)。全部命令见 [docs/commands.md](docs/commands.md)。
 
@@ -300,7 +296,7 @@ bulkhead 解决的是另一个问题：同一台机器上的会话因为进程�
 
 ## 查看正在运行的内容
 
-`bulkhead` 和 `bulkhead-slot` 一起位于 Bash 工具的 `PATH` 上。在 Claude Code 里，`/bulkhead:scan [30d]`、`/bulkhead:status`、`/bulkhead:log [24h|7d]`、`/bulkhead:doctor`、`/bulkhead:reap` 会运行对应命令并总结结果。在自己的终端里使用时按路径调用，例如 `node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead top`（缓存路径因安装而异，可在 `/plugin` 中查看）。所有输出表格的命令都支持 `--json`。完整说明见 [docs/commands.md](docs/commands.md)。
+`bulkhead` 和 `bulkhead-slot` 一起位于 Bash 工具的 `PATH` 上。在 Claude Code 里，`/bulkhead:scan [30d]`、`/bulkhead:status`、`/bulkhead:log [24h|7d]`、`/bulkhead:doctor`、`/bulkhead:reap` 会运行对应命令并总结结果。在自己的终端里，运行 `npx claude-bulkhead top`，或者先用 `npm install -g claude-bulkhead` 安装一次，再运行 `bulkhead top`。npm 包与插件是同一份代码。所有输出表格的命令都支持 `--json`。完整说明见 [docs/commands.md](docs/commands.md)。
 
 ### bulkhead status
 
@@ -383,7 +379,7 @@ PROJECT                  COUNT
 ```
 $ bulkhead doctor
 OK    node            v24.11.0
-OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
+OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.2, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
 OK    state dir       ~/.claude/bulkhead is writable
 OK    config          no config files, defaults in use
 OK    kill-guard      on
@@ -440,13 +436,13 @@ sessions 是 `~/.claude/sessions` 里活着的会话数，heavy 是持有 bulkhe
 {
   "statusLine": {
     "type": "command",
-    "command": "node ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.1/bin/bulkhead-statusline",
+    "command": "bulkhead-statusline",
     "refreshInterval": 10
   }
 }
 ```
 
-路径中包含插件版本号，插件更新后需要同步修改。如果已经有自己的状态栏脚本，在脚本里调用 `bulkhead-statusline` 并把输出拼接到后面即可。
+这需要先运行 `npm install -g claude-bulkhead`，它会把 `bulkhead-statusline` 放到 `PATH` 上。如果已经有自己的状态栏脚本，在脚本里调用 `bulkhead-statusline` 并把输出拼接到后面即可。
 
 ## 常见问题
 

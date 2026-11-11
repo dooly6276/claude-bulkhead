@@ -117,8 +117,8 @@ test('hooks follow the config files', () => {
 
 test('extra shared names are protected', () => {
   const { check } = require('../src/kill-guard')
-  assert.strictEqual(check('pkill postgres'), null)
-  assert.ok(check('pkill postgres', { extraSharedNames: ['postgres'] }))
+  assert.strictEqual(check('pkill nginx'), null)
+  assert.ok(check('pkill nginx', { extraSharedNames: ['nginx'] }))
   assert.strictEqual(check('pkill node', { allowNames: ['node.exe'] }), null)
   assert.ok(check('pkill node'))
 })

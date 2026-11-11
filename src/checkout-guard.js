@@ -3,7 +3,7 @@ const fs = require('fs')
 const path = require('path')
 const { execFileSync } = require('child_process')
 const os = require('os')
-const { runHook, blocked, oneLine, enabled } = require('./hook')
+const { runHook, blocked, oneLine, enabled, ASK_USER } = require('./hook')
 const { readSessionFiles } = require('./sessions')
 const shell = require('./shell')
 const { rmTargets } = require('./basics')
@@ -135,8 +135,14 @@ function removedDirs(c, cwd, home) {
   }
   return rmTargets(c.argv)
     .map(t => expandHome(t, home))
-    .filter(t => t && !/[$%*?]/.test(t))
+    .map(t => expandPwd(t, cwd))
+    .filter(t => t && !/[$%*?`]/.test(t))
     .map(t => ({ dir: path.resolve(cwd, t), how: 'deleting', force: true }))
+}
+
+// $PWD, ${PWD}, $(pwd) and `pwd` are the folder the command runs in.
+function expandPwd(arg, cwd) {
+  return String(arg).replace(/^(?:\$PWD|\$\{PWD\}|\$\(\s*pwd\s*\)|`\s*pwd\s*`)(?=[\\/]|$)/, cwd.replace(/\\/g, '/'))
 }
 
 function expandHome(arg, home) {
@@ -244,6 +250,14 @@ function classify(cmd, {
       what = 'merges into a tree with uncommitted changes'
     }
     const name = path.basename(top)
+    if (call.sub === 'pull') {
+      return {
+        rule: 'git-pull',
+        why: `[bulkhead] checkout-guard: \`${oneLine(seg, 120)}\` ${what} in ${top}, and ${who}.\n` +
+          'A pull rewrites the files that session has open, and a conflict would stop halfway through its edits.\n' +
+          'Wait until it has committed or stashed its changes, or pull from a clone no other session is using.',
+      }
+    }
     return {
       rule: `git-${call.sub}`,
       why: `[bulkhead] checkout-guard: \`${oneLine(seg, 120)}\` ${what} in ${top}, and ${who}.\n` +
@@ -265,7 +279,7 @@ if (require.main === module) {
     if (!cmd) return
     const hit = classify(cmd, { cwd: input.cwd || process.cwd(), sessionId: input.session_id || null, mode: shell.modeFor(input) })
     if (!hit) return
-    return blocked('checkout-guard', hit.rule, input, hit.why)
+    return blocked('checkout-guard', hit.rule, input, `${hit.why}\n${ASK_USER}`)
   })
 }
 
