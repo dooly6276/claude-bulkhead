@@ -126,3 +126,99 @@ test('a job that has to wait shows up in the queue and leaves it when it gives u
   assert.match(r.stderr, /gave up waiting/)
   assert.deepStrictEqual(readQueue(queueDir(state)), [])
 })
+
+test('a stale lock is broken by exactly one waiter', () => {
+  const { breakStale, withLock } = require('../src/slots')
+  const dir = tempDir()
+  const lock = path.join(dir, '.lock')
+  fs.mkdirSync(lock)
+  const old = new Date(Date.now() - 120e3)
+  fs.utimesSync(lock, old, old)
+  assert.strictEqual(breakStale(lock), true)
+  assert.strictEqual(breakStale(lock), false)
+  assert.ok(!fs.existsSync(lock))
+  assert.deepStrictEqual(fs.readdirSync(dir), [], 'the moved lock is removed too')
+  // a fresh lock is left alone
+  fs.mkdirSync(lock)
+  assert.strictEqual(breakStale(lock), false)
+  assert.ok(fs.existsSync(lock))
+  fs.rmdirSync(lock)
+  // withLock gets in after a stale lock
+  fs.mkdirSync(lock)
+  fs.utimesSync(lock, old, old)
+  assert.strictEqual(withLock(dir, () => 'in', 3000), 'in')
+})
+
+test('a stale lock that was replaced by a fresh one meanwhile is put back, not removed', () => {
+  const { breakStale } = require('../src/slots')
+  const dir = tempDir()
+  const lock = path.join(dir, '.lock')
+  fs.mkdirSync(lock)
+  // "now" 25 s ahead: the lock is not stale yet, so it stays
+  assert.strictEqual(breakStale(lock, Date.now() + 25e3), false)
+  assert.ok(fs.existsSync(lock))
+  assert.strictEqual(breakStale(lock, Date.now() + 60e3), true)
+})
+
+test('the oldest waiter that fits goes first; one that does not fit does not hold others up', () => {
+  const dir = path.join(tempDir(), 'slots')
+  const roomy = () => ({ freeGb: 30, totalGb: 64, commitPct: null })
+  const older = { label: 'old job', gb: 3, pid: 1, at: 1 }
+  const r = take(dir, { label: 'late', gb: 3, pid: process.pid }, roomy, undefined, [older])
+  assert.match(r.reason, /old job has been waiting longer and goes first/)
+  assert.strictEqual(readSlots(dir).length, 0)
+  const tooBig = { label: 'huge', gb: 200, pid: 1, at: 1 }
+  const first = take(dir, { label: 'running', gb: 3, pid: process.pid }, roomy)
+  const ok = take(dir, { label: 'small', gb: 3, pid: process.pid }, roomy, undefined, [tooBig])
+  assert.ok(ok.file)
+  release(ok.file)
+  release(first.file)
+})
+
+test('waitersBefore orders by time then PID and skips the caller', () => {
+  const { waitersBefore, enqueue } = require('../src/slots')
+  const q = path.join(tempDir(), 'queue')
+  enqueue(q, { label: 'b', gb: 1, pid: process.pid, at: 200 })
+  assert.deepStrictEqual(waitersBefore(q, { pid: 999999, at: 300 }).map(w => w.label), ['b'])
+  assert.deepStrictEqual(waitersBefore(q, { pid: process.pid, at: 200 }), [])
+  assert.deepStrictEqual(waitersBefore(q, { pid: 1, at: 100 }), [])
+})
+
+test('twelve short jobs on eight slots finish in a few seconds, not in 15 second steps', () => {
+  const state = tempDir()
+  const bin = path.join(__dirname, '..', 'bin', 'bulkhead-slot')
+  const env = { ...process.env, BULKHEAD_STATE_DIR: state, BULKHEAD_TEST_MEMORY: JSON.stringify({ freeGb: 60, totalGb: 64, commitPct: null }) }
+  const started = Date.now()
+  const script = Array.from({ length: 12 }, (_, i) => `"${process.execPath}" "${bin}" run --gb=1 --label=j${i} -- node -e "setTimeout(()=>{},1200)" >/dev/null 2>&1 &`).join('\n') + '\nwait'
+  const r = spawnSync('/bin/sh', ['-c', script], { env, encoding: 'utf8' })
+  assert.strictEqual(r.status, 0, r.stderr)
+  const took = Date.now() - started
+  assert.ok(took < 8000, `took ${took} ms`)
+  assert.deepStrictEqual(fs.readdirSync(path.join(state, 'queue')), [])
+})
+
+test('a waiting job prints its position, what is held and what is free, then gives up with exit 3', () => {
+  const state = tempDir()
+  const bin = path.join(__dirname, '..', 'bin', 'bulkhead-slot')
+  const env = { ...process.env, BULKHEAD_STATE_DIR: state, BULKHEAD_SLOT_PROGRESS_MS: '400', BULKHEAD_TEST_MEMORY: JSON.stringify({ freeGb: 2, totalGb: 64, commitPct: null }) }
+  const r = spawnSync(process.execPath, [bin, 'run', '--gb=2', '--wait=0.03', '--', 'echo', 'never'], { env, encoding: 'utf8' })
+  assert.strictEqual(r.status, 3)
+  assert.match(r.stderr, /waiting \(#1 in line, 0 GB held by 0 jobs, 2\.0 GB free\)/)
+  assert.match(r.stderr, /still waiting \(#1 in line/)
+  assert.match(r.stderr, /gave up waiting/)
+  assert.ok(!r.stdout.includes('never'))
+})
+
+test('slot status names the session and project of each job and shows who waits', () => {
+  const { enqueue } = require('../src/slots')
+  const state = tempDir()
+  const bin = path.join(__dirname, '..', 'bin', 'bulkhead-slot')
+  fs.mkdirSync(path.join(state, 'slots'))
+  fs.writeFileSync(path.join(state, 'slots', 'slot-1.json'), JSON.stringify({ label: 'npm test', gb: 3, pid: process.pid, at: Date.now() - 5000 }))
+  enqueue(path.join(state, 'queue'), { label: 'cargo build', gb: 4, pid: process.pid, at: Date.now() - 45e3, reason: 'free 2.0 GB' })
+  const env = { ...process.env, BULKHEAD_STATE_DIR: state, BULKHEAD_TEST_MEMORY: JSON.stringify({ freeGb: 20, totalGb: 64 }) }
+  const r = spawnSync(process.execPath, [bin, 'status'], { env, encoding: 'utf8' })
+  assert.match(r.stdout, /slot-1\.json: npm test \(3 GB, pid \d+, [45] s/)
+  assert.match(r.stdout, /waiting #1: cargo build \(4 GB, pid \d+, waited 4\d s/)
+  assert.match(r.stdout, /- free 2\.0 GB/)
+})

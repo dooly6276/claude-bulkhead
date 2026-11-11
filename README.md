@@ -139,7 +139,7 @@ After that there is nothing to do. The guards run on every Bash and PowerShell c
 
 ## Run heavy jobs on another machine (optional)
 
-When several sessions run test suites and builds at once, one machine runs out of RAM: memory-guard blocks the commands, or bulkhead-slot makes them queue. If you have a second machine that is mostly idle, `bulkhead remote` runs the heavy command there instead.
+When several sessions run test suites and builds at once, one machine runs out of RAM: memory-guard blocks the commands, or bulkhead-slot makes them queue (automatically, with `memoryGuard.autoQueue`). If you have a second machine that is mostly idle, `bulkhead remote` runs the heavy command there instead.
 
 <p align="center">
   <img src="docs/remote.svg" alt="This machine has 1.8 GB free, so memory-guard holds npm test. bulkhead remote sends only the new commit and the changed files over SSH to buildbox, the tests run there in copy a on port 7172, and the last 20 lines come back. Free RAM on this machine does not change." width="100%">
@@ -209,6 +209,8 @@ Turn off: `BULKHEAD_DISABLE=port-guard`. Details: [docs/guards/port-guard.md](do
 memory-guard blocks heavy commands (test runners, `next build`, `tsc`, Gradle, the Android emulator, Playwright, `cargo test`, `docker build` and similar) when free RAM is under 3 GB, or under 15% of RAM on machines with less than 20 GB. `bulkhead-slot run --gb=4 -- <command>` waits until the shared RAM budget has room, runs the command, and frees the slot when it exits.
 
 Turn off: `BULKHEAD_DISABLE=memory-guard`. Details: [docs/guards/memory-guard.md](docs/guards/memory-guard.md).
+
+With `"memoryGuard": { "autoQueue": true }`, nobody has to remember the slot: memory-guard rewrites every heavy command (tests, builds, browser runs, container builds) to run through `bulkhead-slot`, so all sessions wait in one fair queue instead of being blocked. A waiting job prints its position every 30 seconds, and `bulkhead status` shows which session and project each queued job belongs to. With `"memoryGuard": { "subagents": true }`, a new subagent is not started while memory pressure is critical. See [docs/commands.md](docs/commands.md#auto-queue).
 </details>
 
 <details>
@@ -311,11 +313,11 @@ SESSION  STARTED       RSS     PROJECT
 26448    03:43         625 MB  ~/src/acme-web-checkout
   :3001  node.exe  pid 31020
 
-SLOT    GB  PID    AGE    COMMAND
-slot-1  4   30112  6 min  npx playwright test
+SLOT    GB  PID    AGE    SESSION  PROJECT          COMMAND
+slot-1  4   30112  6 min  18672    ~/src/acme-web   npx playwright test
 
-WAITING  GB  PID    FOR    COMMAND
-#1       3   30200  2 min  npm run build
+WAITING  GB  PID    FOR    SESSION  PROJECT                 COMMAND
+#1       3   30200  2 min  26448    ~/src/acme-web-checkout npm run build
 
 9.9 GB free of 31.8 GB, commit 68%
 ```

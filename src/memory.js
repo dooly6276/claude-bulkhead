@@ -41,6 +41,17 @@ function parseVmStat(text, totalBytes) {
   return { totalGb: totalBytes / GB, freeGb: Math.max(0, freeBytes) / GB, commitPct: null }
 }
 
+// macOS: kern.memorystatus_level is the percentage of memory the system counts as free,
+// reclaimable file cache and compressed pages included (what `memory_pressure` prints as
+// "System-wide memory free percentage"). The vm_stat estimate above misses the reclaimable
+// cache and read 7.7 GB free on a 48 GB Mac that `memory_pressure` called 62% free.
+// pressure is kern.memorystatus_vm_pressure_level: 1 normal, 2 warning, 4 critical.
+function parseDarwinLevel(text, totalBytes) {
+  const [level, pressure] = String(text).trim().split(/\s+/).map(Number)
+  if (!(level >= 0 && level <= 100)) return null
+  return { totalGb: totalBytes / GB, freeGb: (totalBytes / GB) * (level / 100), commitPct: null, pressure: [1, 2, 4].includes(pressure) ? pressure : null }
+}
+
 // Windows: commit charge can run out while RAM still looks "free", and the machine stalls when it does.
 function parseWindowsCommit(text) {
   const [total, free] = String(text).trim().split(/\s+/).map(Number)
@@ -57,7 +68,8 @@ function windowsCommitPct(run) {
   }
 }
 
-const defaultRun = (file, args) => execFileSync(file, args, { encoding: 'utf8', timeout: 8000, windowsHide: true })
+// vm_stat and sysctl answer in milliseconds; only PowerShell is slow, so only it gets the long wait.
+const defaultRun = (file, args) => execFileSync(file, args, { encoding: 'utf8', timeout: /powershell/i.test(file) ? 8000 : 1500, windowsHide: true })
 
 // { totalGb, freeGb, commitPct } where commitPct is measured only on Windows and only on request.
 function readMemory({ platform = process.platform, withCommit = false, run = defaultRun, readFile = fs.readFileSync } = {}) {
@@ -66,11 +78,18 @@ function readMemory({ platform = process.platform, withCommit = false, run = def
     try { return parseMeminfo(readFile('/proc/meminfo', 'utf8')) } catch {}
   }
   if (platform === 'darwin') {
+    try {
+      const m = parseDarwinLevel(run('sysctl', ['-n', 'kern.memorystatus_level', 'kern.memorystatus_vm_pressure_level']), os.totalmem())
+      if (m) return m
+    } catch {}
     try { return parseVmStat(run('vm_stat', []), os.totalmem()) } catch {}
+    // os.freemem() counts only never-used pages, near zero on a healthy Mac: with no usable
+    // reading, say everything is free so a guard allows the command instead of blocking it.
+    return { totalGb: os.totalmem() / GB, freeGb: os.totalmem() / GB, commitPct: null, pressure: null, unknown: true }
   }
   const mem = { totalGb: os.totalmem() / GB, freeGb: os.freemem() / GB, commitPct: null }
   if (platform === 'win32' && withCommit) mem.commitPct = windowsCommitPct(run)
   return mem
 }
 
-module.exports = { readMemory, parseMeminfo, parseVmStat, parseWindowsCommit }
+module.exports = { readMemory, parseMeminfo, parseVmStat, parseDarwinLevel, parseWindowsCommit }

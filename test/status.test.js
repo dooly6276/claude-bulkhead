@@ -31,11 +31,25 @@ test('renders sessions, their ports, slots and free RAM', () => {
     '  :9229  node  pid 990',
     '1001     11:40         300 MB  ?',
     '',
-    'SLOT    GB  PID   AGE     COMMAND',
-    'slot-1  4   4321  12 min  npx playwright test',
+    'SLOT    GB  PID   AGE     SESSION  PROJECT  COMMAND',
+    'slot-1  4   4321  12 min  -        ?        npx playwright test',
     '',
     '9.1 GB free of 31.8 GB',
   ].join('\n'))
+})
+
+test('slots and waiting jobs name the session and project they run under, and how long they waited', () => {
+  const withKids = { ...snapshot, procs: [...snapshot.procs,
+    { pid: 4321, ppid: 990, name: 'node', cmd: 'node bulkhead-slot', start: new Date(2026, 9, 13, 13, 0).getTime(), rss: MB, claudePid: 812 },
+    { pid: 4400, ppid: 990, name: 'node', cmd: 'node bulkhead-slot', start: new Date(2026, 9, 13, 14, 29).getTime(), rss: MB, claudePid: 812 }] }
+  const queue = [{ label: 'cargo build', gb: 4, pid: 4400, at: now - 45e3, reason: 'free 2 GB' }]
+  const st = collect({ snapshot: withKids, files, slots, queue, mem, now })
+  assert.strictEqual(st.slots[0].session, 812)
+  assert.strictEqual(st.slots[0].project, '/home/dev/src/acme-web')
+  const out = render(st, { home: '/home/dev' })
+  assert.match(out, /slot-1 +4 +4321 +12 min +812 +~\/src\/acme-web +npx playwright test/)
+  assert.match(out, /#1 +4 +4400 +45 s +812 +~\/src\/acme-web +cargo build/)
+  assert.strictEqual(toJson(st).queue[0].session, 812)
 })
 
 test('says so when nothing is running', () => {

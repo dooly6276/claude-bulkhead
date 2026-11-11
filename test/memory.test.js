@@ -1,7 +1,7 @@
 'use strict'
 const test = require('node:test')
 const assert = require('node:assert')
-const { readMemory, parseMeminfo, parseVmStat, parseWindowsCommit } = require('../src/memory')
+const { readMemory, parseMeminfo, parseVmStat, parseDarwinLevel, parseWindowsCommit } = require('../src/memory')
 
 const MEMINFO = `MemTotal:       32768000 kB
 MemFree:         1024000 kB
@@ -79,4 +79,45 @@ test('readMemory picks the adapter by platform', () => {
   assert.strictEqual(win.commitPct, 60)
   const noCommit = readMemory({ platform: 'win32', run: () => { throw new Error('not called') } })
   assert.strictEqual(noCommit.commitPct, null)
+})
+
+// Captured on a 48 GB Mac that `memory_pressure` called 69% free: the vm_stat estimate read about
+// 10 GB because it ignores reclaimable cache, kern.memorystatus_level said 69.
+const VM_STAT_48G = `Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                  446804.
+Pages active:                                856726.
+Pages inactive:                              848403.
+Pages speculative:                             1217.
+Pages wired down:                            441930.
+Pages purgeable:                               3997.
+File-backed pages:                           212568.
+Anonymous pages:                            1493778.
+Pages occupied by compressor:                490143.
+`
+const GIB = 2 ** 30
+
+test('macOS free RAM comes from kern.memorystatus_level, which counts reclaimable cache', () => {
+  const m = parseDarwinLevel('69\n1\n', 48 * GIB)
+  assert.ok(Math.abs(m.freeGb - 33.12) < 0.01)
+  assert.strictEqual(m.pressure, 1)
+  assert.strictEqual(parseDarwinLevel('12\n4\n', 16 * GIB).pressure, 4)
+  assert.strictEqual(parseDarwinLevel('garbage', 16 * GIB), null)
+  assert.strictEqual(parseDarwinLevel('150\n1', 16 * GIB), null)
+  // the old estimate on the same machine was far lower
+  assert.ok(parseVmStat(VM_STAT_48G, 48 * GIB).freeGb < 12)
+})
+
+test('readMemory on macOS asks sysctl first, then vm_stat, then reports unknown as plenty', () => {
+  const calls = []
+  const sysctl = file => { calls.push(file); return '62\n1\n' }
+  const m = readMemory({ platform: 'darwin', run: sysctl })
+  assert.deepStrictEqual(calls, ['sysctl'])
+  assert.strictEqual(m.pressure, 1)
+  assert.ok(m.freeGb > 0.6 * m.totalGb - 0.01)
+  const onlyVm = readMemory({ platform: 'darwin', run: file => { if (file === 'sysctl') throw new Error('no'); return VM_STAT_SONOMA } })
+  assert.ok(onlyVm.freeGb >= 0 && !onlyVm.unknown)
+  // both fail: never os.freemem(), which is near zero on a healthy Mac; the guard must not block
+  const none = readMemory({ platform: 'darwin', run: () => { throw new Error('hung') } })
+  assert.strictEqual(none.unknown, true)
+  assert.strictEqual(none.freeGb, none.totalGb)
 })

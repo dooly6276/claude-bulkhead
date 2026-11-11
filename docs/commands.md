@@ -33,16 +33,16 @@ SESSION  STARTED       RSS     PROJECT
 26448    03:43         625 MB  ~/src/acme-web-checkout
   :3001  node.exe  pid 31020
 
-SLOT    GB  PID    AGE    COMMAND
-slot-1  4   30112  6 min  npx playwright test
+SLOT    GB  PID    AGE    SESSION  PROJECT          COMMAND
+slot-1  4   30112  6 min  18672    ~/src/acme-web   npx playwright test
 
-WAITING  GB  PID    FOR    COMMAND
-#1       3   30200  2 min  npm run build
+WAITING  GB  PID    FOR    SESSION  PROJECT                 COMMAND
+#1       3   30200  2 min  26448    ~/src/acme-web-checkout npm run build
 
 9.9 GB free of 31.8 GB, commit 68%
 ```
 
-A session is a running `claude` CLI process. RSS is the sum over its process tree. The project comes from the session file Claude Code keeps in `~/.claude/sessions`, or from `/proc/<pid>/cwd` on Linux. The `WAITING` table appears only when `bulkhead-slot run` jobs are queued.
+A session is a running `claude` CLI process. RSS is the sum over its process tree. The project comes from the session file Claude Code keeps in `~/.claude/sessions`, or from `/proc/<pid>/cwd` on Linux. The `WAITING` table appears only when `bulkhead-slot run` jobs are queued. `SESSION` and `PROJECT` name the Claude session whose process tree the job runs in (`-` when it cannot be told), and `FOR` is how long a waiting job has waited, in seconds, minutes or hours.
 
 `--json` adds per-session `children` (processes in the tree besides the session itself), raw byte counts, ISO times, and the queue with each job's reason for waiting.
 
@@ -304,6 +304,35 @@ bulkhead-slot status [--gb=N]
 ```
 
 `bulkhead slot ...` is the same. `run` waits until the machine has room for a job of N GB (default 3), runs the command, and releases the slot when it exits, fails or is interrupted. The exit code is the command's; 3 means it gave up waiting after `--wait` minutes (default 30). While it waits, the job is listed in `bulkhead status` and `bulkhead top` with the reason.
+
+Waiting jobs start in the order they arrived: the oldest waiter that fits goes first, and a bigger job that does not fit yet does not hold up smaller ones behind it. A waiting job looks at the slot files once a second and starts within a second of a slot being freed.
+
+While it waits, `run` prints one line to stderr every 30 seconds, so a caller does not think it hung:
+
+```
+[bulkhead-slot] waiting (#2 in line, 8 GB held by 2 jobs, 6.1 GB free): free 6.1 GB - this job 4 GB = 2.1 GB, below the 5 GB floor. Holders: npm test (4 GB, pid 30112), cargo build (4 GB, pid 30140)
+[bulkhead-slot] still waiting (#2 in line, 8 GB held by 2 jobs, 6.1 GB free): free 6.1 GB - this job 4 GB = 2.1 GB, below the 5 GB floor
+```
+
+Claude Code's Bash tool stops a foreground command after its timeout (2 minutes by default, 10 at most) and moves it to the background rather than killing it ([tools reference](https://code.claude.com/docs/en/tools-reference.md#foreground-commands-that-move-to-the-background)), so a queued job keeps waiting. To make the caller get an answer sooner, set `--wait` below the timeout, for example `--wait=8` with a 10 minute Bash timeout; exit code 3 then comes back with the holders listed. Auto-queue (below) adds `--wait` from `memoryGuard.waitMinutes` (default 10).
+
+`status` lists each held slot and each waiting job with its age, the session it runs under and that session's project, then whether a new job would start:
+
+```
+slot-1.json: npm test (3 GB, pid 53296, 12 min, session 2321 in /Users/me/src/acme-web)
+waiting #1: cargo build (4 GB, pid 53299, waited 45 s, session 2321 in /Users/me/src/acme-web) - free 2.0 GB below 3 GB
+free 20.0 of 64.0 GB. A 3 GB job would start now.
+```
+
+### Auto-queue
+
+With `memoryGuard.autoQueue: true`, memory-guard stops blocking heavy commands. Instead, it rewrites the Bash or PowerShell command so it runs as `bulkhead-slot run --gb=N --label=... --wait=M -- <original command>`, whatever the free RAM is, so every session waits in the same line. The agent does not have to remember to call bulkhead-slot, and the queue is fair.
+
+- The rewrite uses the documented `hookSpecificOutput.updatedInput` of a PreToolUse hook ([hooks reference](https://code.claude.com/docs/en/hooks.md#pretooluse-decision-control)). It sets no `permissionDecision`, so your permission rules and prompts still apply to the rewritten command, and the rest of the tool input (`timeout`, `description`) is kept.
+- The original command runs unchanged inside `bash -c '...'` (Bash tool) or an encoded `pwsh -EncodedCommand` script (PowerShell tool), so quotes, `$`, backticks and newlines survive.
+- Left alone: commands that are not heavy, already go through bulkhead-slot, run in the background (`run_in_background`, `&`, `nohup`, `Start-Process`), run on another machine (`ssh`, `docker exec`, `bulkhead remote`), or stay up until stopped (`next dev`, `emulator`, `docker compose up` without `-d`). Those keep the old behaviour: blocked only when RAM is low.
+- GB estimates per tool (default 3, `bulkhead-slot status` shows them): vitest, jest, mvn, next, webpack, go, pytest, docker and npm, pnpm, yarn scripts 3; karma, dotnet, vite, tsc, ffmpeg 2; playwright, cypress, gradle, cargo, turbo, nx, swift, fastlane 4; xcodebuild, bazel 6. Override single tools with `memoryGuard.estimatesGb`.
+- If the slot script cannot be found, the command runs as written.
 
 ## bulkhead remote
 

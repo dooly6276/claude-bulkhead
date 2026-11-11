@@ -9,7 +9,11 @@
     "limitSeconds": 240
   },
   "memoryGuard": {
-    "enabled": true
+    "enabled": true,
+    "autoQueue": false,
+    "estimatesGb": { "gradle": 6 },
+    "waitMinutes": 10,
+    "subagents": false
   },
   "memory": {
     "minFreeGb": 3,

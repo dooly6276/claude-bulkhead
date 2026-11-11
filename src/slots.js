@@ -87,6 +87,27 @@ function reclaim(dir, onReclaim = () => {}) {
   }
 }
 
+// A lock older than 30 s was left by a process that died. Renaming it away is atomic, so when two
+// waiters both see it only one rename succeeds; a plain rmdir let both remove it and both enter.
+// If what was moved turns out to be fresh (another waiter had already replaced the stale lock),
+// it is put back.
+const STALE_LOCK_MS = 30000
+function breakStale(lock, now = Date.now()) {
+  try {
+    if (now - fs.statSync(lock).mtimeMs <= STALE_LOCK_MS) return false
+    const moved = `${lock}.stale-${process.pid}-${Math.random().toString(36).slice(2)}`
+    fs.renameSync(lock, moved)
+    if (now - fs.statSync(moved).mtimeMs <= STALE_LOCK_MS) {
+      try { fs.renameSync(moved, lock) } catch { fs.rmdirSync(moved) }
+      return false
+    }
+    fs.rmdirSync(moved)
+    return true
+  } catch {
+    return false
+  }
+}
+
 // mkdir is atomic on every platform we support, so it doubles as a cross-process lock.
 function withLock(dir, fn, timeoutMs = 15000) {
   const lock = path.join(dir, '.lock')
@@ -96,9 +117,7 @@ function withLock(dir, fn, timeoutMs = 15000) {
       fs.mkdirSync(lock)
       break
     } catch {
-      try {
-        if (Date.now() - fs.statSync(lock).mtimeMs > 30000) fs.rmdirSync(lock)
-      } catch {}
+      breakStale(lock)
       if (Date.now() > until) return null
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100)
     }
@@ -110,23 +129,33 @@ function withLock(dir, fn, timeoutMs = 15000) {
   }
 }
 
-// Returns { file } on success or { reason } when the job has to wait.
-function take(dir, { label, gb, pid }, measure, onReclaim) {
+// The oldest waiter that would fit right now goes first. A bigger job that does not fit yet does
+// not hold up smaller ones behind it.
+function waiterAhead(waiters, held, mem, now) {
+  return waiters.find(w => !admit({ held, mem, gb: w.gb, now }))
+}
+
+// Returns { file } on success or { reason } when the job has to wait. `waiters` are the queue
+// entries that were waiting before this job (see readQueue); `extra` is written into the slot file.
+function take(dir, { label, gb, pid, ...extra }, measure, onReclaim, waiters = []) {
   fs.mkdirSync(dir, { recursive: true })
   const result = withLock(dir, () => {
     reclaim(dir, onReclaim)
     const held = readSlots(dir)
-    const reason = admit({ held, mem: measure(held.length > 0), gb })
-    if (reason) return { reason }
-    const body = JSON.stringify({ label, gb, pid, at: Date.now() })
+    const mem = measure(held.length > 0)
+    const first = waiterAhead(waiters, held, mem, Date.now())
+    if (first) return { reason: `${first.label} has been waiting longer and goes first`, mem }
+    const reason = admit({ held, mem, gb })
+    if (reason) return { reason, mem }
+    const body = JSON.stringify({ label, gb, pid, at: Date.now(), ...extra })
     for (let i = 1; i <= MAX_SLOTS; i++) {
       const file = path.join(dir, `slot-${i}.json`)
       try {
         fs.writeFileSync(file, body + '\n', { flag: 'wx' })
-        return { file }
+        return { file, mem }
       } catch {}
     }
-    return { reason: `all ${MAX_SLOTS} slots are taken` }
+    return { reason: `all ${MAX_SLOTS} slots are taken`, mem }
   })
   return result || { reason: 'another session is holding the slot lock' }
 }
@@ -161,8 +190,21 @@ function readQueue(dir, isAlive = alive) {
   return out.sort((a, b) => a.at - b.at)
 }
 
+// Waiters older than this job, oldest first. Ties on the timestamp go to the lower PID.
+function waitersBefore(dir, me, isAlive = alive) {
+  return readQueue(dir, isAlive).filter(q => q.pid !== me.pid && (q.at < me.at || (q.at === me.at && q.pid < me.pid)))
+    .sort((a, b) => a.at - b.at || a.pid - b.pid)
+}
+
+// Cheap change detector for the 1 s poll: the live slot files and the waiters ahead. When it is
+// the same as last time, nothing that could let this job in has happened.
+function signature(slotsDir, queuesDir, me, isAlive = alive) {
+  const held = readSlots(slotsDir).filter(s => s.pid && isAlive(s.pid)).map(s => path.basename(s.file)).sort()
+  return held.join(',') + '|' + waitersBefore(queuesDir, me, isAlive).map(q => q.pid).join(',')
+}
+
 function release(file) {
   try { fs.unlinkSync(file) } catch {}
 }
 
-module.exports = { admit, take, release, reclaim, readSlots, staleReason, slotDir, limits, queueDir, enqueue, readQueue }
+module.exports = { breakStale, withLock, waitersBefore, waiterAhead, signature, admit, take, release, reclaim, readSlots, staleReason, slotDir, limits, queueDir, enqueue, readQueue }

@@ -5,7 +5,7 @@ const { stateDir } = require('./hook')
 const { rejectArgs } = require('./cli-util')
 const { readMemory } = require('./memory')
 const { readProcesses } = require('./processes')
-const { readSessionFiles, findSessions } = require('./sessions')
+const { readSessionFiles, findSessions, assignOwners, isClaudeCli } = require('./sessions')
 const { readSlots, slotDir, staleReason, readQueue, queueDir } = require('./slots')
 
 const GB = 2 ** 30
@@ -22,13 +22,29 @@ function collect({
   mem = readMemory({ withCommit: true }),
   now = Date.now(),
 } = {}) {
+  const sessions = snapshot ? findSessions(snapshot, files) : []
+  // the Claude session a job runs under: its process is somewhere below the session's process
+  const owner = snapshot ? assignOwners(snapshot.procs, new Set(snapshot.procs.filter(isClaudeCli).map(p => p.pid))) : new Map()
+  const whose = pid => {
+    const session = owner.get(pid) || null
+    const found = sessions.find(x => x.pid === session)
+    return { session, project: (found && found.cwd) || null }
+  }
   return {
     at: now,
-    sessions: snapshot ? findSessions(snapshot, files) : [],
-    slots: slots.map(s => ({ slot: path.basename(s.file || '', '.json'), label: s.label, gb: s.gb, pid: s.pid, at: s.at })),
-    queue: queue.map(q => ({ label: q.label, gb: q.gb, pid: q.pid, at: q.at, reason: q.reason })),
+    sessions,
+    slots: slots.map(s => ({ slot: path.basename(s.file || '', '.json'), label: s.label, gb: s.gb, pid: s.pid, at: s.at, ...whose(s.pid) })),
+    queue: queue.map(q => ({ label: q.label, gb: q.gb, pid: q.pid, at: q.at, reason: q.reason, ...whose(q.pid) })),
     memory: mem,
   }
+}
+
+// 45 s, 12 min, 2 h 5 min
+function duration(ms) {
+  const s = Math.max(0, Math.round(ms / 1000))
+  if (s < 60) return `${s} s`
+  const m = Math.floor(s / 60)
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`
 }
 
 const pad2 = n => String(n).padStart(2, '0')
@@ -74,15 +90,15 @@ function render(st, { color = false, home = os.homedir() } = {}) {
   }
   out.push('')
   if (st.slots.length) {
-    const lines = table([['SLOT', 'GB', 'PID', 'AGE', 'COMMAND'],
-      ...st.slots.map(s => [s.slot, s.gb, s.pid, `${Math.round((st.at - s.at) / 60000)} min`, s.label])])
+    const lines = table([['SLOT', 'GB', 'PID', 'AGE', 'SESSION', 'PROJECT', 'COMMAND'],
+      ...st.slots.map(s => [s.slot, s.gb, s.pid, duration(st.at - s.at), s.session || '-', shortPath(s.project, home), s.label])])
     out.push(head(lines[0]), ...lines.slice(1), '')
   } else {
     out.push('no heavy jobs in bulkhead-slot', '')
   }
   if (st.queue && st.queue.length) {
-    const lines = table([['WAITING', 'GB', 'PID', 'FOR', 'COMMAND'],
-      ...st.queue.map((q, i) => [`#${i + 1}`, q.gb, q.pid, `${Math.round((st.at - q.at) / 60000)} min`, q.label])])
+    const lines = table([['WAITING', 'GB', 'PID', 'FOR', 'SESSION', 'PROJECT', 'COMMAND'],
+      ...st.queue.map((q, i) => [`#${i + 1}`, q.gb, q.pid, duration(st.at - q.at), q.session || '-', shortPath(q.project, home), q.label])])
     out.push(head(lines[0]), ...lines.slice(1), '')
   }
   const m = st.memory
@@ -108,4 +124,4 @@ function main(args, env = process.env, stdout = process.stdout) {
   stdout.write(render(st, { color }) + '\n')
 }
 
-module.exports = { collect, render, toJson, main, size, when }
+module.exports = { collect, render, toJson, main, size, when, duration }
