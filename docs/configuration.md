@@ -215,7 +215,7 @@ An entry with a problem (a missing `host`, an unknown key, a value of the wrong 
 
 | Variable | Same as |
 |---|---|
-| `BULKHEAD_DISABLE` | Comma-separated names to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `basics`, `edit-guard`, `secrets-guard`, `orphan-reaper`, the basics rules `rm-root`, `force-push-main`, `discard-changes`, `agent-author`, `self-allow`, or `all`. A name listed here is off whatever the files say |
+| `BULKHEAD_DISABLE` | Comma-separated names to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `disk-guard`, `basics`, `edit-guard`, `secrets-guard`, `orphan-reaper`, `session-state`, the basics rules `rm-root`, `force-push-main`, `discard-changes`, `agent-author`, `self-allow`, or `all`. A name listed here is off whatever the files say |
 | `BULKHEAD_PRESET` | The preset: `quiet`, `normal` or `strict`. Wins over the `preset` key in the files |
 | `BULKHEAD_WAIT_MAX_SEC` | `waitGuard.limitSeconds` |
 | `BULKHEAD_MIN_FREE_GB` | `memory.minFreeGb` |

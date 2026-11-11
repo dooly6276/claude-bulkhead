@@ -70,4 +70,4 @@ function main(argv) {
   process.exit(help ? 0 : 1)
 }
 
-module.exports = { main, USAGE }
+module.exports = { main, USAGE, COMMANDS }
