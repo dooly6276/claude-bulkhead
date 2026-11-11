@@ -29,8 +29,12 @@
 - Inside a hook, reading the process table gives up after 4 seconds (8 on Windows) and lets the call through, instead of waiting up to 15 (60).
 - `guards.log` is rotated at 1 MB like `events.jsonl`, and two hooks rotating at the same moment no longer lose the older log.
 
+- port-guard knows many more servers, each on its default port: `serve`, `live-server`, `json-server`, `puma`, `gunicorn`, `hypercorn`, `fastapi dev`, Django `runserver`, Streamlit, Jupyter, `trunk`, Metro and React Native, VuePress, VitePress, Phoenix, Parcel, Ember, MkDocs, Hugo, Hexo, Zola, mdBook, Netlify and Vercel dev, Rspack, Rsbuild, Spring Boot and more. It reads the port from `php -S`, `dotnet run --urls`, `--server.port`, `docker run -p` and the `ports:` of a compose file, through `pnpm`, `yarn`, `npm exec`, `bunx`, `uv run`, workspaces and wrappers such as `timeout`, `caffeinate`, `cross-env` and `(cd web && npm run dev &)`. The free-port suggestion uses each tool's own flag.
+- port-guard catches more ways to kill by port: `lsof ... | awk ... | xargs kill` without `-t`, `PID=$(lsof -ti :3000); kill $PID`, loops over `lsof` output, `fkill :3000`, and `netstat`, `ss` and `fuser -n tcp -k` pipelines.
+
 ### Fixed
 
+- port-guard no longer reads quoted text as a command: `grep -E "next dev|vite"` and `ps | grep -E 'next start|playwright'` pass, as do `vite --version`, `vite build` and any tool run with `--help`. Heredoc bodies fed to python, node or cat are data, not commands. In 160,288 real commands from transcripts, it blocked 12 instead of 28 under the same conditions, and every one of the 12 was a real conflict.
 - Claude Code sessions started by the macOS desktop app were not seen as sessions.
 - `bulkhead doctor` reported the plugin as installed when run through `npx` from an unrelated copy.
 
