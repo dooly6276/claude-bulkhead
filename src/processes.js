@@ -3,6 +3,12 @@ const fs = require('fs')
 const path = require('path')
 const { execFileSync } = require('child_process')
 
+// How long a process read may take. Inside a hook a slow read fails open, so it is kept short;
+// the CLI commands wait longer for a full answer.
+function readTimeout(cliMs, hookMs, env = process.env) {
+  return env.BULKHEAD_IN_HOOK === '1' ? hookMs : cliMs
+}
+
 // Every reader returns { procs: [{ pid, ppid, name, cmd, start, rss, claudePid }], listening: Set<pid>,
 // ports: [{ port, pid }] }. start is milliseconds since the epoch, rss is bytes, and claudePid is null
 // when the environment is unreadable.
@@ -34,7 +40,7 @@ function parseWindows(json) {
 
 function readWindows(run = execFileSync) {
   const out = run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', WINDOWS_QUERY],
-    { encoding: 'utf8', windowsHide: true, timeout: 60000, maxBuffer: 64 * 1024 * 1024 })
+    { encoding: 'utf8', windowsHide: true, timeout: readTimeout(60000, 8000), maxBuffer: 64 * 1024 * 1024 })
   return parseWindows(out)
 }
 
@@ -167,7 +173,7 @@ function parsePsKeep(text) {
 }
 
 function readMac(run = execFileSync, { withEnv = false } = {}) {
-  const opts = { encoding: 'utf8', timeout: 15000, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, LC_ALL: 'C' } }
+  const opts = { encoding: 'utf8', timeout: readTimeout(15000, 4000), maxBuffer: 64 * 1024 * 1024, env: { ...process.env, LC_ALL: 'C' } }
   const names = new Map()
   for (const line of run('ps', ['-axo', 'pid=,ucomm='], opts).split('\n')) {
     const m = /^\s*(\d+)\s+(.*)$/.exec(line)
@@ -201,5 +207,5 @@ function readProcesses(platform = process.platform, { withEnv = false } = {}) {
 }
 
 module.exports = {
-  readProcesses, parseWindows, readWindows, parseProcStat, parseNetTcp, readLinux, envValue, parsePs, parseLsof, readMac, parsePsEnv, parsePsKeep, isKeepValue,
+  readProcesses, parseWindows, readWindows, parseProcStat, parseNetTcp, readLinux, envValue, parsePs, parseLsof, readMac, parsePsEnv, parsePsKeep, isKeepValue, readTimeout,
 }

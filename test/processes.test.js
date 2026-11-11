@@ -73,3 +73,9 @@ test('macOS: a reparented server whose session is gone is an orphan; a live sess
   const foreign = [base[0], { ...base[1], claudePid: null }]
   assert.deepStrictEqual(findOrphans({ procs: foreign, listening: new Set([990]) }), [])
 })
+
+test('process reads give up sooner inside a hook', () => {
+  const { readTimeout } = require('../src/processes')
+  assert.strictEqual(readTimeout(15000, 4000, {}), 15000)
+  assert.strictEqual(readTimeout(15000, 4000, { BULKHEAD_IN_HOOK: '1' }), 4000)
+})

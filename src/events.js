@@ -22,6 +22,34 @@ function truncate(s, max = MAX_COMMAND) {
 }
 
 // event: { guard, rule, session, project, command, ...extra }. Returns true when written.
+// Moves file to file.1 once it is over `limit` bytes. Two hooks may try at once: a lock folder
+// lets one rotate, and it checks the size again under the lock, so a hook that saw the old big
+// file never moves the fresh small one over the history in file.1. A lock left by a crashed hook
+// is cleared after 10 seconds. Never throws.
+function rotate(file, limit, now = Date.now()) {
+  const lock = file + '.lock'
+  try {
+    try {
+      fs.mkdirSync(lock)
+    } catch {
+      if (now - fs.statSync(lock).mtimeMs < 10000) return false
+      fs.rmdirSync(lock)
+      fs.mkdirSync(lock)
+    }
+  } catch {
+    return false
+  }
+  try {
+    if (fs.statSync(file).size <= limit) return false
+    fs.renameSync(file, file + '.1')
+    return true
+  } catch {
+    return false
+  } finally {
+    try { fs.rmdirSync(lock) } catch {}
+  }
+}
+
 function record(dir, event, { env = process.env, now = Date.now(), maxBytes = MAX_BYTES } = {}) {
   if (loggingOff(env)) return false
   try {
@@ -39,10 +67,7 @@ function record(dir, event, { env = process.env, now = Date.now(), maxBytes = MA
     let size = -1
     try { size = fs.statSync(file).size } catch {}
     if (size < 0) fs.mkdirSync(dir, { recursive: true })
-    else if (size + line.length > maxBytes) {
-      // two hooks may rotate at once; the loser's rename fails and it appends to the new file
-      try { fs.renameSync(file, file + '.1') } catch {}
-    }
+    else if (size + line.length > maxBytes) rotate(file, maxBytes - line.length)
     fs.appendFileSync(file, line)
     return true
   } catch {
@@ -105,4 +130,4 @@ function logSize(dir) {
   return { bytes, files }
 }
 
-module.exports = { record, readEvents, tailEvents, logSize, eventsFile, loggingOff, truncate, MAX_BYTES }
+module.exports = { rotate, record, readEvents, tailEvents, logSize, eventsFile, loggingOff, truncate, MAX_BYTES }

@@ -262,7 +262,7 @@ Rules per guard:
 
 The file is rotated at 1 MB: the current file becomes `events.jsonl.1` (replacing the previous one) and a new file starts, so the log never takes more than about 2 MB. `bulkhead log` reads both files.
 
-Writing an event is one `stat` and one append, only on the block path, and never throws: an unwritable state directory loses the event, not the block. `BULKHEAD_NO_LOG=1` or `"log": { "enabled": false }` turns it off. `guards.log` in the same directory keeps a one-line text record of each block as before.
+Writing an event is one `stat` and one append, only on the block path, and never throws: an unwritable state directory loses the event, not the block. `BULKHEAD_NO_LOG=1` or `"log": { "enabled": false }` turns it off. `guards.log` in the same directory keeps a one-line text record of each block as before, also rotated at 1 MB to `guards.log.1`. When two hooks reach the limit at once, a lock folder lets only one of them rotate, so no history is lost.
 
 ## bulkhead doctor
 

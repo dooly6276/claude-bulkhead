@@ -39,7 +39,13 @@ function log(name, line) {
   try {
     const dir = stateDir()
     fs.mkdirSync(dir, { recursive: true })
-    fs.appendFileSync(path.join(dir, 'guards.log'), `${new Date().toISOString()} ${name} ${line}\n`)
+    const file = path.join(dir, 'guards.log')
+    const text = `${new Date().toISOString()} ${name} ${line}\n`
+    let size = 0
+    try { size = fs.statSync(file).size } catch {}
+    // kept to about 1 MB, the previous MB in guards.log.1
+    if (size + text.length > 1024 * 1024) require('./events').rotate(file, 1024 * 1024 - text.length)
+    fs.appendFileSync(file, text)
   } catch {}
 }
 
@@ -97,6 +103,8 @@ function oneLine(s, max = 300) {
 // { output: object } to print JSON, or a promise of either. Any error lets the call through.
 function runHook(name, handler) {
   if (!enabled(name)) return
+  // process reads give up sooner inside a hook: a slow ps lets the tool call through instead of stalling it
+  process.env.BULKHEAD_IN_HOOK = '1'
   let raw = ''
   process.stdin.setEncoding('utf8')
   process.stdin.on('data', d => (raw += d))

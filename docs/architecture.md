@@ -78,7 +78,7 @@ Every session on the machine uses the same directory, `~/.claude/bulkhead` by de
   config.json       global config file (optional)
   slots/            one JSON file per running heavy job (owner PID, GB, start time, label)
   queue/            one JSON file per bulkhead-slot job that is waiting
-  guards.log        one plain text line per block, with the rule name
+  guards.log        one plain text line per block, with the rule name; guards.log.1 after rotation at 1 MB
   events.jsonl      one JSON line per block, read by bulkhead log and bulkhead top
   events.jsonl.1    the previous log, after rotation at 1 MB
   statusline.json   the cached status line, 5 seconds

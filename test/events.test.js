@@ -112,3 +112,36 @@ test('a block still happens when logging is off', () => {
   assert.strictEqual(r.status, 2)
   assert.ok(!fs.existsSync(eventsFile(dir)))
 })
+
+test('rotate: only one of two racing hooks rotates, and the history in .1 survives', () => {
+  const { rotate } = require('../src/events')
+  const dir = tempDir()
+  const file = path.join(dir, 'events.jsonl')
+  fs.writeFileSync(file, 'x'.repeat(100))
+  assert.strictEqual(rotate(file, 50), true)
+  // the second hook saw the big file before the first rotated; the new file is small now
+  fs.writeFileSync(file, 'new\n')
+  assert.strictEqual(rotate(file, 50), false)
+  assert.strictEqual(fs.readFileSync(file + '.1', 'utf8'), 'x'.repeat(100))
+  // a lock held by another hook: skip; a stale one (crashed hook): cleared
+  fs.writeFileSync(file, 'y'.repeat(100))
+  fs.mkdirSync(file + '.lock')
+  assert.strictEqual(rotate(file, 50), false)
+  assert.strictEqual(rotate(file, 50, Date.now() + 11000), true)
+  assert.ok(!fs.existsSync(file + '.lock'))
+})
+
+test('guards.log is rotated at 1 MB', () => {
+  const dir = tempDir()
+  const before = process.env.BULKHEAD_STATE_DIR
+  process.env.BULKHEAD_STATE_DIR = dir
+  try {
+    fs.writeFileSync(path.join(dir, 'guards.log'), 'z'.repeat(1024 * 1024))
+    require('../src/hook').log('port-guard', 'blocked port-in-use: npm run dev')
+    assert.strictEqual(fs.statSync(path.join(dir, 'guards.log.1')).size, 1024 * 1024)
+    assert.match(fs.readFileSync(path.join(dir, 'guards.log'), 'utf8'), /port-guard blocked port-in-use/)
+  } finally {
+    if (before === undefined) delete process.env.BULKHEAD_STATE_DIR
+    else process.env.BULKHEAD_STATE_DIR = before
+  }
+})
