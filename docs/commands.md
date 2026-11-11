@@ -19,6 +19,7 @@ Every command that prints a table also takes `--json`. Colors are used only when
 | [`bulkhead port`](#bulkhead-port) | A port nothing is listening on |
 | [`bulkhead worktree`](#bulkhead-worktree) | A worktree in one step (env files, install, stable port), a list of them, and safe cleanup |
 | [`bulkhead reap`](#bulkhead-reap) | Stops what sessions that have exited left running, or lists it with `--dry-run` |
+| [`bulkhead hook`](#bulkhead-hook-and-bulkhead-setup) and `bulkhead setup` | The guards for Codex, Gemini, Copilot, Cursor and other agents, and the config that registers them |
 | [`bulkhead-slot`](#bulkhead-slot) | Queues heavy commands against a shared RAM budget |
 | [`bulkhead remote`](#bulkhead-remote) | Runs a heavy command on another machine over SSH (optional) |
 
@@ -48,7 +49,7 @@ WAITING  GB  PID    FOR    SESSION  PROJECT                 COMMAND
 9.9 GB free of 31.8 GB, commit 68%
 ```
 
-A session is a running `claude` CLI process. RSS is the sum over its process tree. The project comes from the session file Claude Code keeps in `~/.claude/sessions`; for a session without one, from `/proc/<pid>/cwd` on Linux, from one batched `lsof -a -d cwd` on macOS, and `(unknown)` on Windows. The `WAITING` table appears only when `bulkhead-slot run` jobs are queued. `SESSION` and `PROJECT` name the Claude session whose process tree the job runs in (`-` when it cannot be told), and `FOR` is how long a waiting job has waited, in seconds, minutes or hours. On a terminal, the project column shrinks to the terminal width and long paths lose their start (`…/dev/api`), never their end.
+A session is a running `claude` CLI process, or the CLI of another agent that bulkhead knows ([Codex, Gemini and other agents](other-agents.md)); an `AGENT` column appears as soon as one of them is running.. RSS is the sum over its process tree. The project comes from the session file Claude Code keeps in `~/.claude/sessions`; for a session without one, from `/proc/<pid>/cwd` on Linux, from one batched `lsof -a -d cwd` on macOS, and `(unknown)` on Windows. The `WAITING` table appears only when `bulkhead-slot run` jobs are queued. `SESSION` and `PROJECT` name the Claude session whose process tree the job runs in (`-` when it cannot be told), and `FOR` is how long a waiting job has waited, in seconds, minutes or hours. On a terminal, the project column shrinks to the terminal width and long paths lose their start (`…/dev/api`), never their end.
 
 - **BRANCH** is the git branch of the session's folder, with `(wt)` when that folder is a linked worktree. It is read from `.git/HEAD` (or the worktree's own gitdir `HEAD`); no git process runs. A detached HEAD shows the short commit.
 - **STATE** is `working`, `waiting 3m` (Claude finished its reply and is waiting for you), `needs permission 4m` (a tool is waiting for your approval) or `needs input` (Claude asked you a question). `-` means no state is known: the hooks are not installed, or the session has not fired one yet. See [Session state](#session-state-and-notifications).
@@ -528,6 +529,17 @@ would stop 30112  test-runner  node ~/src/acme-web/node_modules/vitest/dist/work
 ```
 
 `--json` prints `{ supported, dryRun, orphans: [{ pid, name, rule, what, why, owner, top, pids, command }] }`, where `pids` lists every process in the tree. A run inside a live session never touches that session's own processes. Exit code 1 means the process table could not be read or the platform is not supported.
+
+## bulkhead hook and bulkhead setup
+
+```
+bulkhead hook --agent <codex|gemini|copilot|cursor|windsurf|droid|devin|cline|opencode|amp>
+bulkhead setup <agent> [--print | --write]
+```
+
+`hook` is what the agent runs before each shell command: it reads the agent's payload on stdin, runs the same guards as the Claude Code hook and answers in the agent's block format (exit code 2, or JSON, depending on the agent). Any error lets the command through. You normally never run it yourself.
+
+`setup` shows the config that registers `hook` for an agent. `--print` (the default) writes nothing. `--write` merges it into the agent's config file, keeping everything else, after copying the original to `<file>.bulkhead-backup`; running it again changes nothing. It refuses to rewrite a file that is not plain JSON, and never replaces a file it did not create. Config paths, block formats and sources for each agent are in [Codex, Gemini and other agents](other-agents.md).
 
 ## bulkhead-slot
 

@@ -14,7 +14,9 @@ const readme = read('README.md')
 
 // The text of the "## bulkhead <cmd>" section (or "## bulkhead-slot"), up to the next "## ".
 function section(doc, heading) {
-  const start = doc.indexOf(`\n## ${heading}\n`)
+  // "## bulkhead hook and bulkhead setup" covers both commands
+  const m = new RegExp(`\\n## [^\\n]*\\b${heading.replace(/[-]/g, '\\$&')}(?![\\w-])[^\\n]*\\n`).exec(doc)
+  const start = m ? m.index : -1
   if (start < 0) return null
   const end = doc.indexOf('\n## ', start + 4)
   return doc.slice(start, end < 0 ? undefined : end)

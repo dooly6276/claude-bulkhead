@@ -77,21 +77,29 @@ function render(st, { color = false, home = os.homedir(), width = Infinity } = {
   const paintState = (s, text) => (!color ? text : s.state === 'permission' ? `\x1b[31m${text}\x1b[0m` : s.state === 'waiting' ? `\x1b[33m${text}\x1b[0m` : text)
   const out = []
   if (st.sessions.length) {
-    const rows = [['SESSION', 'STATE', 'STARTED', 'RSS', 'BRANCH', 'PROJECT']]
+    // the AGENT column only appears once a session is not Claude Code, so a Claude-only list reads as before
+    const withAgent = st.sessions.some(s => s.agent && s.agent !== 'claude')
+    const titles = ['SESSION', 'STATE', 'STARTED', 'RSS', 'BRANCH', 'PROJECT']
+    if (withAgent) titles.splice(1, 0, 'AGENT')
+    const rows = [titles]
+    const stateCol = withAgent ? 2 : 1
+    const projectCol = titles.length - 1
     const portsAfter = new Map()
     for (const s of st.sessions) {
-      rows.push([s.pid, stateLabel(s, st.at), when(s.start, st.at), size(s.rss), branchLabel(s), shortPath(s.cwd, home)])
+      const cells = [s.pid, stateLabel(s, st.at), when(s.start, st.at), size(s.rss), branchLabel(s), shortPath(s.cwd, home)]
+      if (withAgent) cells.splice(1, 0, s.agent || 'claude')
+      rows.push(cells)
       portsAfter.set(rows.length - 1, s.ports)
     }
     // the project column takes what the other columns leave, never less than 12 characters
     const widths = rows[0].slice(0, -1).map((_, i) => Math.max(...rows.map(r => String(r[i]).length)))
     const room = Math.max(12, width - widths.reduce((n, w) => n + w + 2, 0))
-    for (const r of rows.slice(1)) r[5] = fitPath(r[5], room)
+    for (const r of rows.slice(1)) r[projectCol] = fitPath(r[projectCol], room)
     const lines = table(rows)
     out.push(head(lines[0]))
     for (let i = 1; i < lines.length; i++) {
       const s = st.sessions[i - 1]
-      const stateText = rows[i][1]
+      const stateText = rows[i][stateCol]
       out.push(color && s.state ? lines[i].replace(stateText, paintState(s, stateText)) : lines[i])
       for (const p of portsAfter.get(i)) out.push(`  :${p.port}  ${p.name}  pid ${p.pid}`)
     }

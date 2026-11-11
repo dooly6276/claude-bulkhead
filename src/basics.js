@@ -221,14 +221,14 @@ function check(cmd, {
   return null
 }
 
-if (require.main === module) {
-  runHook('basics', input => {
-    const cmd = input.tool_input && input.tool_input.command
-    const why = typeof cmd === 'string' && cmd && check(cmd, { cwd: input.cwd || process.cwd(), mode: shell.modeFor(input) })
-    if (!why) return
-    return blocked('basics', ruleOf(why), input, ruleOf(why) === 'self-allow' ? why : `${why}\n${ASK_USER}`)
-  })
+function handle(input) {
+  const cmd = input.tool_input && input.tool_input.command
+  const why = typeof cmd === 'string' && cmd && check(cmd, { cwd: input.cwd || process.cwd(), mode: shell.modeFor(input) })
+  if (!why) return
+  return blocked('basics', ruleOf(why), input, ruleOf(why) === 'self-allow' ? why : `${why}\n${ASK_USER}`)
 }
+
+if (require.main === module) runHook('basics', handle)
 
 function ruleOf(message) {
   if (/cannot approve its own blocks/.test(message)) return 'self-allow'
@@ -238,4 +238,4 @@ function ruleOf(message) {
   return 'rm-root'
 }
 
-module.exports = { check, rmTargets, dangerousTarget, forcePushToMain, ruleOf, agentAuthor }
+module.exports = { handle, check, rmTargets, dangerousTarget, forcePushToMain, ruleOf, agentAuthor }

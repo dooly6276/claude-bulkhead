@@ -172,7 +172,7 @@ function parsePsKeep(text) {
   return out
 }
 
-function readMac(run = execFileSync, { withEnv = false } = {}) {
+function readMac(run = execFileSync, { withEnv = false, withPorts = true } = {}) {
   const opts = { encoding: 'utf8', timeout: readTimeout(15000, 4000), maxBuffer: 64 * 1024 * 1024, env: { ...process.env, LC_ALL: 'C' } }
   const names = new Map()
   for (const line of run('ps', ['-axo', 'pid=,ucomm='], opts).split('\n')) {
@@ -195,14 +195,14 @@ function readMac(run = execFileSync, { withEnv = false } = {}) {
   }
   let ports = []
   // lsof exits 1 when nothing is listening
-  try { ports = parseLsof(run('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fn'], opts)) } catch (e) { ports = parseLsof(String(e.stdout || '')) }
+  if (withPorts) try { ports = parseLsof(run('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fn'], opts)) } catch (e) { ports = parseLsof(String(e.stdout || '')) }
   return { procs, listening: new Set(ports.map(l => l.pid)), ports }
 }
 
-function readProcesses(platform = process.platform, { withEnv = false } = {}) {
+function readProcesses(platform = process.platform, { withEnv = false, ports = true } = {}) {
   if (platform === 'win32') return readWindows()
   if (platform === 'linux') return readLinux()
-  if (platform === 'darwin') return readMac(execFileSync, { withEnv })
+  if (platform === 'darwin') return readMac(execFileSync, { withEnv, withPorts: ports })
   return null
 }
 

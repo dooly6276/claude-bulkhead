@@ -188,13 +188,13 @@ function parallelMessage(cmd, how) {
     'Run one du at a time, in the foreground: du -sh <one folder>.'
 }
 
-if (require.main === module) {
-  runHook('disk-guard', input => {
-    const cmd = input.tool_input && input.tool_input.command
-    const hit = check(cmd, { mode: shell.modeFor(input) })
-    if (!hit) return
-    return blocked('disk-guard', hit.rule, input, `${hit.why}\n${ASK_USER}`)
-  })
+function handle(input) {
+  const cmd = input.tool_input && input.tool_input.command
+  const hit = check(cmd, { mode: shell.modeFor(input) })
+  if (!hit) return
+  return blocked('disk-guard', hit.rule, input, `${hit.why}\n${ASK_USER}`)
 }
 
-module.exports = { check, wholeDisk, isScan }
+if (require.main === module) runHook('disk-guard', handle)
+
+module.exports = { handle, check, wholeDisk, isScan }

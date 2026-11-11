@@ -141,7 +141,10 @@ function frame(view, { width = 100, height = 40, color = false, home = os.homedi
         case 'state': return c(s.state === 'permission' ? 'red' : s.state === 'waiting' ? 'yellow' : s.state === 'working' ? 'green' : 'dim', cell(stateLabel(s, now), col.width))
         case 'started': return cell(when(s.start, now), col.width)
         case 'branch': return cell(branchLabel(s), col.width)
-        case 'project': return cell(fitPath(shortPath(s.cwd, home), col.width), col.width)
+        case 'project': {
+          const tag = s.agent && s.agent !== 'claude' ? `[${s.agent}] ` : ''
+          return cell(tag + fitPath(shortPath(s.cwd, home), Math.max(4, col.width - tag.length)), col.width)
+        }
         case 'rss': return cell(size(s.rss), col.width, true)
         case 'bar': return c('cyan', meter(s.rss / maxRss, col.width))
         case 'procs': return cell(s.children == null ? '-' : s.children, col.width, true)

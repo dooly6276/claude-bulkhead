@@ -250,14 +250,14 @@ function message({ est, maxSec }) {
     'For a one-off check, skip the sleep and read the output file now.'
 }
 
-if (require.main === module) {
-  runHook('wait-guard', input => {
-    const ti = input.tool_input || {}
-    if (ti.run_in_background || typeof ti.command !== 'string') return
-    const verdict = judge(ti.command, ti.timeout, setting('waitGuard.limitSeconds', 180), shell.modeFor(input))
-    if (!verdict) return
-    return blocked('wait-guard', verdict.rule, input, `${message(verdict)}\n${ASK_USER}`)
-  })
+function handle(input) {
+  const ti = input.tool_input || {}
+  if (ti.run_in_background || typeof ti.command !== 'string') return
+  const verdict = judge(ti.command, ti.timeout, setting('waitGuard.limitSeconds', 180), shell.modeFor(input))
+  if (!verdict) return
+  return blocked('wait-guard', verdict.rule, input, `${message(verdict)}\n${ASK_USER}`)
 }
 
-module.exports = { judge, message, topLevelLists, dropBackgrounded }
+if (require.main === module) runHook('wait-guard', handle)
+
+module.exports = { handle, judge, message, topLevelLists, dropBackgrounded }

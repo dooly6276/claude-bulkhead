@@ -4,7 +4,8 @@ const path = require('path')
 const { execFileSync } = require('child_process')
 const os = require('os')
 const { runHook, blocked, oneLine, enabled, ASK_USER } = require('./hook')
-const { readSessionFiles } = require('./sessions')
+const { readSessionFiles, readLiveSessionFiles } = require('./sessions')
+const { agentLabel } = require('./agents')
 const shell = require('./shell')
 const { rmTargets } = require('./basics')
 
@@ -168,7 +169,7 @@ function linksIn(dir) {
 }
 
 function classify(cmd, {
-  cwd = process.cwd(), sessionId = null, files = () => readSessionFiles(), isAlive = alive, run = git, platform = process.platform, mode = 'sh',
+  cwd = process.cwd(), sessionId = null, files = () => readLiveSessionFiles({ files: readSessionFiles() }), isAlive = alive, run = git, platform = process.platform, mode = 'sh',
   home = os.homedir(), links = linksIn, removeRule = () => enabled('remove-session-dir'), stageRule = () => enabled('stage-all'),
 } = {}) {
   const text = shell.prepare(String(cmd || ''), mode)
@@ -203,7 +204,7 @@ function classify(cmd, {
         return {
           rule: 'remove-session-dir',
           owner: { pid, cwd: f.cwd },
-          why: `[bulkhead] checkout-guard: \`${seg}\` removes ${r.dir}, and another Claude session works in it (${describeSession({ pid, cwd: f.cwd })}).\n` +
+          why: `[bulkhead] checkout-guard: \`${seg}\` removes ${r.dir}, and another ${agentLabel(f.agent)} session works in it (${describeSession({ pid, cwd: f.cwd })}).\n` +
             'Its files, its dev server and its next commit would disappear under it.\n' +
             'Leave this folder to that session. If it is really finished, wait until it exits (`bulkhead status` lists the live sessions), then remove it.',
         }
@@ -225,7 +226,7 @@ function classify(cmd, {
     const others = sharers(top, sessionId, { files: liveOthers(), isAlive, run, platform })
     if (!others.length) continue
     const o = others[0]
-    const who = `another Claude session works in the same tree (${describeSession(o)}` +
+    const who = `another ${agentLabel(o.agent)} session works in the same tree (${describeSession(o)}` +
       (others.length > 1 ? `, and ${others.length - 1} more` : '') + ')'
     if (what === 'stage-all') {
       let status = ''
@@ -274,15 +275,15 @@ function check(cmd, opts) {
   return hit ? hit.why : null
 }
 
-if (require.main === module) {
-  runHook('checkout-guard', input => {
-    const cmd = input.tool_input && input.tool_input.command
-    if (!cmd) return
-    const hit = classify(cmd, { cwd: input.cwd || process.cwd(), sessionId: input.session_id || null, mode: shell.modeFor(input) })
-    if (!hit) return
-    return blocked('checkout-guard', hit.rule, input, `${hit.why}\n${ASK_USER}`)
-  })
+function handle(input) {
+  const cmd = input.tool_input && input.tool_input.command
+  if (!cmd) return
+  const hit = classify(cmd, { cwd: input.cwd || process.cwd(), sessionId: input.session_id || null, mode: shell.modeFor(input) })
+  if (!hit) return
+  return blocked('checkout-guard', hit.rule, input, `${hit.why}\n${ASK_USER}`)
 }
+
+if (require.main === module) runHook('checkout-guard', handle)
 
 // `git-checkout`, `git-stash` and so on: the first git command that moves the tree.
 function ruleOf(cmd, cwd = '.', mode = 'sh') {
@@ -294,4 +295,4 @@ function ruleOf(cmd, cwd = '.', mode = 'sh') {
   return 'git'
 }
 
-module.exports = { check, classify, changesTree, gitCall, ruleOf, linksIn }
+module.exports = { handle, check, classify, changesTree, gitCall, ruleOf, linksIn }

@@ -269,6 +269,17 @@ Turn off: `BULKHEAD_DISABLE=orphan-reaper`. Details: [docs/guards/orphan-reaper.
 Turn off: `BULKHEAD_DISABLE=basics`, or one rule by name. Details: [docs/guards/basics.md](docs/guards/basics.md).
 </details>
 
+## Codex, Gemini and other agents
+
+If you run Codex CLI, Gemini CLI, Copilot CLI, Cursor, opencode, Amp, Cline, Factory Droid, Windsurf or Devin on the same machine as Claude Code, bulkhead guards their shell commands with the same seven guards and counts their sessions: an agent's dev server is protected from the others, and `bulkhead status` gets an `AGENT` column.
+
+```
+bulkhead setup codex            # prints the config for ~/.codex/hooks.json
+bulkhead setup codex --write    # merges it (original saved as hooks.json.bulkhead-backup)
+```
+
+`bulkhead setup <agent>` works for `codex`, `gemini`, `copilot`, `cursor`, `windsurf`, `droid`, `devin`, `cline`, `opencode` and `amp`. Each agent calls `bulkhead hook --agent <name>` before a shell command and gets its own block format back. The agents, config files, what is guarded and the documentation each row was checked against are in [docs/other-agents.md](docs/other-agents.md).
+
 ## How bulkhead relates to other hook packs
 
 General safety packs protect a session from dangerous commands. For example, [claude-forge](https://github.com/sangrokjung/claude-forge) includes hooks that filter leaked secrets from output, block piped remote scripts and stop destructive SQL, and [dcg](https://github.com/Dicklesworthstone/destructive_command_guard) and [cc-safety-net](https://github.com/kenryu42/claude-code-safety-net) cover destructive shell and git commands broadly. They are worth using.

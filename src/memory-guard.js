@@ -228,19 +228,19 @@ function queueOutput(input, q) {
   }
 }
 
-if (require.main === module) {
-  runHook('memory-guard', input => {
-    const cmd = input.tool_input && input.tool_input.command
-    if (typeof cmd !== 'string') return
-    if (setting('memoryGuard.autoQueue', false) === true && !touchesSlotFiles(cmd)) {
-      const q = autoQueue(input, { estimates: setting('memoryGuard.estimatesGb', null), wait: setting('memoryGuard.waitMinutes', 10) })
-      // no permissionDecision: the user's permission settings still apply to the rewritten command
-      if (q) return { output: queueOutput(input, q) }
-    }
-    const hit = decide(cmd, undefined, undefined, shell.modeFor(input))
-    if (!hit) return
-    return blocked('memory-guard', hit.rule, input, hit.message)
-  })
+function handle(input) {
+  const cmd = input.tool_input && input.tool_input.command
+  if (typeof cmd !== 'string') return
+  if (setting('memoryGuard.autoQueue', false) === true && !touchesSlotFiles(cmd)) {
+    const q = autoQueue(input, { estimates: setting('memoryGuard.estimatesGb', null), wait: setting('memoryGuard.waitMinutes', 10) })
+    // no permissionDecision: the user's permission settings still apply to the rewritten command
+    if (q) return { output: queueOutput(input, q) }
+  }
+  const hit = decide(cmd, undefined, undefined, shell.modeFor(input))
+  if (!hit) return
+  return blocked('memory-guard', hit.rule, input, hit.message)
 }
 
-module.exports = { check, decide, isHeavy, findHeavy, touchesSlotFiles, autoQueue, queueOutput }
+if (require.main === module) runHook('memory-guard', handle)
+
+module.exports = { handle, check, decide, isHeavy, findHeavy, touchesSlotFiles, autoQueue, queueOutput }

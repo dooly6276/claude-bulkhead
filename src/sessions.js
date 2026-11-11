@@ -2,6 +2,8 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { execFileSync } = require('child_process')
+const { agentOf, installedAgents } = require('./agents')
 
 // On Windows the desktop app and the CLI are both claude.exe. The app's processes run from
 // ...\app\Claude.exe (or Claude.app on macOS) and its helpers carry --type=. On macOS the
@@ -40,10 +42,6 @@ function readSessionFiles(dir = path.join(claudeDir(), 'sessions')) {
     } catch {}
   }
   return files
-}
-
-function linuxCwd(pid) {
-  try { return fs.readlinkSync(`/proc/${pid}/cwd`) } catch { return null }
 }
 
 // Maps every process to the session whose tree it is in. A child must be younger than its
@@ -112,14 +110,70 @@ function snapshotOwner(p, byPid, sessionPids, known = new Map()) {
   return fits.length === 1 ? fits[0] : null
 }
 
-// [{ pid, start, cwd, rss, ports: [{ port, pid, name }] }], oldest first.
-function findSessions({ procs, ports = [] }, files = new Map(), cwdOf = process.platform === 'linux' ? linuxCwd : () => null) {
+function linuxCwd(pid) {
+  try { return fs.readlinkSync(`/proc/${pid}/cwd`) } catch { return null }
+}
+
+// The working directories of several processes at once. macOS has no /proc: one lsof call
+// answers for all of them. Windows has no cheap way, so those sessions have no cwd and the
+// checks that need a folder skip them.
+function readCwds(pids, platform = process.platform, run = execFileSync) {
+  const out = new Map()
+  if (!pids.length) return out
+  if (platform === 'linux') {
+    for (const pid of pids) out.set(pid, linuxCwd(pid))
+  } else if (platform === 'darwin') {
+    let text = ''
+    try {
+      text = run('lsof', ['-a', '-p', pids.join(','), '-d', 'cwd', '-Fn'], { encoding: 'utf8', timeout: 5000, env: { ...process.env, LC_ALL: 'C' } })
+    } catch (e) { text = String(e.stdout || '') } // lsof exits 1 when one of the processes is gone
+    let pid = 0
+    for (const line of text.split('\n')) {
+      if (line[0] === 'p') pid = Number(line.slice(1))
+      else if (line[0] === 'n' && pid) out.set(pid, line.slice(1))
+    }
+  }
+  return out
+}
+
+// Claude Code sessions first, as before. Another agent's tree is one session at its outermost
+// process: the npm launchers of Codex and Gemini start the real program as a child.
+function sessionRoots(procs) {
   const byPid = new Map(procs.map(p => [p.pid, p]))
-  const roots = procs.filter(isClaudeCli)
-  const owner = assignOwners(procs, new Set(roots.map(p => p.pid)))
-  return roots.sort((a, b) => a.start - b.start).map(p => {
-    const f = files.get(p.pid)
-    const fileMatches = f && (!f.startedAt || !p.start || Math.abs(f.startedAt - p.start) < PID_REUSE_SLACK_MS)
+  const roots = []
+  for (const p of procs) {
+    if (isClaudeCli(p)) {
+      roots.push({ proc: p, agent: 'claude' })
+      continue
+    }
+    const agent = agentOf(p)
+    if (!agent) continue
+    let cur = byPid.get(p.ppid)
+    let nested = false
+    for (let i = 0; cur && i < 40 && !nested; i++) {
+      nested = cur.start <= p.start && !isClaudeCli(cur) && agentOf(cur) === agent
+      cur = byPid.get(cur.ppid)
+    }
+    if (!nested) roots.push({ proc: p, agent })
+  }
+  return roots
+}
+
+// [{ pid, agent, start, cwd, rss, ports: [{ port, pid, name }] }], oldest first.
+function findSessions({ procs, ports = [] }, files = new Map(), cwdOf = null, platform = process.platform, run = execFileSync) {
+  const byPid = new Map(procs.map(p => [p.pid, p]))
+  const roots = sessionRoots(procs)
+  const owner = assignOwners(procs, new Set(roots.map(r => r.proc.pid)))
+  const fileCwd = r => {
+    const f = files.get(r.proc.pid)
+    const fileMatches = f && (!f.startedAt || !r.proc.start || Math.abs(f.startedAt - r.proc.start) < PID_REUSE_SLACK_MS)
+    return (fileMatches && f.cwd) || null
+  }
+  // Claude Code names its folder in a session file; the others are asked once, together
+  const others = roots.filter(r => r.agent !== 'claude').map(r => r.proc.pid)
+  const asked = cwdOf ? new Map() : readCwds(others, platform, run)
+  return roots.sort((a, b) => a.proc.start - b.proc.start).map(r => {
+    const p = r.proc
     let rss = 0
     let children = 0
     for (const [pid, root] of owner) {
@@ -127,10 +181,12 @@ function findSessions({ procs, ports = [] }, files = new Map(), cwdOf = process.
       rss += byPid.get(pid).rss || 0
       if (pid !== p.pid) children++
     }
+    const fallback = cwdOf ? cwdOf(p.pid) : r.agent === 'claude' ? (platform === 'linux' ? linuxCwd(p.pid) : null) : asked.get(p.pid)
     return {
       pid: p.pid,
+      agent: r.agent,
       start: p.start,
-      cwd: (fileMatches && f.cwd) || cwdOf(p.pid),
+      cwd: fileCwd(r) || fallback || null,
       rss,
       children,
       ports: ports.filter(l => owner.get(l.pid) === p.pid).map(l => ({ ...l, name: byPid.get(l.pid).name })),
@@ -138,16 +194,43 @@ function findSessions({ procs, ports = [] }, files = new Map(), cwdOf = process.
   })
 }
 
-// The session a process runs under: its nearest Claude ancestor, or CLAUDE_PID.
+// The session a process runs under: its nearest Claude ancestor, else the outermost process of
+// the nearest other agent, else CLAUDE_PID.
 function ownSession(procs, pid = process.pid, env = process.env) {
   const byPid = new Map(procs.map(p => [p.pid, p]))
   let cur = byPid.get(pid)
+  let found = null
   for (let i = 0; cur && i < 40; i++) {
-    if (isClaudeCli(cur)) return cur.pid
+    if (isClaudeCli(cur)) return found ? found.pid : cur.pid
+    const agent = agentOf(cur)
+    if (agent && (!found || found.agent === agent)) found = { pid: cur.pid, agent }
     const par = byPid.get(cur.ppid)
     cur = par && par.start <= cur.start ? par : null
   }
-  return Number(env.CLAUDE_PID) || null
+  return found ? found.pid : Number(env.CLAUDE_PID) || null
 }
 
-module.exports = { isClaudeCli, readSessionFiles, findSessions, assignOwners, ownSession, claudeDir }
+// Session files for the checks that need each live session's folder (checkout-guard): Claude
+// Code's own files plus a cwd for every other agent's process. The process table is only read
+// when one of the other agents has left a folder in the home directory, and never for the agent
+// the caller runs under.
+function readLiveSessionFiles({
+  files = readSessionFiles(), installed = installedAgents, read = () => require('./processes').readProcesses(process.platform, { ports: false }),
+  platform = process.platform, run = execFileSync, self = process.pid,
+} = {}) {
+  const merged = new Map(files)
+  try {
+    if (!installed().length) return merged
+    const snap = read()
+    if (!snap) return merged
+    const mine = new Set()
+    const byPid = new Map(snap.procs.map(p => [p.pid, p]))
+    for (let cur = byPid.get(self), i = 0; cur && i < 40; cur = byPid.get(cur.ppid), i++) mine.add(cur.pid)
+    const roots = sessionRoots(snap.procs).filter(r => r.agent !== 'claude' && !mine.has(r.proc.pid))
+    const cwds = readCwds(roots.map(r => r.proc.pid), platform, run)
+    for (const r of roots) merged.set(r.proc.pid, { cwd: cwds.get(r.proc.pid) || null, startedAt: r.proc.start, status: null, sessionId: null, agent: r.agent })
+  } catch {}
+  return merged
+}
+
+module.exports = { isClaudeCli, readSessionFiles, readLiveSessionFiles, readCwds, sessionRoots, findSessions, assignOwners, ownSession, claudeDir }

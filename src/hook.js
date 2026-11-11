@@ -90,6 +90,8 @@ function recordEvent(name, rule, input = {}, command = null, extra = {}) {
     session: input.session_id || null,
     project: process.env.CLAUDE_PROJECT_DIR || input.cwd || null,
     command,
+    // set by `bulkhead hook --agent <name>`; absent for Claude Code
+    ...(process.env.BULKHEAD_AGENT ? { agent: process.env.BULKHEAD_AGENT } : {}),
     ...extra,
   })
 }
