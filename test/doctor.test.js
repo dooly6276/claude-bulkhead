@@ -60,7 +60,7 @@ test('process reader: timing, failure and unsupported platforms', () => {
   const snap = { procs: [{ pid: 1, ppid: 0, name: 'claude', cmd: 'claude', start: 1, rss: 1 }], ports: [] }
   const r = d.checkProcesses({ read: () => snap, files: () => new Map(), now: clock })
   assert.strictEqual(r.status, 'OK')
-  assert.match(r.summary, /1 processes, 0 listening ports, 1 Claude session in 1\.5s/)
+  assert.match(r.summary, /1 processes, 0 listening ports, 1 Claude session \(0 with a session file\) in 1\.5s/)
   assert.strictEqual(d.checkProcesses({ read: () => { throw new Error('spawn powershell.exe ENOENT') } }).status, 'FAIL')
   assert.strictEqual(d.checkProcesses({ read: () => null, platform: 'aix' }).status, 'WARN')
 })
