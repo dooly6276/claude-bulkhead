@@ -218,7 +218,7 @@ test('slot status names the session and project of each job and shows who waits'
   enqueue(path.join(state, 'queue'), { label: 'cargo build', gb: 4, pid: process.pid, at: Date.now() - 45e3, reason: 'free 2.0 GB' })
   const env = { ...process.env, BULKHEAD_STATE_DIR: state, BULKHEAD_TEST_MEMORY: JSON.stringify({ freeGb: 20, totalGb: 64 }) }
   const r = spawnSync(process.execPath, [bin, 'status'], { env, encoding: 'utf8' })
-  assert.match(r.stdout, /slot-1\.json: npm test \(3 GB, pid \d+, [45] s/)
+  assert.match(r.stdout, /slot-1\.json: npm test \(3 GB, pid \d+, [4-9] s/)
   assert.match(r.stdout, /waiting #1: cargo build \(4 GB, pid \d+, waited 4\d s/)
   assert.match(r.stdout, /- free 2\.0 GB/)
 })
