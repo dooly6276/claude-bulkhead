@@ -5,6 +5,7 @@
 const RULE_KEYS = {
   'rm-root': ['basics', 'rmRoot'],
   'force-push-main': ['basics', 'forcePushMain'],
+  'protected-delete': ['basics', 'protectedDelete'],
   'discard-changes': ['basics', 'discardChanges'],
   'agent-author': ['basics', 'agentAuthor'],
   'stage-all': ['checkoutGuard', 'stageAll'],
