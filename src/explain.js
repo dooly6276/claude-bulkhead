@@ -15,7 +15,7 @@ in the way, the message the agent would see, and how to allow it once or for goo
 judged as a new session that none of the running ones is. --timeout is the tool call's timeout
 in milliseconds, which wait-guard reads (the Bash tool's default is 120000).`
 
-const ORDER = ['kill-guard', 'wait-guard', 'memory-guard', 'port-guard', 'checkout-guard', 'disk-guard', 'basics']
+const ORDER = ['kill-guard', 'wait-guard', 'memory-guard', 'port-guard', 'checkout-guard', 'disk-guard', 'secrets-guard', 'basics']
 const PREVIEW_SESSION = 'explain-preview'
 
 // Reads the process table at most once, and only when a guard asks for it.
@@ -135,6 +135,13 @@ const CHECKS = {
   'disk-guard': async (cmd, ctx) => {
     const hit = require('./disk-guard').check(cmd, { mode: ctx.mode })
     return hit ? { rule: hit.rule, message: hit.why, evidence: [hit.rule] } : null
+  },
+  'secrets-guard': async (cmd, ctx) => {
+    const secrets = require('./secrets-guard')
+    const hit = secrets.classifyCommand(cmd, {
+      cwd: ctx.cwd, mode: ctx.mode, extra: setting('secretsGuard.extraPatterns', []), allow: setting('secretsGuard.allow', []),
+    })
+    return hit ? { rule: hit.rule, message: secrets.message(hit), evidence: [`${hit.label}: ${hit.what}`] } : null
   },
   basics: async (cmd, ctx) => {
     const basics = require('./basics')

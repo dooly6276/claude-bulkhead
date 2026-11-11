@@ -45,6 +45,16 @@
   "allowOnce": {
     "ttlMinutes": 10
   },
+  "editGuard": {
+    "enabled": true,
+    "mode": "warn",
+    "windowMinutes": 30
+  },
+  "secretsGuard": {
+    "enabled": false,
+    "extraPatterns": ["*.token", "~/vault/**"],
+    "allow": [".env.test"]
+  },
   "orphanReaper": {
     "enabled": true,
     "onSessionEnd": true,

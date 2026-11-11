@@ -12,7 +12,7 @@ const RULE_KEYS = {
 }
 const SECTION = {
   'kill-guard': 'killGuard', 'wait-guard': 'waitGuard', 'memory-guard': 'memoryGuard', 'port-guard': 'portGuard',
-  'checkout-guard': 'checkoutGuard', 'disk-guard': 'diskGuard', basics: 'basics', 'orphan-reaper': 'orphanReaper',
+  'checkout-guard': 'checkoutGuard', 'disk-guard': 'diskGuard', basics: 'basics', 'orphan-reaper': 'orphanReaper', 'secrets-guard': 'secretsGuard', 'edit-guard': 'editGuard',
 }
 
 // The shared program name a kill command aims at, to put in allowNames.
@@ -42,6 +42,11 @@ function allowHint(guard, rule, { command = '', message = '' } = {}) {
     const port = /\bport (\d{2,5})\b/.exec(message)
     return port ? { json: j({ portGuard: { ignorePorts: [Number(port[1])] } }), disable: guard } : off
   }
+  if (guard === 'secrets-guard') {
+    const file = /\(([^()\n]+)\) to the model/.exec(message)
+    return { json: j({ secretsGuard: { allow: [file && !/\s/.test(file[1]) ? file[1] : '<file>'] } }), disable: guard }
+  }
+  if (guard === 'edit-guard') return { json: j({ editGuard: { mode: 'warn' } }), disable: guard }
   if (guard === 'wait-guard') return { json: j({ waitGuard: { limitSeconds: 600 } }), disable: guard }
   if (guard === 'memory-guard' && rule === 'low-memory') return { json: j({ memory: { minFreeGb: 1 } }), disable: guard }
   return off

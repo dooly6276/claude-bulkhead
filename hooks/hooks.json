@@ -54,6 +54,12 @@
         "hooks": [
           { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/session-state.js"], "async": true, "timeout": 5 }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/edit-guard.js"], "timeout": 10 }
+        ]
       }
     ],
     "PostToolUseFailure": [
@@ -80,6 +86,18 @@
         "matcher": "Agent|Task",
         "hooks": [
           { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/subagent-guard.js"], "timeout": 10 }
+        ]
+      },
+      {
+        "matcher": "Read|Grep|Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/secrets-guard.js"], "timeout": 10 }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/edit-guard.js"], "timeout": 10 }
         ]
       }
     ]

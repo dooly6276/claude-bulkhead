@@ -19,6 +19,8 @@ const GUARDS = {
   'checkout-guard': 'checkoutGuard',
   'disk-guard': 'diskGuard',
   basics: 'basics',
+  'edit-guard': 'editGuard',
+  'secrets-guard': 'secretsGuard',
   'orphan-reaper': 'orphanReaper',
   'session-state': 'sessionState',
 }
@@ -64,6 +66,12 @@ const KEYS = {
   'basics.agentAuthor': bool(true, 'Block commits authored as Claude or Anthropic (--author, git config user.*, GIT_AUTHOR_*), so the work counts as yours.'),
   'basics.selfAllow': bool(true, 'Block the agent running bulkhead allow or writing the allow state files, so only the user approves a block.'),
   'allowOnce.ttlMinutes': { type: 'number', default: 10, doc: 'Minutes an allow-once code stays valid, and how long an approved command can still be run once.' },
+  'editGuard.enabled': on('edit-guard'),
+  'editGuard.mode': { type: 'string', default: 'warn', doc: 'What edit-guard does when another live session edited the same file lately: "warn" tells the agent, "ask" asks you, "block" stops the edit.' },
+  'editGuard.windowMinutes': { type: 'number', default: 30, doc: 'How recent the other session\'s edit must be, in minutes.' },
+  'secretsGuard.enabled': bool(false, 'Turn secrets-guard on or off. Off by default; on in the strict preset.'),
+  'secretsGuard.extraPatterns': { type: 'string[]', default: [], doc: 'More files secrets-guard keeps out of the conversation: a file name (*.token) or a path pattern (~/vault/**).' },
+  'secretsGuard.allow': { type: 'string[]', default: [], doc: 'Files secrets-guard lets through even though they look secret, by the same patterns.' },
   'orphanReaper.enabled': on('orphan-reaper'),
   'orphanReaper.onSessionEnd': bool(true, 'Also reap right after a session exits, not only when the next session starts.'),
   'orphanReaper.extraNames': { type: 'string[]', default: [], doc: 'More program names orphan-reaper stops once the session that started them has exited.' },
@@ -98,6 +106,7 @@ const PRESETS = {
     'memory.slotFloorGb': gb => Math.min(8, round1(gb * 0.35)),
     'memory.maxCommitPct': 65,
     'basics.protectedBranches': ['main', 'master', 'develop', 'release', 'production'],
+    'secretsGuard.enabled': true,
   },
 }
 

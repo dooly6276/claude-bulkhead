@@ -34,7 +34,8 @@ const verdict = (r, guard) => r.guards.find(g => g.guard === guard)
 test('a harmless command passes every guard and reads no process data', async () => {
   const r = await explain('ls -la', ctx({ snapshot: () => assert.fail('no process scan') , memory: () => assert.fail('no memory read') }))
   assert.strictEqual(r.blocked, false)
-  assert.deepStrictEqual(r.guards.map(g => g.status), Array(7).fill('pass'))
+  assert.deepStrictEqual(r.guards.map(g => [g.guard, g.status]).filter(([, st]) => st !== 'pass'), [['secrets-guard', 'off']])
+  assert.strictEqual(r.guards.length, 8)
   assert.match(render(r), /passes every guard/)
 })
 
@@ -159,4 +160,21 @@ test('the command can be several words or one quoted string; usage when it is mi
   assert.match(err, /usage: bulkhead explain/)
   assert.strictEqual(process.exitCode, 1)
   process.exitCode = old
+})
+
+test('secrets-guard joins in when it is on (strict preset)', async () => {
+  const before = process.env.BULKHEAD_PRESET
+  process.env.BULKHEAD_PRESET = 'strict'
+  require('../src/config').reset()
+  try {
+    const r = await explain('cat .env', ctx())
+    const g = verdict(r, 'secrets-guard')
+    assert.strictEqual(g.status, 'block')
+    assert.strictEqual(g.rule, 'print-file')
+    assert.match(g.config, /"secretsGuard":\{"allow":\[".env"\]\}/)
+  } finally {
+    if (before === undefined) delete process.env.BULKHEAD_PRESET
+    else process.env.BULKHEAD_PRESET = before
+    require('../src/config').reset()
+  }
 })

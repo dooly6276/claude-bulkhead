@@ -38,7 +38,7 @@ This writes `"preset": "quiet"` (or `"normal"`, `"strict"`) at the top level of 
 |---|---|
 | `normal` | The defaults below. Nothing changes. |
 | `quiet` | Only the guards that protect one session from another, and the rules that cannot be undone. Stays on: kill-guard, port-guard, checkout-guard, memory-guard, orphan-reaper, and in basics `rmRoot`, `forcePushMain` and `selfAllow`. Turned off: `waitGuard.enabled`, `diskGuard.enabled`, `basics.discardChanges`, `basics.agentAuthor`. |
-| `strict` | Everything on, with tighter limits: `waitGuard.limitSeconds` 60 (default 180); `memory.minFreeGb` 20% of RAM, at most 5 GB (default 15%, at most 3 GB); `memory.slotFloorGb` 35% of RAM, at most 8 GB (default 25%, at most 5 GB); `memory.maxCommitPct` 65 (default 75, Windows); `basics.protectedBranches` `["main", "master", "develop", "release", "production"]`. |
+| `strict` | Everything on, with tighter limits: `waitGuard.limitSeconds` 60 (default 180); `memory.minFreeGb` 20% of RAM, at most 5 GB (default 15%, at most 3 GB); `memory.slotFloorGb` 35% of RAM, at most 8 GB (default 25%, at most 5 GB); `memory.maxCommitPct` 65 (default 75, Windows); `basics.protectedBranches` `["main", "master", "develop", "release", "production"]`; `secretsGuard.enabled` true (default false). |
 
 The limits scale with the RAM of the machine, so a small laptop is not locked out of every build. To keep one strict value and relax another, set the key: `{ "preset": "strict", "waitGuard": { "limitSeconds": 120 } }`.
 
@@ -129,6 +129,22 @@ Critical memory pressure for `memoryGuard.subagents` means macOS `kern.memorysta
 |---|---|---|---|
 | `ttlMinutes` | number | `10` | Minutes a code from a block message stays valid, and how long an approved command can still be run once after `bulkhead allow <code>` |
 
+### editGuard
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Turns edit-guard on or off |
+| `mode` | `"warn"`, `"ask"` or `"block"` | `"warn"` | What happens when another live session edited the file lately. `warn` lets the edit through and tells the agent, `ask` shows the note to you in the permission prompt, `block` stops the edit |
+| `windowMinutes` | number | `30` | How recent the other session's edit must be |
+
+### secretsGuard
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Turns secrets-guard on. It is off by default; the `strict` preset turns it on |
+| `extraPatterns` | list of patterns | `[]` | More files to keep out of the conversation: a file name (`*.token`) or a path pattern (`~/vault/**`, `config/prod/*`) |
+| `allow` | list of patterns | `[]` | Files to let through although they look secret, by the same patterns (`.env.test`, `fixtures/*.pem`) |
+
 ### orphanReaper
 
 | Key | Type | Default | Meaning |
@@ -199,7 +215,7 @@ An entry with a problem (a missing `host`, an unknown key, a value of the wrong 
 
 | Variable | Same as |
 |---|---|
-| `BULKHEAD_DISABLE` | Comma-separated names to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `basics`, `orphan-reaper`, the basics rules `rm-root`, `force-push-main`, `discard-changes`, `agent-author`, `self-allow`, or `all`. A name listed here is off whatever the files say |
+| `BULKHEAD_DISABLE` | Comma-separated names to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `basics`, `edit-guard`, `secrets-guard`, `orphan-reaper`, the basics rules `rm-root`, `force-push-main`, `discard-changes`, `agent-author`, `self-allow`, or `all`. A name listed here is off whatever the files say |
 | `BULKHEAD_PRESET` | The preset: `quiet`, `normal` or `strict`. Wins over the `preset` key in the files |
 | `BULKHEAD_WAIT_MAX_SEC` | `waitGuard.limitSeconds` |
 | `BULKHEAD_MIN_FREE_GB` | `memory.minFreeGb` |
