@@ -57,6 +57,11 @@ function parseNetTcp(text) {
   return inodes
 }
 
+// BULKHEAD_KEEP=1 in a process's environment marks something started on purpose to outlive its
+// session (see orphan-reaper). Children inherit it, so a marked server's helpers are marked too.
+const KEEP_VALUE = /^(?:1|true|yes)$/i
+const isKeepValue = v => KEEP_VALUE.test(String(v || '').trim())
+
 function envValue(environ, key) {
   for (const kv of environ.split('\0')) if (kv.startsWith(key + '=')) return kv.slice(key.length + 1)
   return null
@@ -94,6 +99,7 @@ function readLinux(io = realFs, clockTicks = 100, pageSize = 4096) {
       pid, ppid: s.ppid, name: s.name, cmd, start: bootMs + (s.startTicks / clockTicks) * 1000,
       rss: s.rssPages * pageSize, claudePid: claudePid || null,
     })
+    if (environ && isKeepValue(envValue(environ, 'BULKHEAD_KEEP'))) procs[procs.length - 1].keep = true
     if (!listenInodes.size) continue
     let fds = []
     try { fds = io.list(`/proc/${entry}/fd`) } catch {}
@@ -150,6 +156,16 @@ function parsePsEnv(text) {
   return out
 }
 
+// The PIDs whose `ps -E` line carries BULKHEAD_KEEP=1 as a whole word.
+function parsePsKeep(text) {
+  const out = new Set()
+  for (const line of text.split('\n')) {
+    const m = /^\s*(\d+)\s.*\sBULKHEAD_KEEP=(\w+)(?=\s|$)/.exec(line)
+    if (m && isKeepValue(m[2])) out.add(Number(m[1]))
+  }
+  return out
+}
+
 function readMac(run = execFileSync, { withEnv = false } = {}) {
   const opts = { encoding: 'utf8', timeout: 15000, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, LC_ALL: 'C' } }
   const names = new Map()
@@ -160,8 +176,16 @@ function readMac(run = execFileSync, { withEnv = false } = {}) {
   const procs = parsePs(run('ps', ['-axww', '-o', 'pid=,ppid=,rss=,lstart=,args='], opts), names)
   if (withEnv) {
     let env = new Map()
-    try { env = parsePsEnv(run('ps', ['-axwwE', '-o', 'pid=,command='], opts)) } catch {}
-    for (const p of procs) p.claudePid = env.get(p.pid) || null
+    let keep = new Set()
+    try {
+      const text = run('ps', ['-axwwE', '-o', 'pid=,command='], opts)
+      env = parsePsEnv(text)
+      keep = parsePsKeep(text)
+    } catch {}
+    for (const p of procs) {
+      p.claudePid = env.get(p.pid) || null
+      if (keep.has(p.pid)) p.keep = true
+    }
   }
   let ports = []
   // lsof exits 1 when nothing is listening
@@ -177,5 +201,5 @@ function readProcesses(platform = process.platform, { withEnv = false } = {}) {
 }
 
 module.exports = {
-  readProcesses, parseWindows, readWindows, parseProcStat, parseNetTcp, readLinux, envValue, parsePs, parseLsof, readMac, parsePsEnv,
+  readProcesses, parseWindows, readWindows, parseProcStat, parseNetTcp, readLinux, envValue, parsePs, parseLsof, readMac, parsePsEnv, parsePsKeep, isKeepValue,
 }

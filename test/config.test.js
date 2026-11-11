@@ -123,13 +123,16 @@ test('extra shared names are protected', () => {
   assert.ok(check('pkill node'))
 })
 
-test('the SessionStart check prints a notice for a broken file only', () => {
+test('the SessionStart check prints a notice for a broken file, and the first-run line once', () => {
   const run = env => spawnSync(process.execPath, [path.join(__dirname, '..', 'src', 'config-check.js')], { input: '{}', encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: tempDir(), ...env } })
   const bad = setup('{nope')
   const r = run({ BULKHEAD_STATE_DIR: bad.state })
   assert.strictEqual(r.status, 0)
   assert.match(JSON.parse(r.stdout).systemMessage, /not valid JSON/)
-  assert.strictEqual(run({ BULKHEAD_STATE_DIR: tempDir() }).stdout, '')
+  // a good config prints only the first-run line, once
+  const fresh = tempDir()
+  assert.match(JSON.parse(run({ BULKHEAD_STATE_DIR: fresh }).stdout).systemMessage, /^bulkhead is on: [^\n]*$/)
+  assert.strictEqual(run({ BULKHEAD_STATE_DIR: fresh }).stdout, '')
 })
 
 test('bulkhead config shows each value and where it came from', () => {

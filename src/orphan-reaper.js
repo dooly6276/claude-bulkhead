@@ -3,7 +3,8 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { execFileSync, spawn } = require('child_process')
-const { enabled, setting, log, oneLine, recordEvent } = require('./hook')
+const { enabled, setting, log, oneLine, recordEvent, stateDir } = require('./hook')
+const notices = require('./notices')
 const { readSessionFiles, claudeDir } = require('./sessions')
 const { readProcesses } = require('./processes')
 
@@ -64,6 +65,32 @@ const RULES = [
 
 // Never stopped, nor anything they started, even under an orphaned shell: programs meant to
 // outlive the session, and daemons that other sessions share.
+const KEEP_TOKEN = /(?:^|[\s"'])BULKHEAD_KEEP=(?:1|true|yes)(?=["'\s]|$)/i
+
+// ssh options that take a value (in the next word, or the rest of the same word) and the ones that
+// open a forward or a tunnel only
+const SSH_VALUE_OPTS = new Set('BbcDEeFIiJLlmOopQRSWw')
+const SSH_FORWARD_OPTS = new Set('DLRN')
+
+// true when an ssh command line opens a port forward or a tunnel only (-L, -R, -D, -N). The value
+// of an option such as `-o StrictHostKeyChecking=no` is skipped, not read as flags.
+function sshForwards(cmd) {
+  const words = String(cmd).trim().split(/\s+/).slice(1)
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i]
+    if (!w.startsWith('-')) break
+    if (w.startsWith('--')) continue
+    for (let j = 1; j < w.length; j++) {
+      if (SSH_FORWARD_OPTS.has(w[j])) return true
+      if (SSH_VALUE_OPTS.has(w[j])) {
+        if (j === w.length - 1) i++
+        break
+      }
+    }
+  }
+  return false
+}
+
 const KEEP = [
   { what: 'Claude Code itself', test: p => isClaude(p), reason: 'A session started from a tool shell is a live session of its own.' },
   { what: 'orphan-reaper itself', cmd: /orphan-reaper\.js/, reason: 'The reaper and its waiters.' },
@@ -79,6 +106,18 @@ const KEEP = [
     test: (p, name) => /^(?:vbcscompiler|bazel|buck2d|sccache)$/i.test(name) ||
       /org\.gradle\.launcher\.daemon|GradleDaemon|KotlinCompileDaemon|org\.jetbrains\.kotlin\.daemon|[\\/]nx[\\/]src[\\/]daemon[\\/]|\bturbo(?:\.exe)?["']?\s+daemon\b|MSBuild\.(?:dll|exe)["']?\s.*\/nodemode/i.test(p.cmd),
     reason: 'Builds in every session connect to the same daemon; stopping it breaks theirs.' },
+  { what: 'Anything started with `BULKHEAD_KEEP=1`', test: p => p.keep === true || KEEP_TOKEN.test(p.cmd),
+    reason: 'You marked it as meant to outlive the session.' },
+  { what: 'ssh tunnels and port forwards (`ssh -L`, `-R`, `-D`, `-N`), autossh, cloudflared, ngrok, Tailscale, frp',
+    test: (p, name) => (/^ssh$/i.test(name) && sshForwards(p.cmd)) || /^(?:autossh|cloudflared|ngrok|tailscale|tailscaled|frpc|frps)$/i.test(name),
+    reason: 'A tunnel is opened on purpose and nothing else reconnects it.' },
+  { what: 'Databases and local services (Postgres, MySQL, MariaDB, MongoDB, Redis, Valkey, Memcached, Jupyter, code-server, Syncthing)',
+    test: (p, name) => /^(?:postgres|postmaster|mysqld|mysqld_safe|mariadbd|mongod|mongos|redis-server|redis-sentinel|valkey-server|memcached|code-server|syncthing)$/i.test(name) ||
+      /(?:^|[\s\\/])jupyter(?:-lab|-notebook|-server|lab)?(?=["'\s]|$)/i.test(p.cmd),
+    reason: 'Local services that other projects and sessions use.' },
+  { what: 'Container runtimes (Colima, Lima, OrbStack, Podman)',
+    name: /^(?:colima|limactl|lima|orbstack|orbstack helper|podman|vfkit|krunkit)$/i,
+    reason: 'One runtime serves every session on the machine.' },
   { what: 'Shared machine services (adb, the Android emulator, Docker, Ollama, watchman, ssh-agent, gpg-agent)',
     name: /^(?:adb|emulator|emulator64-\w+|qemu-system-[\w-]+|dockerd|docker|containerd|com\.docker\.[\w.-]+|ollama|watchman|ssh-agent|gpg-agent)$/i,
     reason: 'One instance serves every session on the machine.' },
@@ -111,13 +150,16 @@ function matchesSpec(spec, p, name) {
   return Boolean(spec.test)
 }
 
-function keeper(keepNames = []) {
+// keepNames: program names; keepPatterns: text that, found in a command line, keeps the process.
+function keeper(keepNames = [], keepPatterns = []) {
   const extra = new Set(keepNames.map(n => baseName(n).toLowerCase()))
+  const patterns = keepPatterns.map(x => String(x).toLowerCase()).filter(Boolean)
   const cache = new Map()
   return p => {
     if (!cache.has(p.pid)) {
       const name = baseName(p.name)
-      cache.set(p.pid, extra.has(name.toLowerCase()) || KEEP.some(k => matchesSpec(k, p, name)))
+      const cmd = String(p.cmd || '').toLowerCase()
+      cache.set(p.pid, extra.has(name.toLowerCase()) || patterns.some(x => cmd.includes(x)) || KEEP.some(k => matchesSpec(k, p, name)))
     }
     return cache.get(p.pid)
   }
@@ -264,7 +306,7 @@ function findOrphans({ procs, listening = new Set() }, now = Date.now(), opts = 
     now,
     session: opts.session || null,
     platform: opts.platform || process.platform,
-    isKept: keeper(opts.keepNames),
+    isKept: keeper(opts.keepNames, opts.keepPatterns),
     snapshotExists: opts.snapshotExists || snapshotExists,
     liveClaudeStarts: procs.filter(isClaude).map(p => p.start),
     live: liveSnapshots(procs, byPid),
@@ -344,8 +386,8 @@ function killPids(pids, platform = process.platform) {
 // Stops every orphan's tree and returns { orphan, pids } for each. On Windows a second look stops
 // children that a dying process started after the first snapshot; elsewhere they are reparented
 // and the next pass finds them through CLAUDE_PID.
-function reapAll(orphans, procs, { platform = process.platform, keepNames = [], reread = null } = {}) {
-  const isKept = keeper(keepNames)
+function reapAll(orphans, procs, { platform = process.platform, keepNames = [], keepPatterns = [], reread = null } = {}) {
+  const isKept = keeper(keepNames, keepPatterns)
   const byPid = new Map(procs.map(p => [p.pid, p]))
   const done = []
   const killed = new Map()
@@ -381,6 +423,7 @@ function settings() {
   return {
     extraNames: setting('orphanReaper.extraNames', []),
     keepNames: setting('orphanReaper.keepNames', []),
+    keepPatterns: setting('orphanReaper.keepPatterns', []),
   }
 }
 
@@ -394,19 +437,23 @@ function run({ platform = process.platform, dryRun = false, session = null, trig
   const snapshot = snap || snapshotNow(platform)
   const orphans = findOrphans(snapshot, Date.now(), { ...opts, session, platform })
   if (dryRun) {
-    const isKept = keeper(opts.keepNames)
+    const isKept = keeper(opts.keepNames, opts.keepPatterns)
     return orphans.map(o => ({ orphan: o, pids: [...new Set([...descendants(o.top, snapshot.procs, isKept), o.pid])] }))
   }
-  const done = reapAll(orphans, snapshot.procs, { platform, keepNames: opts.keepNames, reread: () => snapshotNow(platform) })
+  const done = reapAll(orphans, snapshot.procs, { platform, keepNames: opts.keepNames, keepPatterns: opts.keepPatterns, reread: () => snapshotNow(platform) })
   const files = done.length && !project ? readSessionFiles() : new Map()
-  for (const { orphan: o, pids } of done) {
+  const projectFor = o => project || projectOf(o.owner, files)
+  const shown = notices.items(done, snapshot.ports, projectFor)
+  done.forEach(({ orphan: o, pids }, i) => {
     log('orphan-reaper', `stopped ${o.rule} pid ${o.pid} (tree ${o.top}, ${pids.length} processes; ${o.why}) ${oneLine(o.cmd || o.name, 160)}`)
     recordEvent('orphan-reaper', o.rule, { session_id: sessionId }, o.cmd || o.name, {
-      project: project || projectOf(o.owner, files),
+      project: projectFor(o),
       pid: o.pid,
+      port: shown[i].port,
       trigger,
     })
-  }
+  })
+  if (trigger !== 'manual') notices.append(stateDir(), shown)
   return done
 }
 

@@ -28,7 +28,7 @@ Yes. kill-guard, wait-guard, memory-guard and basics protect one session and its
 | kill-guard, wait-guard, basics, checkout-guard | yes | yes | yes |
 | memory-guard, bulkhead-slot | yes | yes | yes, free RAM estimated from `vm_stat` |
 | port-guard, `bulkhead status` | yes | yes | yes, through `ps` and `lsof` |
-| orphan-reaper | yes | yes, needs `CLAUDE_PID` in tool shells | yes, tested with fixtures, not yet on a real Mac |
+| orphan-reaper | yes | yes, needs `CLAUDE_PID` in tool shells | yes, tested with fixtures and on a real Mac |
 
 Node 18 or later is required on all three. On Windows, `bulkhead-slot` runs commands through Git Bash when it is installed and through `cmd.exe` otherwise.
 
