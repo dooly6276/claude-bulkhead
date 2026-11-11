@@ -3,7 +3,7 @@
 const USAGE = `usage:
   bulkhead status [--json]              sessions, their ports and memory, slots, free RAM
   bulkhead top [--interval=SECONDS]     the same, live, full screen (q quits, r refreshes)
-  bulkhead log [-n N] [--since 7d] [--guard NAME] [--summary] [--json]
+  bulkhead log [SPAN] [-n N] [--guard NAME] [--summary] [--json]
                                         what the guards blocked
   bulkhead scan [--since 30d] [--project TEXT] [-n N] [--json]
                                         replay your Claude Code transcripts against the guards
@@ -16,9 +16,9 @@ const USAGE = `usage:
                                         what every guard would say about a command, nothing runs
   bulkhead allow <code> | --list        allow one blocked command once (you run this, not the agent)
   bulkhead port [--near PORT] [--json]  a port no process is listening on
-  bulkhead worktree add|list|prune     one-step worktrees: env files, install, stable port, safe cleanup
   bulkhead port --stable [--name NAME] [--range 3000-3999]
                                         this worktree's own port, the same every time
+  bulkhead worktree add|list|prune      one-step worktrees: env files, install, stable port, safe cleanup
   bulkhead reap [--dry-run] [--json]    stop what exited sessions left running
   bulkhead hook --agent NAME            the guards for Codex, Gemini, Copilot, Cursor and other agents (reads the pre-tool payload on stdin)
   bulkhead setup AGENT [--print|--write] the hook config for that agent: print it, or merge it into the agent's config file
