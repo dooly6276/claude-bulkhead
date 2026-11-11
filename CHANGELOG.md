@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3
+
+### Fixed
+
+- port-guard reads a very long pipeline (hundreds of thousands of segments) in a fraction of the time: dev-server detection looks a program up by name instead of testing every known tool against every segment. This also keeps the 1 MB fuzz case inside its time limit on slower CI runners.
+
 ## 0.3.2 - 2026-11-12
 
 ### New

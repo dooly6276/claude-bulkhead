@@ -163,11 +163,14 @@ const SUBWRAPPERS = {
 // Words of one command without the keyword in front (`do npm run dev`) and without redirections.
 function cleanWords(words, out = []) {
   let i = 0
-  while (i < words.length && /^(?:do|then|else|elif|if|while|until|\{|!)$/.test(words[i])) i++
+  while (i < words.length && words[i].length <= 5 && /^(?:do|then|else|elif|if|while|until|\{|!)$/.test(words[i])) i++
   for (; i < words.length; i++) {
     const w = words[i]
-    if (/^\d*(?:>>?|<)$/.test(w)) { i++; continue }
-    if (/^\d*[<>]/.test(w)) continue
+    // only a word with < or > can be a redirection
+    if (w.includes('>') || w.includes('<')) {
+      if (/^\d*(?:>>?|<)$/.test(w)) { i++; continue }
+      if (/^\d*[<>]/.test(w)) continue
+    }
     out.push(w)
   }
   return out
@@ -180,12 +183,25 @@ function commandsOf(cmd) {
   return cmds.slice().sort((a, b) => a.s - b.s).map(c => cleanWords(c.words.map(w => w.v))).filter(t => t.length)
 }
 
-const binName = t => path.basename(String(t)).replace(/\.(?:cmd|exe|ps1)$/i, '').toLowerCase()
+const binNames = new Map()
+function binName(t) {
+  const key = String(t)
+  let name = binNames.get(key)
+  if (name === undefined) {
+    name = path.basename(key).replace(/\.(?:cmd|exe|ps1)$/i, '').toLowerCase()
+    if (binNames.size > 2000) binNames.clear()
+    binNames.set(key, name)
+  }
+  return name
+}
 
 // Leading NAME=value pairs, `export NAME=value`, `set NAME=value` and `$env:NAME = value`.
 function takeEnv(t, env) {
   let i = 0
   for (;;) {
+    const w = t[i] || ''
+    // a plain word (no =, no $) is neither an assignment nor $env:NAME
+    if (!w.includes('=') && !w.includes('$') && !(w.length <= 6 && /^(?:export|set|env)$/i.test(w))) return i
     if (/^(?:export|set|env)$/i.test(t[i]) && /^\w+=/.test(t[i + 1] || '')) i++
     const ps = /^\$env:(\w+)(?:=(.*))?$/i.exec(t[i] || '')
     if (ps) {
@@ -207,7 +223,7 @@ function commandStart(t, env) {
   let i = 0
   while (i < t.length) {
     const b = binName(t[i])
-    const kv = /^(\w+)=(.*)$/.exec(t[i])
+    const kv = t[i].includes('=') ? /^(\w+)=(.*)$/.exec(t[i]) : null
     if (kv) { env[kv[1].toUpperCase()] = kv[2]; i++ } else if (Object.hasOwn(WRAPPERS, b)) {
       const j = WRAPPERS[b](t, i)
       if (!(j > i)) break
@@ -262,11 +278,20 @@ function toolPort(tool, args, env) {
 
 const INFO_FLAGS = new Set(['--help', '-h', '--version'])
 
+// TOOLS by program name, in TOOLS order, so a word that is no server is dropped with one lookup.
+let toolsByBin
+function toolsFor(bin) {
+  if (!toolsByBin) {
+    toolsByBin = new Map()
+    for (const tool of TOOLS) for (const b of tool.bin) (toolsByBin.get(b) || toolsByBin.set(b, []).get(b)).push(tool)
+  }
+  return toolsByBin.get(bin) || []
+}
+
 function matchTool(t, env) {
   const bin = binName(t[0] || '')
   const sub = t[1] && !t[1].startsWith('-') ? t[1] : ''
-  for (const tool of TOOLS) {
-    if (!tool.bin.includes(bin)) continue
+  for (const tool of toolsFor(bin)) {
     if (tool.sub && !tool.sub.includes(sub)) continue
     if (tool.notSub && tool.notSub.includes(sub)) continue
     const args = t.slice(1)
@@ -341,6 +366,9 @@ function workspaceDir(dir, name, readFile) {
 
 const quote = a => (/[\s"]/.test(a) ? `'${a}'` : a)
 
+// t without its first n words; the same array when n is 0, which saves a copy per segment of a long pipeline.
+const dropFirst = (t, n) => (n ? t.slice(n) : t)
+
 // Returns null when no known dev server starts, otherwise { port, portArg, hint } where port
 // is null when it cannot be worked out and hint(n) shows how to start the same thing on port n.
 // ports lists every port the command publishes when there is more than one (docker run -p ...).
@@ -349,15 +377,15 @@ function detect(cmd, { cwd = process.cwd(), readFile = fs.readFileSync, depth = 
   let dir = cwd
   let unknown = null
   for (let t of commandsOf(cmd)) {
-    t = t.slice(takeEnv(t, env))
+    t = dropFirst(t, takeEnv(t, env))
     if (!t.length) continue
-    if (/^(?:cd|pushd|Set-Location|sl)$/i.test(t[0])) {
+    if (t[0].length <= 12 && /^(?:cd|pushd|Set-Location|sl)$/i.test(t[0])) {
       const to = t.slice(1).find(a => !/^[/-]d$/i.test(a) && a !== '--')
       if (to) dir = resolveDir(dir, to)
       continue
     }
     const skip = commandStart(t, env)
-    const rest = t.slice(skip)
+    const rest = dropFirst(t, skip)
     const hit = serverHit(t, skip, env) || containerHit(rest, dir, readFile) || scriptHit(t, skip, { dir, readFile, depth, env }) || envPortServer(rest, env)
     if (!hit) continue
     if (hit.port) return hit
@@ -367,7 +395,7 @@ function detect(cmd, { cwd = process.cwd(), readFile = fs.readFileSync, depth = 
 }
 
 function serverHit(t, skip, env) {
-  const hit = matchTool(t.slice(skip), env)
+  const hit = matchTool(dropFirst(t, skip), env)
   if (!hit) return null
   const { tool } = hit
   const flags = tool.flags || []
@@ -382,7 +410,7 @@ function serverHit(t, skip, env) {
 }
 
 function scriptHit(t, skip, { dir, readFile, depth, env }) {
-  const rest = t.slice(skip)
+  const rest = dropFirst(t, skip)
   const call = scriptCall(rest)
   if (!call) return null
   if (depth > 2) return null

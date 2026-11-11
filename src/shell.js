@@ -548,9 +548,10 @@ const REMOTE_HINT = /(?:^|[^\w-])(?:ssh|docker|podman|nerdctl|kubectl|oc|bulkhea
 
 // Every simple command the text runs, with wrappers taken off and shell wrappers opened.
 // Each item is { argv, words, remote, depth, sub }.
-function commands(src, mode = 'sh', depth = 0, out = []) {
+// lexed is the result of lex(src, mode) when the caller already has it, so a long text is read once.
+function commands(src, mode = 'sh', depth = 0, out = [], lexed = null) {
   src = String(src || '')
-  const { cmds, unterminated } = lex(src, mode)
+  const { cmds, unterminated } = lexed || lex(src, mode)
   collect(src, cmds, mode, depth, out)
   // A quote that never closes is a syntax error for the shell, which then runs nothing. Read it
   // once more without quotes so a stray apostrophe cannot hide a command.

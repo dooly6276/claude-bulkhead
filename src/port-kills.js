@@ -41,11 +41,11 @@ function knownVars(lexed) {
   const vars = new Map()
   for (const c of lexed) {
     if (c.sub) continue
-    const w = c.words.map(x => x.v)
-    const at = /^(?:export|declare|local|readonly)$/.test(w[0]) ? 1 : 0
-    const m = /^(\w+)=([\w.:/-]*)$/.exec(w[at] || '')
+    const first = c.words[0].v
+    const at = /^(?:export|declare|local|readonly)$/.test(first) ? 1 : 0
+    const m = c.words[at] && /^(\w+)=([\w.:/-]*)$/.exec(c.words[at].v)
     if (m) vars.set(m[1], [m[2]])
-    if (w[0] === 'for' && w[2] === 'in' && /^\w+$/.test(w[1])) vars.set(w[1], w.slice(3).filter(x => !/[$`]/.test(x)))
+    if (first === 'for' && c.words.length > 2 && c.words[2].v === 'in' && /^\w+$/.test(c.words[1].v)) vars.set(c.words[1].v, c.words.slice(3).map(x => x.v).filter(x => !/[$`]/.test(x)))
   }
   return vars
 }
@@ -126,6 +126,8 @@ const fkillPorts = (args, vars) => args.flatMap(a => expand(a, vars)).map(a => /
 
 // What one statement (a pipeline, a $( ), a loop) says: the ports it kills outright (fuser -k,
 // kill-port, fkill), the ports it looks up, and whether it kills a PID.
+const NO_ARGS = Object.freeze([])
+
 function statementPorts(list, vars) {
   const direct = []
   const explicit = []
@@ -134,7 +136,7 @@ function statementPorts(list, vars) {
   let kills = false
   for (const argv of list) {
     const b = shell.bin(argv[0])
-    const args = argv.slice(1)
+    const args = argv.length > 1 ? argv.slice(1) : NO_ARGS
     const at = PORT_KILLERS.test(b) ? 0 : argv.findIndex((a, i) => i > 0 && i < 6 && PORT_KILLERS.test(shell.bin(a)))
     if (b === 'lsof') { lookup = true; explicit.push(...lsofPorts(args, vars)) } else if (b === 'netstat' || b === 'ss') { lookup = true; explicit.push(...socketPorts(args, vars)) } else if (GREPS.has(b)) patterns.push(...patternPorts(args, vars))
     else if (b === 'fuser') direct.push(...fuserPorts(args, vars))
@@ -149,10 +151,11 @@ function statementPorts(list, vars) {
 }
 
 function shellKillPorts(text) {
-  const lexed = shell.lex(text).cmds
+  const read = shell.lex(text)
+  const lexed = read.cmds
   const vars = knownVars(lexed)
   const segs = new Map()
-  for (const c of shell.commands(text)) {
+  for (const c of shell.commands(text, 'sh', 0, [], read)) {
     if (!segs.has(c.seg)) segs.set(c.seg, [])
     segs.get(c.seg).push(c.argv)
   }
