@@ -7,7 +7,8 @@ const USAGE = `usage:
                                         what the guards blocked
   bulkhead scan [--since 30d] [--project TEXT] [-n N] [--json]
                                         replay your Claude Code transcripts against the guards
-  bulkhead doctor [--json] [--no-remote] check the install, settings and this machine
+  bulkhead scan --share [--markdown]    paste-ready summary of those numbers, counts only
+  bulkhead doctor [--json] [--no-remote] check the install, enforcement and this machine
   bulkhead config [--json]              effective settings and where each one came from
   bulkhead port [--near PORT] [--json]  a port no process is listening on
   bulkhead worktree add|list|prune     one-step worktrees: env files, install, stable port, safe cleanup

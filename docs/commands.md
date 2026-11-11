@@ -85,32 +85,55 @@ RECENT BLOCKS
 
 ```
 bulkhead scan [--since 30d|DATE] [--path DIR|FILE] [--project TEXT] [-n N] [--json]
+bulkhead scan [30d] --share [--markdown]
+bulkhead scan [30d] --explain N
 ```
 
 Reads the transcripts Claude Code keeps in `~/.claude/projects` (subagent transcripts included), takes every Bash and PowerShell command your sessions ran, and replays each one against the guards. It is the quickest way to see whether bulkhead is worth installing: it answers "how often did my sessions already do this?" with your own history. It only reads; nothing is written and nothing leaves the machine.
 
 ```
 $ bulkhead scan --since 30d
-bulkhead scan  replaying your Claude Code sessions against the guards
-  read     1,396 transcripts (6.4 GB), 165 sessions, 90,855 shell commands in 31.7s
-  span     Oct 27 .. Nov 08  (since 30d)
-  overlap  up to 11 sessions running at once (Nov 01), 11 days with two or more at once
+bulkhead scan  what your past Claude Code sessions would have run into
+Found 1,203 shell commands in 211 of your 437 sessions that bulkhead would have stopped.
+Most common: 338 foreground sleeps and polling loops past the wait limit; 55 checkout/merge/rebase/stash in a tree another session was using.
+Up to 11 Claude Code sessions ran at the same time (Nov 01); on 11 days two or more did.
+  read 1,396 transcripts (6.4 GB), 90,855 shell commands in 31.7s, Oct 27 .. Nov 08 (since 30d)
 
 GUARD           RULE                HITS  SESSIONS  STOPPED  LAST
 wait-guard      poll-loop            338        56      337  Nov 08
 checkout-guard  stage-all             19         8        1  Nov 07
 checkout-guard  git-checkout          16         5        -  Nov 01
 ...
+STOPPED: hits a hook already stopped or you declined, as the transcript recorded them. "-" means none recorded: the command ran.
+
+checkout-guard  stage-all  19 times in 8 sessions  another session was active in the same tree at that minute
+  $ ...; [git add -A uploads/drafts uploads/done] && git commit -q -m "wip"  ~/src/acme-web  Nov 07  #4
 ```
 
+- The first three lines say what was found in plain words. Under the table, `-` in **STOPPED** means none recorded: transcripts only show a stop when a hook printed an error or you declined, so a `-` row is a command that ran. When at least half of a rule's hits were already stopped by your own hooks, one line says so, because bulkhead would add less there than the count suggests.
 - **HITS** is the number of commands with the shape a guard blocks; **SESSIONS** how many sessions ran them; **STOPPED** how many were already stopped by a PreToolUse hook (any hook, not only bulkhead) or declined by you in the permission prompt.
-- Under the table, each rule shows its newest examples (`-n`, default 3, `-n 0` for none) with the project and day. Secret-looking values (tokens, `-u user:pass`, `*_KEY=`, `Bearer ...`, URLs with a password) are masked before printing.
+- Under the table, each rule shows its newest examples (`-n`, default 3, `-n 0` for none) with the project and day, numbered `#1`, `#2`, and so on. Long commands are cut around the part that matched, which is shown in `[brackets]` (bold in a terminal). Secret-looking values (tokens, `-u user:pass`, `*_KEY=`, `Bearer ...`, URLs with a password) are masked before printing.
 - **overlap** is the most sessions running at the same time. A session counts as running between two of its events when they are at most 10 minutes apart.
 - **What is replayed:** kill-guard, wait-guard (with each call's own timeout; background calls skipped), disk-guard, basics except `discard-changes`, memory-guard's slot-file rule, and checkout-guard. checkout-guard needs to know which sessions were live at that moment, so scan rebuilds it from the transcripts: another session counts as live when it had activity within 10 minutes of the command in the same git tree, and for `git add -A` it assumes that session had edits there.
 - **What is not replayed:** port-guard and memory-guard's low-RAM check depend on which ports and how much RAM were in use at that moment, which transcripts do not record.
 - A hit means the command had the shape a guard blocks, not that damage was done.
 
-`--since` takes `24h`, `7d`, `2w` or a date, and the same value can be given without the flag (`bulkhead scan 30d`). `--project acme` keeps sessions whose folder contains `acme`. `--path` reads another folder or a single `.jsonl`. `--json` prints every rule with its counts and up to five masked examples. On a 2026 MacBook Pro it replays about 140 MB of transcripts a second, so a few GB take under a minute; it shows progress when it runs longer than 3 seconds in a terminal.
+`--since` takes `24h`, `7d`, `2w` or a date, and the same value can be given without the flag (`bulkhead scan 30d`). `--project acme` keeps sessions whose folder contains `acme`. `--path` reads another folder or a single `.jsonl`. `--json` prints every rule with its counts and up to five masked examples.
+
+**`--share`** prints 5 to 8 lines you can paste into a post, an issue or a chat: how many days, sessions and the most at once, and how many commands the guards would have stopped, grouped in plain words. It carries counts only, never a project path, command text or secret, and comes from the same numbers as the report above. `--share --markdown` prints the same as a small table.
+
+```
+$ bulkhead scan 14d --share
+bulkhead scan, 14 days, 437 sessions, up to 18 at once.
+It would have stopped 200 commands in 60 sessions:
+  90 foreground sleeps and polling loops past the wait limit
+  55 checkout/merge/rebase/stash in a tree another session was using
+  29 git add -A while another session was active in the same tree
+  11 other risky commands (4 kinds)
+(bulkhead scan, github.com/dooly6276/claude-bulkhead)
+```
+
+**`--explain N`** shows example `#N` from the report in full: the whole command (masked), the part that matched, the rule, what the rule means, and a link to the guard's page. The match is found from the rule's name, so for an unusual command it can be the whole command. Use the same `-n` you used for the report. On a 2026 MacBook Pro it replays about 140 MB of transcripts a second, so a few GB take under a minute; it shows progress when it runs longer than 3 seconds in a terminal.
 
 Claude Code deletes transcripts older than `cleanupPeriodDays` (30 by default), so scan sees at most that much history.
 
@@ -198,7 +221,7 @@ Writing an event is one `stat` and one append, only on the block path, and never
 bulkhead doctor [--json] [--no-remote]
 ```
 
-Runs every check and prints one line each, `OK`, `WARN` or `FAIL`. The exit code is 1 when any check fails. When remotes are configured, it also connects to each one; `--no-remote` skips that.
+Runs every check and prints one line each, `OK`, `WARN` or `FAIL`. The exit code is 1 when any check fails, the Enforcement checks below included. When remotes are configured, it also connects to each one; `--no-remote` skips that.
 
 | Check | FAIL or WARN when |
 |---|---|
@@ -207,9 +230,8 @@ Runs every check and prints one line each, `OK`, `WARN` or `FAIL`. The exit code
 | `state dir` | FAIL when the state directory cannot be written; slots and the event log need it |
 | `config` | WARN for each config problem: invalid JSON, an unknown key, a value of the wrong type |
 | one line per guard | Says `on` or `off` and why (`env BULKHEAD_DISABLE`, or the config file that turned it off), plus its main setting. WARN when orphan-reaper is on for a platform it does not support |
-| `hook run` | FAIL when kill-guard, started the way Claude Code starts it, does not block a test command. Shows how long it took |
-| `processes` | FAIL when the process reader fails (no PowerShell, no `/proc`, no `ps`). WARN above 8 seconds. Shows the process, port and session counts and the time taken |
-| `sessions` | WARN when `~/.claude/sessions` does not exist |
+| `processes` | FAIL when the process reader fails (no PowerShell, no `/proc`, no `ps`). WARN above 8 seconds. Shows the process, port and session counts and the time taken. Sessions are found from the process list; the line says how many of them have a session file |
+| `sessions` | WARN when `~/.claude/sessions` does not exist. Shows how many session files there are; a running session without one is still counted by `processes`, but checkout-guard cannot tell which folder it works in |
 | `memory` | WARN when free RAM is below the memory-guard minimum right now. Shows the limits computed for this machine |
 | `slots` | WARN when a slot's owner has died; the next `bulkhead-slot run` reclaims it |
 | `event log` | Shows its size and event count, or that it is off and why |
@@ -230,16 +252,41 @@ OK    checkout-guard  on
 OK    disk-guard      on
 OK    basics          on, protected branches: main, master
 OK    orphan-reaper   on, at session start and after each session ends
-OK    hook run        kill-guard blocked a test command in 90 ms
-OK    processes       356 processes, 21 listening ports, 8 Claude sessions in 2.4s
-OK    sessions        ~/.claude/sessions (8 session files)
+OK    processes       356 processes, 21 listening ports, 8 Claude sessions (8 with a session file) in 2.4s
+OK    sessions        ~/.claude/sessions (8 session files; a running session without one is still found from the process list, but checkout-guard cannot tell which folder it works in)
 OK    memory          12.2 of 31.8 GB free, commit 43%, memory-guard blocks heavy commands below 3 GB, bulkhead-slot keeps 5 GB free for a second job, and waits while commit is above 75%
 OK    slots           none held
 OK    event log       ~/.claude/bulkhead/events.jsonl, empty so far
 OK    git             2.52.0.windows.1
 
-19 OK, 0 WARN, 0 FAIL
+
+Enforcement
+OK    install          bulkhead@bulkhead 0.2.2 at ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.2, enabled in user settings
+OK    hooks on         no disableAllHooks or allowManagedHooksOnly in user, project, local or managed settings
+OK    hooks.json       installed copy: 7 PreToolUse hooks, all synchronous
+OK    hook node        /usr/local/bin/node v24.11.0
+OK    hook kill-guard  blocked "pkill node" (exit 2, message shown to Claude) in 52 ms
+OK    hook wait-guard  blocked "sleep 100000" (exit 2, message shown to Claude) in 49 ms
+OK    hook disk-guard  blocked "du -sh /" (exit 2, message shown to Claude) in 50 ms
+OK    hook basics      blocked "rm -rf /" (exit 2, message shown to Claude) in 51 ms
+
+26 OK, 0 WARN, 0 FAIL
 ```
+
+### Enforcement
+
+A hook that is listed in Claude Code can still fail to block. This section proves the guards block, using only your files and canary commands that are never executed; no live session is needed.
+
+| Check | What it does, and when it is WARN or FAIL |
+|---|---|
+| `install` | Finds how the plugin reaches Claude Code for this config folder (`CLAUDE_CONFIG_DIR` or `~/.claude`): `plugins/installed_plugins.json`, `enabledPlugins` in user, project (`.claude/settings.json`) and local (`.claude/settings.local.json`) settings, and the marketplace. WARN `not installed in Claude Code; run /plugin install bulkhead@bulkhead` when there is no entry (running from an npx cache does not install the hooks). FAIL when it is turned off, or the installed folder has no `hooks/hooks.json` |
+| `duplicates` | WARN when bulkhead hooks are also written into a settings file by hand, or two installed copies exist, so each guard runs twice per call |
+| `hooks on`, `hooks off`, `managed hooks` | FAIL when `disableAllHooks` is `true` after settings precedence (a project `false` overrides a user `true`), when managed settings turn the plugin off, or when `allowManagedHooksOnly` is on and the plugin is not force-enabled in managed `enabledPlugins`. The managed file is read from `/Library/Application Support/ClaudeCode/`, `/etc/claude-code/` or `C:\Program Files\ClaudeCode\`. Each message links the documented setting |
+| `hooks.json` | Reads `hooks/hooks.json` from the installed copy, the one Claude Code runs. FAIL when it is missing or a PreToolUse hook is `async` (the hooks reference says an async hook cannot block) |
+| `hook node` | FAIL when `node` is not on the `PATH` a hook gets, or is older than 18. With no node every hook fails to start, and Claude Code lets the call through |
+| `hook <guard>` | Runs the installed hook command as `hooks.json` declares it: exec form (`command` plus `args`, no shell) or shell form, the same `${CLAUDE_PLUGIN_ROOT}` substitution, the same `timeout`, and a synthetic PreToolUse payload for a canary command (`pkill node`, `sleep 100000` with a 1 hour tool timeout, `du -sh /`, `rm -rf /`). It must exit 2 with the guard's message on stderr. FAIL when it exits 0, blocks without a message, cannot start, or times out (a PreToolUse hook that times out does not block the call). The time shown is the measured hook latency, node start included. Guards you turned off in config are skipped |
+
+What the checks rely on: PreToolUse exit code 2 blocks the call and shows stderr to Claude, a timed-out or failed-to-start command hook does not block unless `onFailure: "block"` is set, and an `async` hook cannot block ([hooks reference](https://code.claude.com/docs/en/hooks)); `disableAllHooks`, `allowManagedHooksOnly` and `enabledPlugins` behave as in the [settings reference](https://code.claude.com/docs/en/settings-reference). The checks use the `PATH` of the shell that runs `bulkhead doctor`; a desktop app or IDE can start Claude Code with a different `PATH`.
 
 ## bulkhead config
 

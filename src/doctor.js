@@ -12,6 +12,7 @@ const { readSessionFiles, findSessions, claudeDir } = require('./sessions')
 const { limits, readSlots, slotDir, staleReason } = require('./slots')
 const { useColor, paint, shortPath, bytes, rejectArgs } = require('./cli-util')
 const remote = require('./remote')
+const { checkEnforcement } = require('./doctor-enforcement')
 
 const ROOT = path.resolve(__dirname, '..')
 const SMALL_MACHINE_GB = 24
@@ -125,14 +126,16 @@ function checkProcesses({ read = () => readProcesses(), files = () => readSessio
   }
   const ms = now() - t0
   if (!snap) return warn('processes', `no process reader for ${platform}; port-guard, top and status see no sessions`)
-  const sessions = findSessions(snap, files())
-  const text = `${snap.procs.length} processes, ${snap.ports.length} listening ports, ${sessions.length} Claude session${sessions.length === 1 ? '' : 's'} in ${(ms / 1000).toFixed(1)}s`
+  const known = files()
+  const sessions = findSessions(snap, known)
+  const withFile = sessions.filter(s => known.has(s.pid)).length
+  const text = `${snap.procs.length} processes, ${snap.ports.length} listening ports, ${sessions.length} Claude session${sessions.length === 1 ? '' : 's'} (${withFile} with a session file) in ${(ms / 1000).toFixed(1)}s`
   return ms > 8000 ? warn('processes', `${text}; slow, so port-guard may hit its 20s timeout on a busy machine`) : ok('processes', text)
 }
 
 function checkSessionsDir(dir = path.join(claudeDir(), 'sessions')) {
   return fs.existsSync(dir)
-    ? ok('sessions', `${shortPath(dir)} (${readSessionFiles(dir).size} session files)`)
+    ? ok('sessions', `${shortPath(dir)} (${readSessionFiles(dir).size} session files; a running session without one is still found from the process list, but checkout-guard cannot tell which folder it works in)`)
     : warn('sessions', `${shortPath(dir)} does not exist; checkout-guard cannot see other sessions and project names show as ?`)
 }
 
@@ -218,13 +221,13 @@ function runAll({ remotes = true } = {}) {
     checkStateDir(),
     ...checkConfig(cfg),
     ...checkGuards(cfg),
-    checkHookRun(),
     checkProcesses(),
     checkSessionsDir(),
     checkMemory(),
     checkSlots(),
     checkLog(cfg),
     checkGit(),
+    ...checkEnforcement({ cfg }),
     ...(remotes ? checkRemotes(cfg) : []),
   ]
 }
@@ -232,7 +235,13 @@ function runAll({ remotes = true } = {}) {
 function render(checks, { color = false } = {}) {
   const style = { OK: 'green', WARN: 'yellow', FAIL: 'red' }
   const width = Math.max(...checks.map(c => c.id.length))
-  const lines = checks.map(c => `${paint(color, style[c.status], c.status.padEnd(4))}  ${c.id.padEnd(width)}  ${c.summary}`)
+  const lines = []
+  let section = null
+  for (const c of checks) {
+    if (c.section && c.section !== section) lines.push('', paint(color, 'bold', c.section))
+    section = c.section || null
+    lines.push(`${paint(color, style[c.status], c.status.padEnd(4))}  ${c.id.padEnd(width)}  ${c.summary}`)
+  }
   const count = s => checks.filter(c => c.status === s).length
   lines.push('', `${count('OK')} OK, ${count('WARN')} WARN, ${count('FAIL')} FAIL`)
   return lines.join('\n')
