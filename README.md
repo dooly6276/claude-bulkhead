@@ -453,26 +453,40 @@ Checks Node, the plugin files, the state directory, the config files, each guard
 
 ```
 $ bulkhead doctor
-OK    node            v24.11.0
-OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.2, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
-OK    state dir       ~/.claude/bulkhead is writable
-OK    config          no config files, defaults in use
-OK    kill-guard      on
-OK    wait-guard      on, limit 180s
-OK    memory-guard    on
-OK    port-guard      on
-OK    checkout-guard  on
-OK    disk-guard      on
-OK    basics          on, protected branches: main, master
-OK    orphan-reaper   on, at session start and after each session ends
-OK    processes       356 processes, 21 listening ports, 8 Claude sessions (8 with a session file) in 2.4s
-OK    sessions        ~/.claude/sessions (8 session files)
-OK    memory          12.2 of 31.8 GB free, commit 43%, memory-guard blocks heavy commands below 3 GB, bulkhead-slot keeps 5 GB free for a second job, and waits while commit is above 75%
-OK    slots           none held
-OK    event log       ~/.claude/bulkhead/events.jsonl, empty so far
-OK    git             2.52.0.windows.1
+OK    node             v24.22.1
+OK    package          this copy ~/.claude/plugins/cache/bulkhead/bulkhead/0.3.0, hooks: 3 SessionStart, 2 SessionEnd, 1 UserPromptSubmit, 1 Stop, 1 Notification, 2 PostToolUse, 1 PostToolUseFailure, 4 PreToolUse
+OK    state dir        ~/.claude/bulkhead is writable
+OK    config           no config files, defaults in use
+OK    preset           normal (default)
+OK    kill-guard       on
+OK    wait-guard       on, limit 180s
+OK    memory-guard     on
+OK    port-guard       on
+OK    checkout-guard   on
+OK    disk-guard       on
+OK    basics           on, protected branches: main, master
+OK    edit-guard       on
+OK    secrets-guard    off (default)
+OK    orphan-reaper    on, at session start and after each session ends
+OK    session-state    on
+OK    processes        589 processes, 11 listening ports, 10 Claude sessions (10 with a session file) in 0.2s
+OK    sessions         ~/.claude/sessions (10 session files; a running session without one is still found from the process list, but checkout-guard cannot tell which folder it works in)
+OK    memory           28.3 of 48.0 GB free, memory-guard blocks heavy commands below 3 GB, bulkhead-slot keeps 5 GB free for a second job
+OK    slots            none held
+OK    event log        ~/.claude/bulkhead/events.jsonl, 2 events, 254 B (rotates at 1 MB)
+OK    git              2.56.0
 
-19 OK, 0 WARN, 0 FAIL
+Enforcement
+OK    install          bulkhead@bulkhead 0.3.0 at ~/.claude/plugins/cache/bulkhead/bulkhead/0.3.0, enabled in user settings
+OK    hooks on         no disableAllHooks or allowManagedHooksOnly in user, project, local or managed settings
+OK    hooks.json       installed copy: 4 PreToolUse hooks, all synchronous
+OK    hook node        /opt/homebrew/bin/node v24.22.1
+OK    hook kill-guard  blocked "pkill node" (exit 2, message shown to Claude) in 71 ms
+OK    hook wait-guard  blocked "sleep 100000" (exit 2, message shown to Claude) in 64 ms
+OK    hook disk-guard  blocked "du -sh /" (exit 2, message shown to Claude) in 70 ms
+OK    hook basics      blocked "rm -rf /" (exit 2, message shown to Claude) in 63 ms
+
+30 OK, 0 WARN, 0 FAIL
 ```
 
 ### bulkhead port
