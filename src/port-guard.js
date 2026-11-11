@@ -41,7 +41,13 @@ function listening(port, timeoutMs = 300) {
 }
 
 // Resolves to a block message, or null. Anything we cannot pin down is allowed.
-async function check(cmd, {
+async function check(cmd, opts) {
+  const hit = await inspect(cmd, opts)
+  return hit ? hit.message : null
+}
+
+// The same decision with its evidence: { rule, message, port, pid, name, owner: { pid, cwd } }.
+async function inspect(cmd, {
   cwd, probe = listening, snapshot = () => readProcesses(), files = () => readSessionFiles(), self = ownSession, ignore = setting('portGuard.ignorePorts', []), mode = 'sh',
 } = {}) {
   const server = detect(opened(cmd, mode), { cwd })
@@ -59,11 +65,12 @@ async function check(cmd, {
   const taken = new Set(snap.ports.map(l => l.port))
   const stable = preferredPort(cwd, taken)
   const free = stable || freePort(server.port, taken)
-  return `[bulkhead] port-guard: port ${server.port} is already used by another Claude session ` +
+  const message = `[bulkhead] port-guard: port ${server.port} is already used by another Claude session ` +
     `(${describeSession(owner)}): ${name} pid ${holder.pid}.\n` +
     'Leave that server alone; it is the other session\'s work. If you start yours anyway, it either fails or moves to the ' +
     `next port, and requests to localhost:${server.port} reach the other project.\n` +
     (free ? `Port ${free} is free${stable ? ' (this worktree\'s own port)' : ''}:\n  ${server.hint(free)}` : `Pick a free port and pass it explicitly; \`bulkhead port --near ${server.port}\` prints one.`)
+  return { rule: 'port-in-use', message, port: server.port, pid: holder.pid, name, owner: { pid: owner.pid, cwd: owner.cwd } }
 }
 
 const numbers = s => (String(s).match(/\d+/g) || []).map(Number).filter(n => n > 0 && n < 65536)
@@ -123,7 +130,11 @@ async function checkKill(cmd, {
       const name = (snap.procs.find(p => p.pid === holder.pid) || {}).name || 'a process'
       const free = freePort(port, new Set(snap.ports.map(l => l.port)))
       return {
+        rule: 'kill-by-port',
         port,
+        pid: holder.pid,
+        name,
+        owner: { pid: owner.pid, cwd: owner.cwd },
         message: `[bulkhead] port-guard: \`${oneLine(cmd, 120)}\` would stop ${name} pid ${holder.pid}, the server another Claude session ` +
           `runs on port ${port} (${describeSession(owner)}).\n` +
           'That server is the other session\'s work. Stopping it breaks whatever that session is running or testing.\n' +
@@ -141,11 +152,11 @@ if (require.main === module) {
     const cmd = input.tool_input && input.tool_input.command
     if (typeof cmd !== 'string' || !cmd) return
     const mode = shell.modeFor(input)
-    const why = await check(cmd, { cwd: input.cwd, mode })
-    if (why) return blocked('port-guard', 'port-in-use', input, why)
+    const why = await inspect(cmd, { cwd: input.cwd, mode })
+    if (why) return blocked('port-guard', why.rule, input, why.message)
     const kill = await checkKill(cmd, { mode })
     if (kill) return blocked('port-guard', 'kill-by-port', input, kill.message)
   })
 }
 
-module.exports = { check, checkKill, killPorts, freePort, listening }
+module.exports = { check, inspect, checkKill, killPorts, freePort, listening }

@@ -7,7 +7,7 @@ const shell = require('./shell')
 const { realPath } = require('./paths')
 
 // Narrow rules for mistakes that cannot be undone. Each can be turned off on its own:
-// rm-root, force-push-main, discard-changes, agent-author.
+// rm-root, force-push-main, discard-changes, agent-author, self-allow.
 
 // ~, $HOME and %USERPROFILE% become the home directory; /c/... becomes C:/... on Windows.
 // Returns null for anything with a variable we cannot expand.
@@ -165,6 +165,10 @@ function check(cmd, {
   const forcePush = once(() => enabled('force-push-main'))
   const discard = once(() => enabled('discard-changes'))
   const author = once(() => enabled('agent-author'))
+  if (/allow/i.test(String(cmd || '')) && enabled('self-allow')) {
+    const self = require('./self-allow').check(cmd, { mode })
+    if (self) return self
+  }
   const prepared = shell.prepare(String(cmd || ''), mode)
   const cmds = shell.commands(prepared, mode).filter(x => !x.remote)
   if (author() && /GIT_(?:AUTHOR|COMMITTER)_/i.test(prepared)) {
@@ -222,11 +226,12 @@ if (require.main === module) {
     const cmd = input.tool_input && input.tool_input.command
     const why = typeof cmd === 'string' && cmd && check(cmd, { cwd: input.cwd || process.cwd(), mode: shell.modeFor(input) })
     if (!why) return
-    return blocked('basics', ruleOf(why), input, `${why}\n${ASK_USER}`)
+    return blocked('basics', ruleOf(why), input, ruleOf(why) === 'self-allow' ? why : `${why}\n${ASK_USER}`)
   })
 }
 
 function ruleOf(message) {
+  if (/cannot approve its own blocks/.test(message)) return 'self-allow'
   if (/makes the agent the author/.test(message)) return 'agent-author'
   if (/force-pushing/.test(message)) return 'force-push-main'
   if (/would throw away/.test(message)) return 'discard-changes'

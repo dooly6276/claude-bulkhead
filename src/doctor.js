@@ -70,12 +70,13 @@ function checkConfig(cfg) {
   const out = []
   if (!cfg.warnings.length) out.push(ok('config', files.length ? `loaded ${files.map(f => shortPath(f)).join(', ')}` : 'no config files, defaults in use'))
   for (const w of cfg.warnings) out.push(warn('config', w.replace(/^(\S+)/, m => shortPath(m))))
+  out.push(ok('preset', `${cfg.preset} (${why(cfg.presetFrom)})`))
   return out
 }
 
 function why(source) {
   if (source === 'default') return 'default'
-  if (source.startsWith('env ')) return source
+  if (source.startsWith('env ') || source.startsWith('preset ')) return source
   return shortPath(source)
 }
 

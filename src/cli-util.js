@@ -27,6 +27,18 @@ function option(args, name) {
   return undefined
 }
 
+// A number option, `--name N` or `--name=N`: { value } (the fallback when the option is absent)
+// or { error } with the message to print. Values at or below `min` are refused unless `inclusive`.
+function numberOption(args, name, { fallback, min = 0, inclusive = false, max = Infinity, tooBig } = {}) {
+  const raw = option(args, name)
+  if (raw === undefined) return { value: fallback }
+  const n = raw === true || String(raw).trim() === '' ? NaN : Number(raw)
+  if (!Number.isFinite(n)) return { error: `--${name} needs a number, got ${raw === true ? 'nothing' : raw}` }
+  if (n < min || (n === min && !inclusive)) return { error: `--${name} must be ${inclusive ? 'at least' : 'above'} ${min}, got ${raw}` }
+  if (n > max) return { error: tooBig ? tooBig(n) : `--${name} must be at most ${max}, got ${raw}` }
+  return { value: n }
+}
+
 // Cut to `width` visible characters, ending in … when anything was dropped.
 function fit(s, width) {
   s = String(s == null ? '' : s)
@@ -76,4 +88,4 @@ function rejectArgs(cmd, args, spec, stderr, usage) {
   return true
 }
 
-module.exports = { unknownArg, rejectArgs, useColor, paint, shortPath, option, fit, table, bytes }
+module.exports = { unknownArg, rejectArgs, useColor, paint, shortPath, option, numberOption, fit, table, bytes }

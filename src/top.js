@@ -5,7 +5,7 @@ const { stateDir } = require('./hook')
 const { tailEvents } = require('./events')
 const { limits } = require('./slots')
 const { size, when } = require('./status')
-const { useColor, paint, option, fit, rejectArgs } = require('./cli-util')
+const { useColor, paint, fit, rejectArgs, numberOption } = require('./cli-util')
 const { homeShort, fitPath, stateLabel, needsUserFirst, branchLabel, mcpLine } = require('./session-info')
 
 const shortPath = (p, home) => homeShort(p, home) || '(unknown)'
@@ -313,9 +313,14 @@ function snapshot({ stdout = process.stdout, env = process.env } = {}) {
 function main(args, { stdin = process.stdin, stdout = process.stdout, env = process.env } = {}) {
   if (args.includes('--help') || args.includes('-h')) return stdout.write(USAGE + '\n')
   if (rejectArgs('top', args, { flags: ['once'], valued: ['interval'] }, process.stderr, USAGE)) return
+  const every = numberOption(args, 'interval', { min: 0.5, inclusive: true })
+  if (every.error) {
+    process.stderr.write(`bulkhead top: ${every.error}\n`)
+    process.exitCode = 1
+    return
+  }
   if (args.includes('--once') || !stdout.isTTY || !stdin.isTTY) return snapshot({ stdout, env })
-  const sec = Number(option(args, 'interval'))
-  const interval = sec >= 0.5 ? sec * 1000 : defaultInterval()
+  const interval = every.value ? every.value * 1000 : defaultInterval()
   return live({ stdin, stdout, env, interval }).then(() => process.exit(0))
 }
 

@@ -1,7 +1,7 @@
 'use strict'
 const { stateDir } = require('./hook')
 const { readEvents, eventsFile } = require('./events')
-const { useColor, paint, shortPath, option, fit, table, rejectArgs } = require('./cli-util')
+const { useColor, paint, shortPath, option, numberOption, fit, table, rejectArgs } = require('./cli-util')
 
 const USAGE = `usage: bulkhead log [-n N] [--since 7d|24h|30m] [--guard NAME] [--summary] [--json]
 
@@ -114,19 +114,22 @@ function main(args, { env = process.env, stdout = process.stdout, stderr = proce
   const sinceArg = option(args, 'since')
   let since = null
   if (sinceArg !== undefined && sinceArg !== '') {
-    since = parseSince(sinceArg, now)
+    since = sinceArg === true ? NaN : parseSince(sinceArg, now)
     if (!Number.isFinite(since)) {
-      stderr.write(`bulkhead log: cannot read --since ${sinceArg}; use 30m, 24h, 7d, 2w or a date like 2026-10-01\n`)
+      stderr.write(`bulkhead log: ${sinceArg === true ? '--since needs a value' : `cannot read --since ${sinceArg}`}; use 30m, 24h, 7d, 2w or a date like 2026-10-01\n`)
       process.exitCode = 1
       return
     }
   }
   const guard = option(args, 'guard')
-  const nArg = (() => {
-    const i = args.indexOf('-n')
-    return i >= 0 ? args[i + 1] : option(args, 'limit')
-  })()
-  const n = Number(nArg) > 0 ? Math.floor(Number(nArg)) : 20
+  const i = args.indexOf('-n')
+  const count = numberOption(i >= 0 ? ['--n', args[i + 1]] : args, i >= 0 ? 'n' : 'limit', { fallback: 20 })
+  if (count.error) {
+    stderr.write(`bulkhead log: ${count.error.replace('--n ', '-n ')}\n`)
+    process.exitCode = 1
+    return
+  }
+  const n = Math.max(1, Math.floor(count.value))
   const events = filter(readEvents(dir), { since, guard: typeof guard === 'string' ? guard : null })
   const json = args.includes('--json')
   const color = useColor(stdout, env)
