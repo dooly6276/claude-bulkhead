@@ -4,16 +4,22 @@ const os = require('os')
 const path = require('path')
 
 // On Windows the desktop app and the CLI are both claude.exe. The app's processes run from
-// ...\app\Claude.exe (or Claude.app on macOS) and its helpers carry --type=.
-const DESKTOP_APP = /[\\/]app[\\/]Claude\.exe|Claude\.app[\\/]Contents[\\/]MacOS[\\/]Claude(?:["\s]|$)/i
+// ...\app\Claude.exe (or Claude.app on macOS) and its helpers carry --type=. On macOS the
+// app's own Claude Code sessions run from .../claude-code/<x.y.z>/<hash>/claude.app/Contents/
+// MacOS/claude, so the macOS match is case-sensitive: Claude.app/.../Claude is the app,
+// claude.app/.../claude is the CLI. The app starts each one through Contents/Helpers/disclaimer,
+// whose command line names the CLI too; that wrapper is not a session.
+const DESKTOP_APP = /[\\/]app[\\/]Claude\.exe/i
+const DESKTOP_APP_MAC = /Claude\.app\/Contents\/(?:MacOS\/Claude(?:["\s]|$)|Helpers\/)/
+const BUNDLED_CLI_MAC = /\/claude\.app\/Contents\/MacOS\/claude(?:["\s]|$)/
 const PID_REUSE_SLACK_MS = 120 * 1000
 
 // The native installer runs versions/<x.y.z> through a `claude` link, so the process name can be
 // the version; the command line still starts with claude or names that folder.
 function isClaudeCli(p) {
   if (!p) return false
-  if (/--type=/.test(p.cmd) || DESKTOP_APP.test(p.cmd)) return false
-  if (/^claude(?:\.exe)?$/i.test(p.name)) return true
+  if (/--type=/.test(p.cmd) || DESKTOP_APP.test(p.cmd) || DESKTOP_APP_MAC.test(p.cmd)) return false
+  if (/^claude(?:\.exe)?$/i.test(p.name) || BUNDLED_CLI_MAC.test(p.cmd)) return true
   if (/^["']?(?:\S*[\\/])?claude(?:\.exe)?["']?(?:\s|$)|[\\/]claude[\\/]versions[\\/]/i.test(p.cmd)) return true
   return /^(?:node|bun)(?:\.exe)?$/i.test(p.name) && /claude-code[\\/]cli\.js|@anthropic-ai[\\/]claude-code/i.test(p.cmd)
 }

@@ -20,6 +20,12 @@ test('tells the CLI apart from the desktop app', () => {
   assert.ok(!isClaudeCli(proc(1, 0, 'claude.exe', app, 0)))
   assert.ok(!isClaudeCli(proc(1, 0, 'claude.exe', `${app} --type=renderer`, 0)))
   assert.ok(!isClaudeCli(proc(1, 0, 'Claude', '/Applications/Claude.app/Contents/MacOS/Claude', 0)))
+  // the macOS desktop app runs its Claude Code sessions from a bundled claude.app
+  const bundled = '/Users/dev/Library/Application Support/Claude/claude-code/2.1.321/ddbdf2b334e1/claude.app/Contents/MacOS/claude --output-format stream-json --verbose'
+  assert.ok(isClaudeCli(proc(1, 0, 'claude', bundled, 0)))
+  assert.ok(isClaudeCli(proc(1, 0, '', bundled, 0)))
+  assert.ok(!isClaudeCli(proc(1, 0, 'Claude', '/Applications/Claude.app/Contents/MacOS/Claude --some-flag', 0)))
+  assert.ok(!isClaudeCli(proc(1, 0, 'disclaimer', `/Applications/Claude.app/Contents/Helpers/disclaimer --pgroup -- ${bundled}`, 0)))
   assert.ok(!isClaudeCli(proc(1, 0, 'node', 'node server.js', 0)))
   // native installer: the process is named after its version
   assert.ok(isClaudeCli(proc(1, 0, '2.1.292', '/home/dev/.local/share/claude/versions/2.1.292 --resume', 0)))
