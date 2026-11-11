@@ -18,7 +18,7 @@ const PLENTY = { freeGb: 24, totalGb: 32, commitPct: 20 }
 const LOW = { freeGb: 0.8, totalGb: 32, commitPct: 20 }
 
 // Ports a dev server picks by default; in the "busy" fixture another session holds all of them.
-const BUSY_PORTS = [1313, 3000, 3001, 4000, 4173, 4200, 4321, 5000, 5173, 6006, 8000, 8080, 8081, 8787]
+const BUSY_PORTS = [1313, 3000, 3001, 4000, 4173, 4200, 4321, 5000, 5173, 6006, 8000, 8080, 8081, 8501, 8787, 8888, 9292]
 
 function realTemp(prefix) {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)))
