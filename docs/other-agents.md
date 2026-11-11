@@ -20,7 +20,7 @@ $ bulkhead setup codex
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/local/bin/node /home/me/.claude/plugins/cache/bulkhead/bulkhead/0.2.2/bin/bulkhead hook --agent codex",
+            "command": "/usr/local/bin/node /home/me/.claude/plugins/cache/bulkhead/bulkhead/0.3.0/bin/bulkhead hook --agent codex",
             "timeout": 30,
             "statusMessage": "bulkhead guards"
           }
