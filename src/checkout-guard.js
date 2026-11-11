@@ -97,6 +97,9 @@ const key = (p, platform) => {
   const n = real(p).replace(/\\/g, '/').replace(/\/+$/, '')
   return platform === 'win32' ? n.toLowerCase() : n
 }
+// Loaded only when a guard blocks.
+const describeSession = s => require('./session-info').describeSession(s)
+
 const inside = (child, parent) => child === parent || child.startsWith(parent + '/')
 
 // Other live sessions whose project directory is in the same working tree. A session started in
@@ -116,13 +119,6 @@ function sharers(top, sessionId, { files, isAlive, run, platform }) {
     out.push({ pid, ...f })
   }
   return out
-}
-
-function when(ms) {
-  if (!ms) return 'unknown time'
-  const d = new Date(ms)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ` +
-    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 // git worktree remove <path> and rm -rf <path>: the folders the command deletes.
@@ -206,7 +202,7 @@ function classify(cmd, {
         const [pid, f] = hit
         return {
           rule: 'remove-session-dir',
-          why: `[bulkhead] checkout-guard: \`${seg}\` removes ${r.dir}, and another Claude session works in it (pid ${pid}, started ${when(f.startedAt)}, in ${f.cwd}).\n` +
+          why: `[bulkhead] checkout-guard: \`${seg}\` removes ${r.dir}, and another Claude session works in it (${describeSession({ pid, cwd: f.cwd })}).\n` +
             'Its files, its dev server and its next commit would disappear under it.\n' +
             'Leave this folder to that session. If it is really finished, wait until it exits (`bulkhead status` lists the live sessions), then remove it.',
         }
@@ -228,7 +224,7 @@ function classify(cmd, {
     const others = sharers(top, sessionId, { files: liveOthers(), isAlive, run, platform })
     if (!others.length) continue
     const o = others[0]
-    const who = `another Claude session works in the same tree (pid ${o.pid}, started ${when(o.startedAt)}` +
+    const who = `another Claude session works in the same tree (${describeSession(o)}` +
       (others.length > 1 ? `, and ${others.length - 1} more` : '') + ')'
     if (what === 'stage-all') {
       let status = ''

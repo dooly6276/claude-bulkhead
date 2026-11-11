@@ -24,15 +24,15 @@ const view = { st, scanning: false, lastScanMs: 1400, interval: 4000, events, no
 const visible = s => s.replace(/\x1b\[[0-9;]*m/g, '')
 
 test('renders every section at a normal width', () => {
-  const lines = frame(view, { width: 110, height: 40, home: '/home/dev' })
+  const lines = frame(view, { width: 140, height: 40, home: '/home/dev' })
   const text = lines.join('\n')
   assert.match(lines[0], /^bulkhead top {2}14:30:05 +scan 1\.4s {2}every 4s {2}q quit {2}r refresh$/)
   assert.match(lines[1], /^RAM █+░+ {2}9\.9 GB free of 31\.8 GB {2}commit 68%$/)
-  assert.match(text, /SESSIONS 2\nPID +STARTED +PROJECT +RSS +PROCS +PORTS/)
-  assert.match(text, /18672 +Oct 12 17:49 +~\/src\/acme-web +1\.4 GB +█{10} +12 +:3000 :24678/)
+  assert.match(text, /SESSIONS 2\nPID +STATE +STARTED +PROJECT +BRANCH +RSS +PROCS +PORTS/)
+  assert.match(text, /18672 +- +Oct 12 17:49 +~\/src\/acme-web +- +1\.4 GB +█{10} +12 +:3000 :24678/)
   assert.match(text, /HEAVY JOBS {2}1 running, 1 waiting\nslot-1 +4 GB +30112 +6 min +npx playwright test\nwait #1 3 GB +30200 +2 min +npm run build {2}\(this machine/)
   assert.match(text, /RECENT BLOCKS\n\d\d:\d\d {2}kill-guard +taskkill-im +~\/src\/acme-web +taskkill \/F \/IM node\.exe/)
-  for (const l of lines) assert.ok(l.length <= 110, `too wide: ${l}`)
+  for (const l of lines) assert.ok(l.length <= 140, `too wide: ${l}`)
 })
 
 test('narrow terminals drop columns and truncate, never wrap', () => {
@@ -40,9 +40,10 @@ test('narrow terminals drop columns and truncate, never wrap', () => {
     const lines = frame(view, { width, height: 40, home: '/home/dev', color: true })
     for (const l of lines) assert.ok(visible(l).length <= Math.max(24, width), `width ${width}: ${visible(l)}`)
   }
-  assert.deepStrictEqual(layout(60).map(c => c.key), ['pid', 'started', 'project', 'rss', 'procs', 'ports'])
-  assert.deepStrictEqual(layout(45).map(c => c.key), ['pid', 'project', 'rss', 'procs', 'ports'])
-  assert.deepStrictEqual(layout(30).map(c => c.key), ['pid', 'project', 'rss'])
+  assert.deepStrictEqual(layout(140).map(c => c.key), ['pid', 'state', 'started', 'project', 'branch', 'rss', 'bar', 'procs', 'ports'])
+  assert.deepStrictEqual(layout(100).map(c => c.key), ['pid', 'state', 'project', 'branch', 'rss', 'procs', 'ports'])
+  assert.deepStrictEqual(layout(60).map(c => c.key), ['pid', 'state', 'project', 'rss'])
+  assert.deepStrictEqual(layout(30).map(c => c.key), ['pid', 'state', 'project'])
   assert.ok(frame(view, { width: 60, home: '/home/dev' }).join('\n').includes('…'))
 })
 

@@ -118,7 +118,7 @@ claude-bulkhead is a set of small hooks that block or clean up each of these. Ea
 | **[wait-guard](docs/guards/wait-guard.md)**<br>Blocks foreground sleep loops longer than 3 minutes, which make the next request rewrite the whole prompt cache. | **[orphan-reaper](docs/guards/orphan-reaper.md)**<br>When a session exits, stops the dev servers, test workers, watchers and headless browsers it left running. Keep one on purpose with `BULKHEAD_KEEP=1`; tunnels and databases are kept already. |
 | **[disk-guard](docs/guards/disk-guard.md)** <sup>new</sup><br>Blocks `du -sh ~`, `find /` without `-maxdepth`, and disk scans run in parallel, which stall the disk every session shares. | **[`bulkhead scan`](#do-you-need-it-ask-your-transcripts)** <sup>new</sup><br>Replays your past Claude Code transcripts against the guards: what they would have stopped, and how many sessions ran at once. |
 | **[basics](docs/guards/basics.md)**<br>Blocks `rm -rf` at a root, home or a folder directly in it, force-pushes to `main`, resets that would lose uncommitted work, and commits authored as Claude. | **[`bulkhead status`, `top`, `log`, `doctor`](#see-what-is-running)**<br>Shows every session, its RAM, its ports, queued jobs, and what the guards have blocked. |
-| **[Status line](#status-line)**<br>`3 sessions  2 heavy  9.1 GB free` in the Claude Code status line, in under 100 ms. | **[Config and slash commands](#configuration)**<br>Per-machine and per-project config with allow lists, plus `/bulkhead:scan`, `/bulkhead:status`, `/bulkhead:log`, `/bulkhead:doctor` and `/bulkhead:reap`. |
+| **[Status line](#status-line)**<br>`3 sessions  2 heavy  9.1 GB free` in the Claude Code status line, in about 100 ms. | **[Config and slash commands](#configuration)**<br>Per-machine and per-project config with allow lists, plus `/bulkhead:scan`, `/bulkhead:status`, `/bulkhead:log`, `/bulkhead:doctor` and `/bulkhead:reap`. |
 
 Optional: **[`bulkhead remote`](#run-heavy-jobs-on-another-machine-optional)** runs a test suite, a build or a browser run on another machine over SSH, when this one has no RAM to spare.
 
@@ -315,25 +315,25 @@ Environment variables still work and win over both files. The simplest place for
 
 ### bulkhead status
 
-Every Claude Code session on the machine, the memory its process tree uses, what it has listening on a port, the jobs held in bulkhead-slot and the ones waiting, and free RAM:
+Every Claude Code session on the machine: what it is doing (working, waiting for you, needs permission), its git branch and whether that is a worktree, the memory its process tree uses, what it has listening on a port, the jobs held in bulkhead-slot and the ones waiting, free RAM, and MCP servers that run as several copies across sessions:
 
 ```
 $ bulkhead status
-SESSION  STARTED       RSS     PROJECT
-18672    Oct 12 17:49  1.4 GB  ~/src/acme-web
-  :3000  node.exe  pid 24632
-21888    Oct 12 17:52  353 MB  ~/src/acme-web-auth
-26448    03:43         625 MB  ~/src/acme-web-checkout
-  :3001  node.exe  pid 31020
+SESSION  STATE                STARTED  RSS     BRANCH              PROJECT
+18672    working              09:52    1.4 GB  main                ~/src/acme-web
+  :3000  node  pid 24632
+21888    needs permission 4m  10:05    353 MB  feat/login (wt)     ~/src/acme-web-auth
+26448    waiting 3m           11:40    625 MB  feat/checkout (wt)  ~/src/acme-web-checkout
+  :3001  node  pid 31020
+duplicate MCP: 3 copies of @playwright/mcp, 1.2 GB (sessions 18672, 21888, 26448)
 
-SLOT    GB  PID    AGE    COMMAND
-slot-1  4   30112  6 min  npx playwright test
-
-WAITING  GB  PID    FOR    COMMAND
-#1       3   30200  2 min  npm run build
+SLOT    GB  PID    AGE     COMMAND
+slot-1  4   30112  12 min  npx playwright test
 
 9.9 GB free of 31.8 GB, commit 68%
 ```
+
+`bulkhead top` puts the sessions that need you first. `bulkhead port --stable` prints a port that belongs to the current git worktree and is the same every time. To get a desktop notification when a session starts waiting, set `notify.command` ([commands.md](docs/commands.md#session-state-and-notifications)).
 
 `bulkhead slot ...` is the same as `bulkhead-slot ...`.
 
@@ -442,7 +442,7 @@ would stop 30112  test-runner  node ~/src/acme-web/node_modules/vitest/dist/work
 3 sessions  2 heavy  9.1 GB free
 ```
 
-Sessions are the live entries in `~/.claude/sessions`, heavy is the number of jobs holding a bulkhead-slot, and free is the same measure memory-guard uses. It does not scan processes, takes under 100 ms, and caches the line for 5 seconds in the state directory.
+Sessions are the live entries in `~/.claude/sessions`, heavy is the number of jobs holding a bulkhead-slot, and free is the same measure memory-guard uses. When sessions are waiting for you, the line adds `2 waiting` after the session count. It does not list every process (one `ps` for the session pids only), takes about 100 ms from cold on a Mac with 650 processes, and caches the line for 5 seconds in the state directory, written through a temporary file so concurrent sessions never read half of it.
 
 A plugin cannot set the main status line (plugin settings only support `agent` and `subagentStatusLine`), so add it to `~/.claude/settings.json` yourself:
 
@@ -461,7 +461,7 @@ This needs `npm install -g claude-bulkhead`, which puts `bulkhead-statusline` on
 ## FAQ
 
 **Does it slow Claude Code down?**
-A little. Each guard is one short Node process. On a Windows 11 desktop with Node 24, `node scripts/bench-hooks.js 15` measured 40 to 49 ms per guard on an allowed command (median of 15 runs), and 33 ms for starting Node alone. Writing a block to the event log adds no measurable time. The guards only do slow work, such as reading the process list (a second or two on Windows), when the command matches: a dev server start on a port that already answers, a kill, a heavy command. The status line takes under 100 ms and is cached for 5 seconds.
+A little. Each guard is one short Node process. On a Windows 11 desktop with Node 24, `node scripts/bench-hooks.js 15` measured 40 to 49 ms per guard on an allowed command (median of 15 runs), and 33 ms for starting Node alone. Writing a block to the event log adds no measurable time. The guards only do slow work, such as reading the process list (a second or two on Windows), when the command matches: a dev server start on a port that already answers, a kill, a heavy command. The status line takes about 100 ms cold and is cached for 5 seconds.
 
 **It blocked something it should not have. What do I do?**
 Run `bulkhead log` to see the exact command and reason. Let it through in the project config, `<repo>/.claude/bulkhead.json`: `killGuard.allowNames` for a program name, `portGuard.ignorePorts` for a shared port, `waitGuard.limitSeconds` for a longer wait, or `"enabled": false` for the whole guard in that project. See [docs/configuration.md](docs/configuration.md). Then please open a [false positive issue](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml) with the line from `bulkhead log`, so the pattern can be fixed for everyone.

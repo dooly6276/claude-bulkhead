@@ -5,7 +5,10 @@ const { stateDir } = require('./hook')
 const { tailEvents } = require('./events')
 const { limits } = require('./slots')
 const { size, when } = require('./status')
-const { useColor, paint, shortPath, option, fit, rejectArgs } = require('./cli-util')
+const { useColor, paint, option, fit, rejectArgs } = require('./cli-util')
+const { homeShort, fitPath, stateLabel, needsUserFirst, branchLabel, mcpLine } = require('./session-info')
+
+const shortPath = (p, home) => homeShort(p, home) || '(unknown)'
 
 const USAGE = `usage: bulkhead top [--interval=SECONDS] [--once]
 
@@ -43,9 +46,11 @@ const cell = (s, width, right = false) => {
 // project column shrinks. Widths are fixed except the project and ports columns.
 const COLUMNS = [
   { key: 'pid', title: 'PID', width: 7 },
+  { key: 'state', title: 'STATE', width: 20 },
   { key: 'started', title: 'STARTED', width: 12, drop: 2 },
-  { key: 'project', title: 'PROJECT', width: 12, flex: true },
-  { key: 'rss', title: 'RSS', width: 7, right: true },
+  { key: 'project', title: 'PROJECT', width: 20, flex: true },
+  { key: 'branch', title: 'BRANCH', width: 18, drop: 5 },
+  { key: 'rss', title: 'RSS', width: 7, right: true, drop: 6 },
   { key: 'bar', title: '', width: 10, drop: 1 },
   { key: 'procs', title: 'PROCS', width: 5, right: true, drop: 4 },
   { key: 'ports', title: 'PORTS', width: 6, grow: 22, drop: 3 },
@@ -54,11 +59,14 @@ const COLUMNS = [
 function layout(width) {
   let cols = COLUMNS.slice()
   const total = cs => cs.reduce((n, c) => n + c.width, 0) + (cs.length - 1) * 2
-  for (const d of [1, 2, 3, 4]) {
+  for (const d of [1, 2, 3, 4, 5, 6]) {
     if (total(cols) <= width) break
     cols = cols.filter(c => c.drop !== d)
   }
   cols = cols.map(c => ({ ...c }))
+  // the state text shrinks (needs perm…) before the project column is squeezed out
+  const state = cols.find(c => c.key === 'state')
+  if (state && total(cols) > width) state.width = Math.max(7, state.width - (total(cols) - width))
   let spare = width - total(cols)
   const ports = cols.find(c => c.key === 'ports')
   if (ports && spare > 0) {
@@ -112,24 +120,28 @@ function frame(view, { width = 100, height = 40, color = false, home = os.homedi
   lines.push('')
 
   // sessions
-  const sessions = st.sessions
+  const sessions = needsUserFirst(st.sessions)
   const cols = layout(width)
-  lines.push(c('bold', fit(`SESSIONS ${sessions.length}`, width)))
+  const needy = sessions.filter(s => s.state === 'permission' || s.state === 'waiting').length
+  lines.push(c('bold', fit(`SESSIONS ${sessions.length}`, width)) + (needy && width >= 24 + 12 ? c('yellow', `  ${needy} waiting for you`) : ''))
   lines.push(c('dim', cols.map(col => cell(col.title, col.width, col.right)).join('  ').trimEnd()))
   const maxRss = Math.max(1, ...sessions.map(s => s.rss))
 
   // what has to fit below the session rows
   const slotRows = st.slots.length + (st.queue || []).length
   const events = view.events || []
-  const below = 2 + (slotRows ? slotRows + 1 : 1) + 2 + Math.max(1, events.length)
+  const dupes = (st.mcp || []).filter(g => g.duplicate)
+  const below = 2 + (slotRows ? slotRows + 1 : 1) + 2 + Math.max(1, events.length) + (dupes.length ? dupes.length + 2 : 0)
   const room = Math.max(1, height - lines.length - below)
   const shown = sessions.length > room ? sessions.slice(0, Math.max(0, room - 1)) : sessions
   for (const s of shown) {
     const parts = cols.map(col => {
       switch (col.key) {
         case 'pid': return cell(s.pid, col.width)
+        case 'state': return c(s.state === 'permission' ? 'red' : s.state === 'waiting' ? 'yellow' : s.state === 'working' ? 'green' : 'dim', cell(stateLabel(s, now), col.width))
         case 'started': return cell(when(s.start, now), col.width)
-        case 'project': return cell(shortPath(s.cwd, home), col.width)
+        case 'branch': return cell(branchLabel(s), col.width)
+        case 'project': return cell(fitPath(shortPath(s.cwd, home), col.width), col.width)
         case 'rss': return cell(size(s.rss), col.width, true)
         case 'bar': return c('cyan', meter(s.rss / maxRss, col.width))
         case 'procs': return cell(s.children == null ? '-' : s.children, col.width, true)
@@ -142,6 +154,11 @@ function frame(view, { width = 100, height = 40, color = false, home = os.homedi
   if (shown.length < sessions.length) lines.push(c('dim', fit(`... ${sessions.length - shown.length} more`, width)))
   if (!sessions.length) lines.push(c('dim', 'no Claude sessions found'))
   lines.push('')
+  if (dupes.length) {
+    lines.push(c('bold', 'DUPLICATE MCP SERVERS'))
+    for (const g of dupes) lines.push(c('yellow', fit(`${mcpLine(g, size)}  sessions ${g.sessions.join(', ')}`, width)))
+    lines.push('')
+  }
 
   // slots and queue
   const queue = st.queue || []

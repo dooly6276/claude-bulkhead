@@ -20,6 +20,7 @@ const GUARDS = {
   'disk-guard': 'diskGuard',
   basics: 'basics',
   'orphan-reaper': 'orphanReaper',
+  'session-state': 'sessionState',
 }
 // rules that can be turned off one at a time, inside a guard that stays on
 const RULES = {
@@ -61,6 +62,9 @@ const KEYS = {
   'orphanReaper.extraNames': { type: 'string[]', default: [], doc: 'More program names orphan-reaper stops once the session that started them has exited.' },
   'orphanReaper.keepNames': { type: 'string[]', default: [], doc: 'Program names orphan-reaper never stops, nor anything they started.' },
   'orphanReaper.keepPatterns': { type: 'string[]', default: [], doc: 'Text that keeps a process when it appears in its command line, such as "ssh -L" or "my-tunnel.sh". Case is ignored.' },
+  'sessionState.enabled': on('session-state'),
+  'notify.command': { type: 'string', default: null, globalOnly: true, doc: 'Command run (detached) when a session starts waiting for you. Gets BULKHEAD_SESSION_PROJECT, BULKHEAD_SESSION_STATE and BULKHEAD_SESSION_PID. Off by default; global config file only.' },
+  'notify.minIntervalSeconds': { type: 'number', default: 30, doc: 'Least seconds between two notifications for the same session.' },
   'log.enabled': bool(true, 'Write blocks to events.jsonl. BULKHEAD_NO_LOG=1 turns it off.'),
   // Global file only (see src/remotes.js for why).
   'remote.default': { type: 'string', default: null, globalOnly: true, doc: 'The remote bulkhead remote uses when several are configured and --remote is not given.' },

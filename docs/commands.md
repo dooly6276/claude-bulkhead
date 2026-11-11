@@ -27,25 +27,65 @@ bulkhead status [--json]
 ```
 
 ```
-SESSION  STARTED       RSS     PROJECT
-18672    Oct 12 17:49  1.4 GB  ~/src/acme-web
-  :3000  node.exe  pid 24632
-21888    Oct 12 17:52  353 MB  ~/src/acme-web-auth
-26448    03:43         625 MB  ~/src/acme-web-checkout
-  :3001  node.exe  pid 31020
+SESSION  STATE                STARTED  RSS     BRANCH              PROJECT
+18672    working              09:52    1.4 GB  main                ~/src/acme-web
+  :3000  node  pid 24632
+21888    needs permission 4m  10:05    353 MB  feat/login (wt)     ~/src/acme-web-auth
+26448    waiting 3m           11:40    625 MB  feat/checkout (wt)  ~/src/acme-web-checkout
+  :3001  node  pid 31020
+duplicate MCP: 3 copies of @playwright/mcp, 1.2 GB (sessions 18672, 21888, 26448)
 
-SLOT    GB  PID    AGE    COMMAND
-slot-1  4   30112  6 min  npx playwright test
-
-WAITING  GB  PID    FOR    COMMAND
-#1       3   30200  2 min  npm run build
+SLOT    GB  PID    AGE     COMMAND
+slot-1  4   30112  12 min  npx playwright test
 
 9.9 GB free of 31.8 GB, commit 68%
 ```
 
-A session is a running `claude` CLI process. RSS is the sum over its process tree. The project comes from the session file Claude Code keeps in `~/.claude/sessions`, or from `/proc/<pid>/cwd` on Linux. The `WAITING` table appears only when `bulkhead-slot run` jobs are queued.
+A session is a running `claude` CLI process. RSS is the sum over its process tree. The project comes from the session file Claude Code keeps in `~/.claude/sessions`; for a session without one, from `/proc/<pid>/cwd` on Linux, from one batched `lsof -a -d cwd` on macOS, and `(unknown)` on Windows. The `WAITING` table appears only when `bulkhead-slot run` jobs are queued. On a terminal, the project column shrinks to the terminal width and long paths lose their start (`…/dev/api`), never their end.
 
-`--json` adds per-session `children` (processes in the tree besides the session itself), raw byte counts, ISO times, and the queue with each job's reason for waiting.
+- **BRANCH** is the git branch of the session's folder, with `(wt)` when that folder is a linked worktree. It is read from `.git/HEAD` (or the worktree's own gitdir `HEAD`); no git process runs. A detached HEAD shows the short commit.
+- **STATE** is `working`, `waiting 3m` (Claude finished its reply and is waiting for you), `needs permission 4m` (a tool is waiting for your approval) or `needs input` (Claude asked you a question). `-` means no state is known: the hooks are not installed, or the session has not fired one yet. See [Session state](#session-state-and-notifications).
+- A `duplicate MCP:` line appears when the same MCP server runs in two or more sessions. See [Duplicate MCP servers](#duplicate-mcp-servers).
+
+`--json` adds per-session `children` (processes in the tree besides the session itself), `branch`, `worktree`, `state` (`working`, `waiting`, `permission` or `null`), `stateReason` (`reply`, `idle`, `permission`, `input`), `stateSince`, `mcp` (the session's MCP servers: `name`, `pid`, `rss`), raw byte counts, ISO times, and the queue with each job's reason for waiting. A top-level `mcp` array lists every MCP server group: `name`, `copies`, `sessions`, `rss`, `duplicate`.
+
+### Session state and notifications
+
+Claude Code runs hooks when a session changes what it is doing. bulkhead registers a tiny hook (`src/session-state.js`) for these events, taken from the [hooks reference](https://code.claude.com/docs/en/hooks):
+
+| Event | Sets |
+|---|---|
+| `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure` | working |
+| `Stop` | waiting for you (the reply is done) |
+| `Notification` with `permission_prompt` | needs permission |
+| `Notification` with `elicitation_dialog` or `elicitation_url_dialog` | needs input |
+| `Notification` with `idle_prompt` | keeps waiting |
+| `SessionStart` (not after `compact`) | waiting |
+| `SessionEnd` | removes the state |
+
+Each event writes one small file, `<state dir>/session-state/<session id>.json`, and reads nothing else: no process list, no git. It prints nothing and exits 0 on any error. `PostToolUse` and `PostToolUseFailure` run async, so they never slow a tool call, and they write only when the state changes. A file belongs to a session only while that session's process runs: `status` and `top` join files to live sessions by the session id in `~/.claude/sessions/<pid>.json`, so a file left behind by a crashed session is never shown (and is deleted after two days).
+
+Claude Code sends `permission_prompt` only after the prompt has waited about six seconds, and `idle_prompt` about 60 seconds after a reply. A turn you interrupt with Esc does not fire `Stop`, so that session keeps showing `working` until its next event. `top` lists the sessions that need you first: needs permission, then waiting (longest first), then the rest. The status line shows the count: `3 sessions  2 waiting  1 heavy  9.1 GB free`.
+
+To be told when a session starts waiting, set `notify.command` in the global config file ([configuration.md](configuration.md#notify)). It is off by default. The command runs detached, at most once per `notify.minIntervalSeconds` (default 30) per session, never blocks the hook, and gets three environment variables: `BULKHEAD_SESSION_PROJECT` (the folder), `BULKHEAD_SESSION_STATE` (`waiting` or `permission`) and `BULKHEAD_SESSION_PID` (the Claude process). Examples:
+
+```json
+{ "notify": { "command": "osascript -e 'display notification \"'\"$BULKHEAD_SESSION_STATE\"'\" with title \"Claude: '\"$BULKHEAD_SESSION_PROJECT\"'\"'" } }
+```
+
+macOS above. On Linux: `"command": "notify-send \"Claude $BULKHEAD_SESSION_STATE\" \"$BULKHEAD_SESSION_PROJECT\""`. On Windows the command runs in `cmd.exe`, so `"command": "msg %USERNAME% /TIME:10 Claude %BULKHEAD_SESSION_STATE% in %BULKHEAD_SESSION_PROJECT%"` works on Pro editions, and a toast works through PowerShell: `"command": "powershell -NoProfile -Command \"[void][Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime]; $x = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent('ToastText02'); $x.GetElementsByTagName('text')[0].AppendChild($x.CreateTextNode('Claude is ' + $env:BULKHEAD_SESSION_STATE)) | Out-Null; $x.GetElementsByTagName('text')[1].AppendChild($x.CreateTextNode($env:BULKHEAD_SESSION_PROJECT)) | Out-Null; [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('bulkhead').Show([Windows.UI.Notifications.ToastNotification]::new($x))\""`. Write the JSON with the quotes escaped as your shell needs; a short script file that reads the three variables is easier to keep right.
+
+### Duplicate MCP servers
+
+A stdio MCP server is a child process of the session that started it, so five sessions with the Playwright MCP run five copies, each with its own browser. `status` and `top` group each session's child processes, treat an npx, shell and node chain as one server, and flag a server that runs in two or more sessions with the same command line apart from session-specific parts (the session's folder, package versions, numbers, ids, temp paths). The line says how many copies there are and their total RSS, for example `3 copies of @playwright/mcp, 1.2 GB`.
+
+A command line is read as an MCP server by this heuristic, nothing more:
+
+- the program is a launcher (`npx`, `npm`, `pnpm`, `yarn`, `bunx`, `bun`, `uvx`, `uv`, `pipx`, `node`, `deno`, `python`, `tsx`, `docker`, with or without `.exe` or `.cmd`) and one of its arguments names an MCP package or path, or the program's own name contains `mcp` as a word or `mcp-server`;
+- an argument names an MCP package when it is `@modelcontextprotocol/...`, or its last two path segments (or the package under `node_modules/`) contain `mcp` as a word (`@playwright/mcp`, `playwright-mcp`, `context7-mcp`, `mcp_server_fetch`) or `mcp-server`;
+- options (`--mcp-config`) never count, and neither does a project folder called `mcp-hub` when the script under it is not named like an MCP server.
+
+A server the heuristic misses is simply not grouped; nothing is stopped or blocked because of it. Only processes inside a session's tree count, so servers left behind by an exited session are orphan-reaper's job.
 
 ## bulkhead top
 
@@ -56,29 +96,31 @@ bulkhead top [--interval=SECONDS] [--once]
 A full-screen view that refreshes every 2 seconds on Linux and macOS and every 4 seconds on Windows, where one process scan takes 1 to 2 seconds. The scan runs in a worker thread, so the screen and the keys never wait for it; the header shows `scanning` while one is running and the last scan's duration otherwise.
 
 ```
-bulkhead top  14:30:05                                         scan 1.4s  every 4s  q quit  r refresh
-RAM ████████████████░░░░░░░░░░░░░░  9.9 GB free of 31.8 GB  commit 68%
+bulkhead top  14:30:05                                                          scan 1.4s  every 2s  q quit  r refresh
+RAM █████████████████████░░░░░░░░░  9.9 GB free of 31.8 GB  commit 68%
 
-SESSIONS 3
-PID      STARTED       PROJECT                         RSS              PROCS  PORTS
-18672    Oct 12 17:49  ~/src/acme-web               1.4 GB  ██████████     12  :3000 :24678
-21888    Oct 12 17:52  ~/src/acme-web-auth          353 MB  ███░░░░░░░      3  -
-26448    03:43         ~/src/acme-web-checkout      625 MB  ████░░░░░░      5  :3001
+SESSIONS 3  2 waiting for you
+PID      STATE                 STARTED       PROJECT               BRANCH                  RSS  PROCS  PORTS
+21888    needs permission 4m   10:05         ~/src/acme-web-auth   feat/login (wt)      353 MB      5  -
+26448    waiting 3m            11:40         …/acme-web-checkout   feat/checkout (wt)   625 MB      5  :3001
+18672    working               09:52         ~/src/acme-web        main                 1.4 GB     12  :3000
 
-HEAVY JOBS  1 running, 1 waiting
-slot-1  4 GB   30112   6 min   npx playwright test
-wait #1 3 GB   30200   2 min   npm run build  (this machine has 16 GB; one heavy job at a time)
+DUPLICATE MCP SERVERS
+3 copies of @playwright/mcp, 1.2 GB  sessions 18672, 21888, 26448
+
+HEAVY JOBS  1 running, 0 waiting
+slot-1  4 GB   30112   12 min  npx playwright test
 
 RECENT BLOCKS
 14:29  kill-guard     taskkill-im    ~/src/acme-web-auth      taskkill /F /IM node.exe
-14:12  wait-guard     poll-loop      ~/src/acme-web-checkout  until [ -f out/DONE ]; do sleep 30; done
 ```
 
 - The RAM bar shows used memory. It is green above the slot floor, yellow below it, and red below the memory-guard minimum, when a line under it says heavy commands are being blocked. Linux adds swap, Windows adds commit charge.
 - RSS bars are relative to the largest session. PROCS counts the processes in the session's tree besides the session itself.
 - Keys: `q`, `Esc` or `Ctrl-C` quit, `r` refreshes at once.
 - The terminal is restored on every exit path: the view runs in the alternate screen buffer, and quitting, `Ctrl-C`, `SIGTERM` and `SIGHUP` all leave it and show the cursor again.
-- On a narrow terminal, columns are dropped in this order: the RSS bar, the start time, the ports, the process count. Then the project column shrinks and long values end in `…`. Lines never wrap. When there are more sessions than rows, the list ends in `... N more`.
+- Sessions that need you come first: needs permission, then waiting (longest first), then the others. The header counts them (`2 waiting for you`). A `DUPLICATE MCP SERVERS` section appears when the same MCP server runs in several sessions.
+- On a narrow terminal, columns are dropped in this order: the RSS bar, the start time, the ports, the process count, the branch, the RSS. Then the state text shortens and the project column shrinks. Project paths lose their start (`…/dev/api`), other long values end in `…`. Lines never wrap. With `NO_COLOR` set, or when the output is not a terminal, there are no colors. When there are more sessions than rows, the list ends in `... N more`.
 - When the output is not a terminal (a pipe, a file, the Bash tool), or with `--once`, it prints one snapshot without colors and exits.
 
 ## bulkhead scan
@@ -314,6 +356,7 @@ memory.minFreeGb               2                   env BULKHEAD_MIN_FREE_GB
 
 ```
 bulkhead port [--near PORT] [--json]
+bulkhead port --stable [--name NAME] [--range 3000-3999] [--json]
 ```
 
 Prints the first port at or above `PORT` (default 3000) that nothing listens on, and nothing else, so it can be used inline:
@@ -324,7 +367,17 @@ npm run dev -- --port $(bulkhead port --near 3000)
 
 A port counts as free only when it can be bound on `127.0.0.1`, `0.0.0.0`, `::1` and `::`; on Windows a server on one of these does not stop a bind on another. Ports that browsers refuse to open (such as 5060, 6000 and 6665 to 6669) are skipped. It tries 1000 ports and exits 1 when none is free. No process scan is needed, so it answers in well under a second.
 
-port-guard's block messages suggest it.
+`--stable` gives each git worktree a port of its own that is the same every time. The start port is taken from the SHA-1 of the worktree's root folder (the first four bytes as a number, modulo the size of the range, plus its start; lower case on Windows), or of `--name` when you give one. If something is listening there, it tries the next port in a fixed order (upward, wrapping inside the range, browser-blocked ports skipped), so the answer only changes while a port is taken. When it skips a port it says on stderr which session holds it:
+
+```
+$ bulkhead port --stable
+bulkhead port: 3417 is in use by session 18672 in ~/src/acme-web on branch main; using 3418
+3418
+```
+
+With `--json`: `port`, `preferred` (the first port of the sequence), `range`, `root`, `name` and `skipped` (each with `port`, `pid`, `name` and `session`). Two worktrees of one repository get different ports, so `npm run dev -- --port $(bulkhead port --stable)` in each never collides. It exits 1 when the range is full or `--range` is not `LOW-HIGH` between 1024 and 65535.
+
+port-guard's block messages suggest the current worktree's stable port when the folder is in a git tree (and the next free port otherwise).
 
 ## bulkhead worktree
 

@@ -10,6 +10,7 @@ claude-bulkhead is a Claude Code plugin made of small Node scripts. There is no 
 |---|---|---|---|
 | `SessionStart` | `startup\|resume` | orphan-reaper, run with `async: true` so the session does not wait | |
 | | `startup` | config-check: one notice when a config file is broken | 10 s |
+| `SessionStart` (all sources), `SessionEnd`, `UserPromptSubmit`, `Stop`, `Notification` (`permission_prompt`, `idle_prompt`, `elicitation_*`), `PostToolUse`, `PostToolUseFailure` | | session-state: one small file per session, read by `status` and `top` (the two `PostToolUse` ones run async) | 5 s |
 | `SessionEnd` | all reasons | orphan-reaper `--session-end`: starts a detached waiter and returns at once (it does nothing for `clear` and `resume`) | Claude Code's 1.5 s budget |
 | `PreToolUse` | `Bash\|PowerShell` | kill-guard, wait-guard, disk-guard, basics | 10 s |
 | | | memory-guard, checkout-guard | 15 s |
@@ -77,6 +78,7 @@ Every session on the machine uses the same directory, `~/.claude/bulkhead` by de
   events.jsonl      one JSON line per block, read by bulkhead log and bulkhead top
   events.jsonl.1    the previous log, after rotation at 1 MB
   statusline.json   the cached status line, 5 seconds
+  session-state/    one JSON file per session: working, waiting or needs permission, and since when
   remote-logs/      full output of bulkhead remote run --tail, the newest 50
   remote-last.json  the copy each project's last remote run used, for bulkhead remote fetch
 ```

@@ -40,7 +40,7 @@ test('blocks commands that move a tree another session is in', () => {
     'git restore .', 'git checkout -- .', 'cd web && git checkout main', 'git -C web switch main']) {
     const msg = check(cmd, ctx())
     assert.ok(msg, cmd)
-    assert.match(msg, /pid 200, started 2026-10-13 10:40/, cmd)
+    assert.match(msg, /session 200 in /, cmd)
   }
   assert.match(check('git checkout main', ctx()), /git worktree add \.\.\/shop-<task> -b <branch>/)
 })
@@ -87,7 +87,7 @@ test('a session that entered the tree through a link still shares it', () => {
   const link = path.join(tempDir(), 'shop')
   fs.symlinkSync(real, link, 'junction')
   const files = () => new Map([[200, { cwd: link, startedAt: 0, sessionId: 'other' }]])
-  assert.match(check('git checkout main', { cwd: real, sessionId: 'me', files, isAlive: () => true }), /pid 200/)
+  assert.match(check('git checkout main', { cwd: real, sessionId: 'me', files, isAlive: () => true }), /session 200 in /)
 })
 
 test('hook fails open', () => {
@@ -123,7 +123,7 @@ test('deleting a folder another live session works in is blocked', () => {
     const hit = classify(cmd, ctx())
     assert.ok(hit, cmd)
     assert.strictEqual(hit.rule, 'remove-session-dir', cmd)
-    assert.match(hit.why, /pid 200/, cmd)
+    assert.match(hit.why, /session 200 in /, cmd)
   }
   // the blog session is in /work/blog
   assert.strictEqual(classify('rm -rf /work/blog/dist', ctx()), null)
