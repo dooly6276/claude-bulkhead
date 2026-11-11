@@ -4,7 +4,9 @@
   <strong>Evita que Claude Code ejecute <code>pkill node</code> sobre tus otros servidores de desarrollo, les quite los puertos y haga commit de las ediciones de otra sesión con <code>git add -A</code>.</strong>
 </p>
 
-<p align="center">Hooks que saben qué procesos, puertos y árboles de git pertenecen a cada sesión y subagente de Claude Code, así que bloquean solo lo que dañaría a otra cosa y le dicen a Claude qué comando seguro ejecutar en su lugar. Cero dependencias, sin telemetría.</p>
+<p align="center">Hooks que saben qué procesos, puertos y árboles de git pertenecen a cada sesión y subagente de Claude Code, así que bloquean solo lo que dañaría a otra cosa y le dicen a Claude qué comando seguro ejecutar en su lugar.</p>
+
+<p align="center">Windows, macOS y Linux. Sin tmux, sin sudo, sin daemon en segundo plano, sin llamadas de red, sin dependencias. También protege a Codex, Gemini CLI, Copilot CLI, Cursor y otros seis agentes.</p>
 
 <p align="center">
   <a href="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml"><img src="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml/badge.svg" alt="tests"></a>
@@ -34,7 +36,14 @@ Después, mira qué habría detenido en tu último mes, sin cambiar nada:
 /bulkhead:scan 30d
 ```
 
-Node 18 o superior debe estar en el `PATH` (el instalador nativo de Claude Code no lo instala; compruébalo con `node --version`). Para los comandos de terminal y la línea de estado, ejecuta también `npm install -g claude-bulkhead`, o usa `npx claude-bulkhead status` sin instalar.
+Node 18 o superior debe estar en el `PATH` (el instalador nativo de Claude Code no lo instala; compruébalo con `node --version`).
+
+| Instalación | Qué obtienes |
+|---|---|
+| El plugin (arriba) | Los guards, que se ejecutan en cada llamada a Bash, PowerShell, Read y Edit; los slash commands `/bulkhead:scan`, `status`, `log`, `doctor`, `reap`, `remote`; la skill que enseña a Claude los hábitos seguros. Esta es la parte que te protege. |
+| `npm install -g claude-bulkhead` (opcional) | El comando `bulkhead` en tu propia terminal (`status`, `top`, `explain`, `allow`, `worktree`, `scan`, `doctor`), la línea de estado, `bulkhead-slot` y `bulkhead setup <agent>` para Codex, Gemini y los demás. `npx claude-bulkhead status` funciona sin instalar. |
+
+¿No sabes si funciona? `bulkhead doctor` ejecuta un comando inofensivo a través de cada guard y muestra que fue bloqueado, y cuánto tardó.
 
 ## Qué detiene
 
@@ -42,7 +51,7 @@ Node 18 o superior debe estar en el `PATH` (el instalador nativo de Claude Code 
 |---|---|
 | Un agente reinicia su dev server con `pkill node` y se caen con él los servidores de todos los demás worktrees. | kill-guard bloquea el comando y le explica al agente cómo encontrar y detener su propio PID. |
 | Dos sesiones comparten un checkout. Una ejecuta `git add -A && git commit` y los cambios a medias de la otra viajan en ese commit. | checkout-guard lo bloquea y pide los nombres de archivo. |
-| Dos worktrees ejecutan `npm run dev`. El segundo pasa al 3001, pero su agente sigue probando `localhost:3000` y ve la otra rama. | port-guard bloquea el segundo arranque e indica un puerto libre. `bulkhead port` imprime uno cuando lo pides. |
+| Dos worktrees ejecutan `npm run dev`. El segundo pasa al 3001, pero su agente sigue probando `localhost:3000` y ve la otra rama. | port-guard bloquea el segundo arranque e indica un puerto libre. |
 | Tres sesiones lanzan `next build`, `npm test` y Playwright en el mismo minuto, y la máquina se congela. | memory-guard bloquea los comandos pesados cuando queda poca RAM. Con `bulkhead-slot`, el tercer trabajo espera en una cola hasta que haya espacio. |
 
 <details>
@@ -87,7 +96,7 @@ No hace falta adivinar. Claude Code guarda la transcripción de cada sesión en 
 /bulkhead:scan 30d
 ```
 
-Solo lee, enmascara todo lo que parezca un secreto antes de imprimir y no envía nada a ninguna parte. port-guard y la comprobación de poca RAM no se repiten, porque las transcripciones no registran qué puertos ni cuánta RAM estaban en uso; checkout-guard se reconstruye a partir de qué sesiones estaban activas en el mismo árbol de git en ese minuto. Detalles: [docs/commands.md](docs/commands.md#bulkhead-scan).
+Solo lee, enmascara todo lo que parezca un secreto antes de imprimir y no envía nada a ninguna parte. port-guard y la comprobación de poca RAM no se repiten, porque las transcripciones no registran qué puertos ni cuánta RAM estaban en uso; checkout-guard se reconstruye a partir de qué sesiones estaban activas en el mismo árbol de git en ese minuto. `bulkhead scan --share` imprime un resumen de 5 a 8 líneas con solo recuentos (sin rutas ni comandos) que puedes pegar en una publicación o en un chat, y `--explain 1` muestra un ejemplo completo con la parte que coincidió. Detalles: [docs/commands.md](docs/commands.md#bulkhead-scan).
 
 ## Por qué existe
 
@@ -115,10 +124,13 @@ claude-bulkhead es un conjunto de pequeños hooks que bloquean o limpian cada un
 |---|---|
 | **[kill-guard](docs/guards/kill-guard.md)**<br>Bloquea `pkill node`, `taskkill /IM`, `Stop-Process -Name` y otras formas de matar por nombre de programa. Matar por PID pasa. | **[port-guard](docs/guards/port-guard.md)**<br>Bloquea arrancar un dev server en un puerto que otra sesión ya sirve, y matar por puerto el servidor de esa sesión. |
 | **[memory-guard y bulkhead-slot](docs/guards/memory-guard.md)**<br>Bloquea los comandos pesados cuando queda poca RAM y pone en cola los trabajos pesados contra un único presupuesto de RAM compartido por todas las sesiones. | **[checkout-guard](docs/guards/checkout-guard.md)**<br>Bloquea `git checkout`, `stash`, `reset --hard`, `git add -A` y similares cuando otra sesión activa trabaja en el mismo árbol, y el borrado de una carpeta en la que trabaja otra sesión. |
-| **[wait-guard](docs/guards/wait-guard.md)**<br>Bloquea los bucles de sleep en primer plano de más de 3 minutos, que hacen que la siguiente petición reescriba toda la caché del prompt. | **[orphan-reaper](docs/guards/orphan-reaper.md)**<br>Cuando una sesión termina, detiene los dev servers, test workers, watchers y navegadores headless que dejó corriendo. |
-| **[disk-guard](docs/guards/disk-guard.md)** <sup>new</sup><br>Bloquea `du -sh ~`, `find /` sin `-maxdepth` y los escaneos de disco en paralelo, que bloquean el disco que comparten todas las sesiones. | **[`bulkhead scan`](#lo-necesitas-pregunta-a-tus-transcripciones)** <sup>new</sup><br>Repite tus transcripciones pasadas de Claude Code contra los guards: qué habrían detenido y cuántas sesiones corrieron a la vez. |
+| **[wait-guard](docs/guards/wait-guard.md)**<br>Bloquea los bucles de sleep en primer plano de más de 3 minutos, que hacen que la siguiente petición reescriba toda la caché del prompt. | **[orphan-reaper](docs/guards/orphan-reaper.md)**<br>Cuando una sesión termina, detiene los dev servers, test workers, watchers y navegadores headless que dejó corriendo. Para conservar uno a propósito, usa `BULKHEAD_KEEP=1`; los túneles y las bases de datos ya se conservan. |
+| **[disk-guard](docs/guards/disk-guard.md)**<br>Bloquea `du -sh ~`, `find /` sin `-maxdepth` y los escaneos de disco en paralelo, que bloquean el disco que comparten todas las sesiones. | **[`bulkhead scan`](#lo-necesitas-pregunta-a-tus-transcripciones)**<br>Repite tus transcripciones pasadas de Claude Code contra los guards: qué habrían detenido y cuántas sesiones corrieron a la vez. |
 | **[basics](docs/guards/basics.md)**<br>Bloquea `rm -rf` en una raíz, en el home o en una carpeta directamente dentro de él, los force-push a `main`, los reset que perderían trabajo sin commitear y los commits con Claude como autor. | **[`bulkhead status`, `top`, `log`, `doctor`](#ver-qué-se-está-ejecutando)**<br>Muestra cada sesión, su RAM, sus puertos, los trabajos en cola y lo que han bloqueado los guards. |
-| **[Línea de estado](#línea-de-estado)**<br>`3 sessions  2 heavy  9.1 GB free` en la línea de estado de Claude Code, en menos de 100 ms. | **[Configuración y slash commands](#configuración)**<br>Configuración por máquina y por proyecto con listas de permitidos, más `/bulkhead:scan`, `/bulkhead:status`, `/bulkhead:log`, `/bulkhead:doctor` y `/bulkhead:reap`. |
+| **[edit-guard](docs/guards/edit-guard.md)** <sup>new</sup><br>Avisa al agente cuando otra sesión activa editó el mismo archivo en los últimos 30 minutos, en este árbol o en otro worktree del repositorio. Solo informa por defecto, sin servidor. | **[secrets-guard](docs/guards/secrets-guard.md)** <sup>new, off by default</sup><br>Bloquea leer o imprimir `.env`, claves privadas, credenciales de la nube y todo el entorno, con la herramienta Read o con un comando de shell, mientras que `.env.example`, `ls ~/.ssh` y los archivos `.pub` pasan. |
+| **[`bulkhead explain` y `bulkhead allow`](#cuando-bloquea-algo-que-querías)** <sup>new</sup><br>Ve qué diría cada guard sobre un comando antes de ejecutarlo, y deja pasar una vez un comando bloqueado con el código del mensaje de bloqueo. Claude no puede aprobar sus propios bloqueos. | **[`bulkhead worktree`](#worktrees-en-un-solo-paso)** <sup>new</sup><br>Un worktree nuevo en un solo paso, con tus archivos `.env` copiados, las dependencias instaladas y su propio puerto estable; `prune` elimina los ya fusionados, incluidos los squash merges, y nunca uno en el que trabaja una sesión. |
+| **[Auto-queue](docs/commands.md#auto-queue)** <sup>new</sup><br>Con `memoryGuard.autoQueue`, los comandos pesados no se rechazan, sino que se ponen en fila: el hook los envuelve en `bulkhead-slot` y empiezan cuando hay espacio. | **[Codex, Gemini y otros agentes](#codex-gemini-y-otros-agentes)** <sup>new</sup><br>Los mismos guards para Codex, Gemini CLI, Copilot CLI, Cursor, Windsurf, Droid, Devin, Cline, opencode y Amp, configurados con `bulkhead setup <agent>`. |
+| **[Línea de estado](#línea-de-estado)**<br>`3 sessions  2 heavy  9.1 GB free` en la línea de estado de Claude Code, en unos 100 ms. | **[Configuración y slash commands](#configuración)**<br>Configuración por máquina y por proyecto con listas de permitidos, más `/bulkhead:scan`, `/bulkhead:status`, `/bulkhead:log`, `/bulkhead:doctor` y `/bulkhead:reap`. |
 
 Opcional: **[`bulkhead remote`](#ejecutar-trabajos-pesados-en-otra-máquina-opcional)** ejecuta una suite de pruebas, un build o una ejecución de navegador en otra máquina por SSH, cuando esta no tiene RAM de sobra.
 
@@ -132,14 +144,29 @@ Una ejecución guionizada de `bulkhead status`, port-guard, kill-guard y wait-gu
 
 1. Instala el plugin como se indica arriba y abre una sesión nueva de Claude Code.
 2. Mira qué habría detectado: ejecuta `/bulkhead:scan 30d`, o `bulkhead scan` en la herramienta Bash. Lee tus transcripciones del último mes y no cambia nada.
-3. Comprueba la instalación. Dentro de Claude Code ejecuta `/bulkhead:doctor`, o ejecuta `bulkhead doctor` en la herramienta Bash. Todas las líneas deben decir `OK`. Una línea `WARN` o `FAIL` indica el guard y el motivo.
+3. Comprueba la instalación. Dentro de Claude Code ejecuta `/bulkhead:doctor`, o ejecuta `bulkhead doctor` en la herramienta Bash. Todas las líneas deben decir `OK`. Una línea `WARN` o `FAIL` indica el guard y el motivo. La sección Enforcement del final demuestra que los hooks bloquean: ejecuta el hook instalado con un comando canario y comprueba el código de salida, el mensaje y la latencia, y avisa de `disableAllHooks`, de un plugin desactivado o de que falta `node`.
 4. Abre una terminal junto a tus sesiones y ejecuta `npx claude-bulkhead top` (o `bulkhead top` tras `npm install -g claude-bulkhead`) para ver en vivo las sesiones, la RAM, los puertos y los trabajos pesados. Pulsa `q` para salir.
 
 Después no hay nada más que hacer. Los guards se ejecutan en cada llamada a Bash y PowerShell. Para ver qué detuvieron, ejecuta `bulkhead log` o `/bulkhead:log`; `bulkhead log --summary` cuenta los bloqueos por guard en tu máquina. Para cambiar un umbral o permitir un comando, consulta [docs/configuration.md](docs/configuration.md). Todos los comandos están listados en [docs/commands.md](docs/commands.md).
 
+## Worktrees en un solo paso
+
+Cuando otra sesión trabaja en tu árbol, checkout-guard envía al agente a un worktree. Un worktree normal no tiene `.env`, ni `node_modules`, y usa el mismo puerto de dev server que el checkout principal. `bulkhead worktree add` resuelve esas tres cosas:
+
+```
+$ bulkhead worktree add fix-login
+created ~/dev/shop-fix-login on new branch fix-login from HEAD
+copied .env (default set)
+pnpm install --frozen-lockfile: done in 14.2s
+wrote PORT=3800 to .env.local
+next: cd ~/dev/shop-fix-login && claude
+```
+
+Copia los archivos indicados en `.worktreeinclude` (el archivo que Claude Code también lee) o un conjunto seguro por defecto de archivos `.env`, nunca `node_modules`, la salida de builds ni nada que pese más de 5 MB; instala con el lockfile del proyecto; y le da al worktree un puerto que es el mismo cada vez. `bulkhead worktree list` muestra cada worktree con su rama, estado, sesión activa y puerto. `bulkhead worktree prune` lista los que están fusionados, limpios y sin uso, y los elimina con `--yes` mediante `git worktree remove` y `git branch -d`, nunca con `--force`, y nunca la carpeta de una sesión activa. Detalles en [docs/commands.md](docs/commands.md#bulkhead-worktree).
+
 ## Ejecutar trabajos pesados en otra máquina (opcional)
 
-Cuando varias sesiones ejecutan suites de pruebas y builds a la vez, una sola máquina se queda sin RAM: memory-guard bloquea los comandos, o bulkhead-slot los hace esperar en cola. Si tienes una segunda máquina que está casi siempre libre, `bulkhead remote` ejecuta allí el comando pesado.
+Cuando varias sesiones ejecutan suites de pruebas y builds a la vez, una sola máquina se queda sin RAM: memory-guard bloquea los comandos, o bulkhead-slot los hace esperar en cola (automáticamente, con `memoryGuard.autoQueue`). Si tienes una segunda máquina que está casi siempre libre, `bulkhead remote` ejecuta allí el comando pesado.
 
 <p align="center">
   <img src="docs/remote.svg" alt="Esta máquina tiene 1,8 GB libres, así que memory-guard retiene npm test. bulkhead remote envía por SSH a buildbox solo el commit nuevo y los archivos modificados, las pruebas se ejecutan allí en la copia a, en el puerto 7172, y vuelven las últimas 20 líneas. La RAM libre de esta máquina no cambia." width="100%">
@@ -209,12 +236,14 @@ Desactivar: `BULKHEAD_DISABLE=port-guard`. Detalles: [docs/guards/port-guard.md]
 memory-guard bloquea los comandos pesados (test runners, `next build`, `tsc`, Gradle, el emulador de Android, Playwright, `cargo test`, `docker build` y similares) cuando la RAM libre es inferior a 3 GB, o inferior al 15 % de la RAM en máquinas con menos de 20 GB. `bulkhead-slot run --gb=4 -- <command>` espera a que haya espacio en el presupuesto de RAM compartido, ejecuta el comando y libera el hueco cuando termina.
 
 Desactivar: `BULKHEAD_DISABLE=memory-guard`. Detalles: [docs/guards/memory-guard.md](docs/guards/memory-guard.md).
+
+Con `"memoryGuard": { "autoQueue": true }`, nadie tiene que acordarse del slot: memory-guard reescribe cada comando pesado (pruebas, builds, ejecuciones de navegador, builds de contenedores) para que se ejecute a través de `bulkhead-slot`, de modo que todas las sesiones esperan en una única cola justa en lugar de ser bloqueadas. Un trabajo en espera imprime su posición cada 30 segundos, y `bulkhead status` muestra a qué sesión y proyecto pertenece cada trabajo en cola. Con `"memoryGuard": { "subagents": true }`, no se inicia un subagente nuevo mientras la presión de memoria sea crítica. Consulta [docs/commands.md](docs/commands.md#auto-queue).
 </details>
 
 <details>
 <summary><strong>checkout-guard</strong>: dos sesiones en un mismo árbol de git</summary>
 
-Bloquea `git checkout <branch>`, `switch`, `stash`, `reset --hard`, `clean -f`, `rebase`, `merge`, `restore .` y un `pull` con cambios sin commitear cuando otra sesión activa trabaja en el mismo árbol, y sugiere `git worktree add`. También bloquea allí `git add -A`, `git add .` y `git commit -a` (`stage-all`), que arrastrarían a tu commit los cambios a medias de la otra sesión, y `rm -rf` o `git worktree remove` sobre una carpeta en la que trabaja otra sesión activa (`remove-session-dir`). En Windows bloquea `git worktree remove --force` sobre un worktree que contiene junctions, que git ha seguido hasta el checkout principal.
+Bloquea `git checkout <branch>`, `switch`, `stash`, `reset --hard`, `clean -f`, `rebase`, `merge`, `restore .` y un `pull` con cambios sin commitear cuando otra sesión activa trabaja en el mismo árbol, y sugiere `git worktree add`. También bloquea allí `git add -A`, `git add .` y `git commit -a` (`stage-all`; `git add -A src/` y `git add -n` pasan), que arrastrarían a tu commit los cambios a medias de la otra sesión, y `rm -rf` o `git worktree remove` sobre una carpeta en la que trabaja otra sesión activa (`remove-session-dir`). En Windows bloquea `git worktree remove --force` sobre un worktree que contiene junctions, que git ha seguido hasta el checkout principal.
 
 Desactivar: `BULKHEAD_DISABLE=checkout-guard`, o una sola regla con `BULKHEAD_DISABLE=stage-all` o `remove-session-dir`. Detalles: [docs/guards/checkout-guard.md](docs/guards/checkout-guard.md).
 </details>
@@ -238,18 +267,29 @@ Desactivar: `BULKHEAD_DISABLE=wait-guard`, o sube el límite con `BULKHEAD_WAIT_
 <details>
 <summary><strong>orphan-reaper</strong>: procesos que dejan las sesiones que terminaron</summary>
 
-Cuando una sesión termina, un proceso de espera oculto en segundo plano detiene lo que ella lanzó desde sus shells de herramientas y dejó corriendo: dev servers y cualquier otra cosa que escuche en un puerto, test runners y sus workers (Vitest, Jest, Playwright, pytest y xdist, `cargo test`, `go test` y más), watchers como `tsc --watch` y nodemon, builds como `next build` y navegadores headless. Una pasada al iniciar la sesión recoge lo que dejó un crash. Los editores, las terminales, los daemons compartidos como Gradle o adb y todo lo que hayas lanzado tú nunca se tocan. `bulkhead reap --dry-run` muestra qué detendría y por qué. Windows, Linux y macOS (macOS probado con fixtures).
+Cuando una sesión termina, un proceso de espera oculto en segundo plano detiene lo que ella lanzó desde sus shells de herramientas y dejó corriendo: dev servers y cualquier otra cosa que escuche en un puerto, test runners y sus workers (Vitest, Jest, Playwright, pytest y xdist, `cargo test`, `go test` y más), watchers como `tsc --watch` y nodemon, builds como `next build` y navegadores headless. Una pasada al iniciar la sesión recoge lo que dejó un crash. Los editores, las terminales, los daemons compartidos como Gradle o adb y todo lo que hayas lanzado tú nunca se tocan. `bulkhead reap --dry-run` muestra qué detendría y por qué. Lo que lanzaste a propósito para que siga activo se conserva con `BULKHEAD_KEEP=1 <command>` (los túneles ssh, cloudflared, ngrok, Jupyter, Redis, Postgres, MySQL, MongoDB y Docker se conservan sin ello), y la siguiente sesión te dice en una línea qué se detuvo. Windows, Linux y macOS (macOS probado en un Mac real).
 
 Desactivar: `BULKHEAD_DISABLE=orphan-reaper`. Detalles: [docs/guards/orphan-reaper.md](docs/guards/orphan-reaper.md).
 </details>
 
 <details>
-<summary><strong>basics</strong>: cuatro errores que no se pueden deshacer</summary>
+<summary><strong>basics</strong>: cinco errores que no se pueden deshacer</summary>
 
-`rm-root` (`rm -rf` en una raíz, en una carpeta de primer nivel como `/srv`, en el home, en una carpeta directamente dentro del home como `~/Documents`, o por encima del repositorio), `force-push-main` (`git push --force` a `main` o `master`; `--force-with-lease` pasa), `discard-changes` (`git reset --hard` o `git clean -fd` que perderían trabajo sin commitear) y `agent-author` (`--author="Claude <noreply@anthropic.com>"`, `git config user.name Claude` y similares, para que tus commits sigan contando como tuyos).
+`rm-root` (`rm -rf` en una raíz, en una carpeta de primer nivel como `/srv`, en el home, en una carpeta directamente dentro del home como `~/Documents`, o por encima del repositorio), `force-push-main` (`git push --force` a `main` o `master`; `--force-with-lease` pasa), `protected-delete` (`git push origin :main`, `git push --delete origin main`, `git branch -D main`), `discard-changes` (`git reset --hard` o `git clean -fd` que perderían trabajo sin commitear) y `agent-author` (`--author="Claude <noreply@anthropic.com>"`, `git config user.name Claude` y similares, para que tus commits sigan contando como tuyos).
 
 Desactivar: `BULKHEAD_DISABLE=basics`, o una sola regla por su nombre. Detalles: [docs/guards/basics.md](docs/guards/basics.md).
 </details>
+
+## Codex, Gemini y otros agentes
+
+Si usas Codex CLI, Gemini CLI, Copilot CLI, Cursor, opencode, Amp, Cline, Factory Droid, Windsurf o Devin en la misma máquina que Claude Code, bulkhead protege sus comandos de shell con los mismos guards y cuenta sus sesiones: el dev server de un agente queda protegido frente a los demás, y `bulkhead status` gana una columna `AGENT`.
+
+```
+bulkhead setup codex            # prints the config for ~/.codex/hooks.json
+bulkhead setup codex --write    # merges it (original saved as hooks.json.bulkhead-backup)
+```
+
+`bulkhead setup <agent>` funciona con `codex`, `gemini`, `copilot`, `cursor`, `windsurf`, `droid`, `devin`, `cline`, `opencode` y `amp`. Cada agente llama a `bulkhead hook --agent <name>` antes de un comando de shell y recibe de vuelta el bloqueo en su propio formato. Los agentes, los archivos de configuración, lo que se protege y la documentación con la que se comprobó cada fila están en [docs/other-agents.md](docs/other-agents.md).
 
 ## Cómo se relaciona bulkhead con otros paquetes de hooks
 
@@ -283,7 +323,8 @@ Las variables de entorno siguen funcionando y tienen prioridad sobre ambos archi
 
 | Variable | Valor por defecto | Equivale a |
 |---|---|---|
-| `BULKHEAD_DISABLE` | vacío | Guards que se desactivan, separados por comas: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `disk-guard`, `orphan-reaper`, `basics`, o `all`. También se pueden desactivar reglas sueltas: `rm-root`, `force-push-main`, `discard-changes`, `agent-author`, `stage-all`, `remove-session-dir`. Un nombre aquí queda desactivado digan lo que digan los archivos |
+| `BULKHEAD_DISABLE` | vacío | Guards que se desactivan, separados por comas: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `disk-guard`, `orphan-reaper`, `basics`, o `all`. También se pueden desactivar reglas sueltas: `rm-root`, `force-push-main`, `protected-delete`, `discard-changes`, `agent-author`, `stage-all`, `remove-session-dir`. Un nombre aquí queda desactivado digan lo que digan los archivos |
+| `BULKHEAD_PRESET` | `normal` | El preset: `quiet`, `normal` o `strict` |
 | `BULKHEAD_WAIT_MAX_SEC` | 180 | `waitGuard.limitSeconds` |
 | `BULKHEAD_MIN_FREE_GB` | 3, o el 15 % de la RAM si es menos | `memory.minFreeGb` |
 | `BULKHEAD_SLOT_FLOOR_GB` | 5, o el 25 % de la RAM si es menos | `memory.slotFloorGb` |
@@ -294,31 +335,65 @@ Las variables de entorno siguen funcionando y tienen prioridad sobre ambos archi
 
 </details>
 
+## Cuando bloquea algo que querías
+
+Un bloqueo es una pregunta, no un veredicto. Hay tres salidas, de la más pequeña a la más amplia:
+
+1. Permitirlo una vez. Cada mensaje de bloqueo termina con un código corto. En tu propia terminal, ejecuta `bulkhead allow 7F3K`. La siguiente llamada idéntica del agente (mismo comando, misma carpeta) pasa, una sola vez, dentro de 10 minutos. El agente no puede hacerlo por ti: bulkhead bloquea cualquier intento de ejecutar `bulkhead allow` o de escribir sus archivos de estado.
+2. Ver primero el motivo. `bulkhead explain -- <command>` pasa el comando por cada guard contra las sesiones, los puertos y el árbol de git en vivo, sin ejecutarlo, e imprime quién es el dueño de lo que estorba, el mensaje exacto que ve el agente y cómo permitirlo.
+3. Permitirlo para siempre, o cambiar cuánto bloquea. Pon la regla en `.claude/bulkhead.json` (la tabla de abajo), o elige un preset: `bulkhead config --preset quiet` conserva solo los guards entre sesiones y las dos reglas que no se pueden deshacer, `strict` activa todo con límites más estrictos, y `normal` es el valor por defecto. Tus propias claves y variables de entorno tienen prioridad sobre un preset.
+
+### ¿Bloqueó algo que querías? Guía rápida
+
+La vía de una sola vez es siempre `bulkhead allow <code>`, ejecutada por ti. La vía permanente, para la regla que se activó:
+
+| Guard | Regla | Permanente, en `.claude/bulkhead.json` |
+|---|---|---|
+| kill-guard | `pkill`, `taskkill-im`, `stop-process-name` y las demás formas de matar por nombre | `{"killGuard":{"allowNames":["ffmpeg"]}}` |
+| wait-guard | `long-sleep`, `poll-loop`, `follow` | `{"waitGuard":{"limitSeconds":600}}` |
+| memory-guard | `low-memory` | `{"memory":{"minFreeGb":1}}` |
+| memory-guard | `slot-files` | `{"memoryGuard":{"enabled":false}}` |
+| port-guard | `port-in-use`, `kill-by-port` | `{"portGuard":{"ignorePorts":[3000]}}` |
+| checkout-guard | `stage-all` | `{"checkoutGuard":{"stageAll":false}}` |
+| checkout-guard | `remove-session-dir` | `{"checkoutGuard":{"removeSessionDir":false}}` |
+| checkout-guard | `git-checkout`, `git-pull` y los demás cambios de árbol | `{"checkoutGuard":{"enabled":false}}` |
+| disk-guard | `disk-wide-find`, `parallel-disk-scan`, `disk-wide-scan` | `{"diskGuard":{"enabled":false}}` |
+| basics | `rm-root` | `{"basics":{"rmRoot":false}}` |
+| basics | `force-push-main` | `{"basics":{"forcePushMain":false}}` |
+| basics | `discard-changes` | `{"basics":{"discardChanges":false}}` |
+| basics | `agent-author` | `{"basics":{"agentAuthor":false}}` |
+| basics | `self-allow` | no se puede permitir una vez; solo tú puedes aprobarlo |
+
+El mismo interruptor como variable de entorno es `BULKHEAD_DISABLE=<nombre del guard o de la regla>`. Todo está en [docs/configuration.md](docs/configuration.md) y [docs/commands.md](docs/commands.md).
+
 ## Ver qué se está ejecutando
 
 `bulkhead` está en el `PATH` de la herramienta Bash junto a `bulkhead-slot`. Dentro de Claude Code, `/bulkhead:scan [30d]`, `/bulkhead:status`, `/bulkhead:log [24h|7d]`, `/bulkhead:doctor` y `/bulkhead:reap` ejecutan el comando correspondiente y resumen su salida. En tu propia terminal, ejecuta `npx claude-bulkhead top`, o instálalo una vez con `npm install -g claude-bulkhead` y ejecuta `bulkhead top`. El paquete de npm es el mismo código que el plugin. Todos los comandos que imprimen una tabla aceptan `--json`. La referencia completa está en [docs/commands.md](docs/commands.md).
 
 ### bulkhead status
 
-Cada sesión de Claude Code de la máquina, la memoria que usa su árbol de procesos, lo que tiene escuchando en un puerto, los trabajos retenidos en bulkhead-slot y los que esperan, y la RAM libre:
+Cada sesión de Claude Code de la máquina: qué está haciendo (trabajando, esperándote, necesita permiso), su rama de git y si es un worktree, la memoria que usa su árbol de procesos, lo que tiene escuchando en un puerto, los trabajos retenidos en bulkhead-slot y los que esperan, la RAM libre y los servidores MCP que corren como varias copias entre sesiones:
 
 ```
 $ bulkhead status
-SESSION  STARTED       RSS     PROJECT
-18672    Oct 12 17:49  1.4 GB  ~/src/acme-web
-  :3000  node.exe  pid 24632
-21888    Oct 12 17:52  353 MB  ~/src/acme-web-auth
-26448    03:43         625 MB  ~/src/acme-web-checkout
-  :3001  node.exe  pid 31020
+SESSION  STATE                STARTED  RSS     BRANCH              PROJECT
+18672    working              09:52    1.4 GB  main                ~/src/acme-web
+  :3000  node  pid 24632
+21888    needs permission 4m  10:05    353 MB  feat/login (wt)     ~/src/acme-web-auth
+26448    waiting 3m           11:40    625 MB  feat/checkout (wt)  ~/src/acme-web-checkout
+  :3001  node  pid 31020
+duplicate MCP: 3 copies of @playwright/mcp, 1.2 GB (sessions 18672, 21888, 26448)
 
-SLOT    GB  PID    AGE    COMMAND
-slot-1  4   30112  6 min  npx playwright test
+SLOT    GB  PID    AGE    SESSION  PROJECT          COMMAND
+slot-1  4   30112  6 min  18672    ~/src/acme-web   npx playwright test
 
-WAITING  GB  PID    FOR    COMMAND
-#1       3   30200  2 min  npm run build
+WAITING  GB  PID    FOR    SESSION  PROJECT                 COMMAND
+#1       3   30200  2 min  26448    ~/src/acme-web-checkout npm run build
 
 9.9 GB free of 31.8 GB, commit 68%
 ```
+
+`bulkhead top` pone primero las sesiones que te necesitan. `bulkhead port --stable` imprime un puerto que pertenece al worktree de git actual y es el mismo cada vez. Para recibir una notificación de escritorio cuando una sesión empieza a esperar, define `notify.command` ([commands.md](docs/commands.md#session-state-and-notifications)).
 
 `bulkhead slot ...` es lo mismo que `bulkhead-slot ...`.
 
@@ -374,31 +449,44 @@ PROJECT                  COUNT
 
 ### bulkhead doctor
 
-Comprueba Node, los archivos del plugin, el directorio de estado, los archivos de configuración, cada guard (activo o desactivado, y por qué), una ejecución real de un hook, el lector de procesos con sus tiempos, los archivos de sesión, los límites de RAM calculados para esta máquina, los slots retenidos, el registro de eventos y git. El código de salida es 1 si falla alguna comprobación.
+Comprueba Node, los archivos del plugin, el directorio de estado, los archivos de configuración, cada guard (activo o desactivado, y por qué), el lector de procesos con sus tiempos, los archivos de sesión, los límites de RAM calculados para esta máquina, los slots retenidos, el registro de eventos y git. Después, una sección Enforcement demuestra que los hooks instalados bloquean: la instalación y `enabledPlugins`, las instalaciones duplicadas, los ajustes que desactivan los hooks, `node` en el `PATH` del hook, y una ejecución real del comando de hook de cada guard contra un canario, con su latencia. El código de salida es 1 si falla alguna comprobación.
 
 ```
 $ bulkhead doctor
-OK    node            v24.11.0
-OK    plugin          ~/.claude/plugins/cache/bulkhead/bulkhead/0.2.2, hooks: 2 SessionStart, 1 SessionEnd, 7 PreToolUse
-OK    state dir       ~/.claude/bulkhead is writable
-OK    config          no config files, defaults in use
-OK    kill-guard      on
-OK    wait-guard      on, limit 180s
-OK    memory-guard    on
-OK    port-guard      on
-OK    checkout-guard  on
-OK    disk-guard      on
-OK    basics          on, protected branches: main, master
-OK    orphan-reaper   on, at session start and after each session ends
-OK    hook run        kill-guard blocked a test command in 90 ms
-OK    processes       356 processes, 21 listening ports, 8 Claude sessions in 2.4s
-OK    sessions        ~/.claude/sessions (8 session files)
-OK    memory          12.2 of 31.8 GB free, commit 43%, memory-guard blocks heavy commands below 3 GB, bulkhead-slot keeps 5 GB free for a second job, and waits while commit is above 75%
-OK    slots           none held
-OK    event log       ~/.claude/bulkhead/events.jsonl, empty so far
-OK    git             2.52.0.windows.1
+OK    node             v24.22.1
+OK    package          this copy ~/.claude/plugins/cache/bulkhead/bulkhead/0.3.0, hooks: 3 SessionStart, 2 SessionEnd, 1 UserPromptSubmit, 1 Stop, 1 Notification, 2 PostToolUse, 1 PostToolUseFailure, 4 PreToolUse
+OK    state dir        ~/.claude/bulkhead is writable
+OK    config           no config files, defaults in use
+OK    preset           normal (default)
+OK    kill-guard       on
+OK    wait-guard       on, limit 180s
+OK    memory-guard     on
+OK    port-guard       on
+OK    checkout-guard   on
+OK    disk-guard       on
+OK    basics           on, protected branches: main, master
+OK    edit-guard       on
+OK    secrets-guard    off (default)
+OK    orphan-reaper    on, at session start and after each session ends
+OK    session-state    on
+OK    processes        589 processes, 11 listening ports, 10 Claude sessions (10 with a session file) in 0.2s
+OK    sessions         ~/.claude/sessions (10 session files; a running session without one is still found from the process list, but checkout-guard cannot tell which folder it works in)
+OK    memory           28.3 of 48.0 GB free, memory-guard blocks heavy commands below 3 GB, bulkhead-slot keeps 5 GB free for a second job
+OK    slots            none held
+OK    event log        ~/.claude/bulkhead/events.jsonl, 2 events, 254 B (rotates at 1 MB)
+OK    git              2.56.0
 
-19 OK, 0 WARN, 0 FAIL
+Enforcement
+OK    install          bulkhead@bulkhead 0.3.0 at ~/.claude/plugins/cache/bulkhead/bulkhead/0.3.0, enabled in user settings
+OK    hooks on         no disableAllHooks or allowManagedHooksOnly in user, project, local or managed settings
+OK    hooks.json       installed copy: 4 PreToolUse hooks, all synchronous
+OK    hook node        /opt/homebrew/bin/node v24.22.1
+OK    hook kill-guard  blocked "pkill node" (exit 2, message shown to Claude) in 71 ms
+OK    hook wait-guard  blocked "sleep 100000" (exit 2, message shown to Claude) in 64 ms
+OK    hook disk-guard  blocked "du -sh /" (exit 2, message shown to Claude) in 70 ms
+OK    hook basics      blocked "rm -rf /" (exit 2, message shown to Claude) in 63 ms
+
+30 OK, 0 WARN, 0 FAIL
 ```
 
 ### bulkhead port
@@ -428,7 +516,7 @@ would stop 30112  test-runner  node ~/src/acme-web/node_modules/vitest/dist/work
 3 sessions  2 heavy  9.1 GB free
 ```
 
-Las sesiones son las entradas activas en `~/.claude/sessions`, heavy es el número de trabajos que retienen un bulkhead-slot, y free es la misma medida que usa memory-guard. No escanea procesos, tarda menos de 100 ms y guarda la línea en caché durante 5 segundos en el directorio de estado.
+Las sesiones son las entradas activas en `~/.claude/sessions`, heavy es el número de trabajos que retienen un bulkhead-slot, y free es la misma medida que usa memory-guard. Cuando hay sesiones esperándote, la línea añade `2 waiting` después del número de sesiones. No lista todos los procesos (un solo `ps` solo para los pids de sesión), tarda unos 100 ms en frío en un Mac con 650 procesos y guarda la línea en caché durante 5 segundos en el directorio de estado, escrita a través de un archivo temporal para que las sesiones concurrentes nunca lean la mitad.
 
 Un plugin no puede definir la línea de estado principal (los ajustes de plugin solo admiten `agent` y `subagentStatusLine`), así que añádela tú mismo a `~/.claude/settings.json`:
 
@@ -447,7 +535,7 @@ Esto requiere `npm install -g claude-bulkhead`, que pone `bulkhead-statusline` e
 ## Preguntas frecuentes
 
 **¿Ralentiza Claude Code?**
-Un poco. Cada guard es un proceso corto de Node. En un equipo de escritorio con Windows 11 y Node 24, `node scripts/bench-hooks.js 15` midió entre 40 y 49 ms por guard en un comando permitido (mediana de 15 ejecuciones), y 33 ms solo por arrancar Node. Escribir un bloqueo en el registro de eventos no añade tiempo medible. Los guards solo hacen trabajo lento, como leer la lista de procesos (uno o dos segundos en Windows), cuando el comando coincide: arrancar un dev server en un puerto que ya responde, un kill, un comando pesado. La línea de estado tarda menos de 100 ms y se guarda en caché durante 5 segundos.
+Un poco. Todos los guards de Bash se ejecutan en un único proceso corto de Node sin dependencias, unos 76 ms por llamada a una herramienta en un MacBook Pro (Node 24), de los cuales 32 ms son el arranque de Node. Cuando 10 sesiones llaman a una herramienta en el mismo instante, cada una espera unos 89 ms (318 ms cuando cada guard era un proceso propio, como en la 0.2). Escribir un bloqueo en el registro de eventos no añade tiempo medible. Los guards solo hacen trabajo lento, como leer la lista de procesos (uno o dos segundos en Windows), cuando el comando coincide: arrancar un dev server en un puerto que ya responde, un kill, un comando pesado. La línea de estado tarda unos 100 ms en frío y se guarda en caché durante 5 segundos.
 
 **Ha bloqueado algo que no debía. ¿Qué hago?**
 Ejecuta `bulkhead log` para ver el comando exacto y el motivo. Déjalo pasar en la configuración del proyecto, `<repo>/.claude/bulkhead.json`: `killGuard.allowNames` para un nombre de programa, `portGuard.ignorePorts` para un puerto compartido, `waitGuard.limitSeconds` para una espera más larga, o `"enabled": false` para desactivar todo el guard en ese proyecto. Consulta [docs/configuration.md](docs/configuration.md). Después, abre por favor un [issue de falso positivo](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml) con la línea de `bulkhead log`, para que el patrón se corrija para todos.
@@ -456,7 +544,7 @@ Ejecuta `bulkhead log` para ver el comando exacto y el motivo. Déjalo pasar en 
 Sí. kill-guard, wait-guard, memory-guard y basics protegen igual de bien a una sola sesión y a sus subagentes. port-guard y checkout-guard solo actúan cuando hay otra sesión activa, y orphan-reaper limpia lo que dejan las sesiones que ya terminaron.
 
 **¿Qué sistemas soporta?**
-Windows, Linux y macOS, con Node 18 o superior. orphan-reaper en macOS está probado con fixtures de la salida de `ps` pero todavía no en un Mac real, y en Linux requiere una versión de Claude Code que defina `CLAUDE_PID` para los shells de herramientas. En Windows, `bulkhead-slot` ejecuta los comandos a través de Git Bash si está instalado y, si no, a través de `cmd.exe`.
+Windows, Linux y macOS, con Node 18 o superior. orphan-reaper en macOS está probado con fixtures de la salida de `ps` y en un Mac real (se terminó una sesión de relleno y solo se detuvieron sus restos), y en Linux requiere una versión de Claude Code que defina `CLAUDE_PID` para los shells de herramientas. En Windows, `bulkhead-slot` ejecuta los comandos a través de Git Bash si está instalado y, si no, a través de `cmd.exe`.
 
 **¿Envía algo a algún sitio?**
 No. No hay telemetría ni llamadas de red. El único socket que abre es el intento de conexión de port-guard a `localhost` para ver si un puerto responde. Los registros se quedan en el directorio de estado. La única excepción es `bulkhead remote`, que se conecta por SSH a una máquina que tú has configurado, y solo cuando lo ejecutas.
@@ -476,6 +564,8 @@ Hay más preguntas, incluidas cómo se pueden eludir los guards y cómo se miden
 /plugin uninstall bulkhead@bulkhead
 /plugin marketplace remove bulkhead
 ```
+
+Si en su lugar instalaste el paquete de npm, ejecuta `npm uninstall -g claude-bulkhead`. Un proceso de espera de SessionEnd que ya esté en marcha termina por sí solo en menos de 3 minutos, así que no queda nada ejecutándose después de desinstalar.
 
 Después, borra el directorio de estado (`~/.claude/bulkhead`, o `BULKHEAD_STATE_DIR` si lo definiste) y elimina la entrada `statusLine` de `~/.claude/settings.json` si la añadiste.
 
