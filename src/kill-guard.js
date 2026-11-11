@@ -432,4 +432,4 @@ if (require.main === module) {
   })
 }
 
-module.exports = { check, classify, message, nameHits, patternHits }
+module.exports = { check, classify, message, nameHits, patternHits, nameList }

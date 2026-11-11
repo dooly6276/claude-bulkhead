@@ -43,15 +43,37 @@ function log(name, line) {
   } catch {}
 }
 
-// Records a block in guards.log and events.jsonl and returns the hook result that stops the call.
 // One line for the agent and the person reading it: a block can be intentional, and the answer
-// to that is a question to the user, not a way around the guard.
-const ASK_USER = 'If the user wants this on purpose, ask them: they can allow it in .claude/bulkhead.json (see docs/configuration.md).'
+// to that is a question to the user, not a way around the guard. <code> is the allow-once code
+// of this block; blocked() fills it in, and adds the config snippet of the rule that fired.
+const ASK_USER = 'If the user wants this on purpose, ask them to run `bulkhead allow <code>` in their own terminal (allows it once), or allow it in .claude/bulkhead.json.'
 
+// The block text with the one-line way out: the allow-once command and the exact config snippet.
+function withWayOut(message, { code = null, json = null } = {}) {
+  const once = code ? `run \`bulkhead allow ${code}\` in their own terminal (allows it once)` : null
+  const perm = json ? `set ${json} in .claude/bulkhead.json` : null
+  const how = [once, perm].filter(Boolean).join(', or ')
+  const line = how ? `If the user wants this on purpose, ask them to ${how}.` : ''
+  const body = message.includes(ASK_USER) ? message.split(ASK_USER).join(line).replace(/\n+$/, '') : message
+  return line && !message.includes(ASK_USER) ? `${body}\n${line}` : body
+}
+
+// Records a block in guards.log and events.jsonl and returns the hook result that stops the call.
+// Returns nothing when the user allowed this exact command once (bulkhead allow <code>).
 function blocked(name, rule, input, message, command = input && input.tool_input && input.tool_input.command) {
+  const cwd = input && input.cwd
+  const allow = rule === 'self-allow' ? null : require('./allow-once')
+  if (allow && allow.consume(name, rule, command, cwd)) {
+    log(name, `allowed once ${rule}: ${oneLine(command || '')}`)
+    return undefined
+  }
   log(name, `blocked ${rule}: ${oneLine(command || '')}`)
   recordEvent(name, rule, input, command)
-  return { block: message }
+  let code = null
+  if (allow) code = allow.issue({ guard: name, rule, command, cwd, session: input && input.session_id })
+  let json = null
+  try { json = require('./allow-hint').allowHint(name, rule, { command, message }).json } catch {}
+  return { block: withWayOut(message, { code, json }) }
 }
 
 function recordEvent(name, rule, input = {}, command = null, extra = {}) {
@@ -91,4 +113,4 @@ function runHook(name, handler) {
 }
 
 module.exports = {
-  ASK_USER, runHook, enabled, setting, envNumber, log, oneLine, stateDir, blocked, recordEvent }
+  ASK_USER, withWayOut, runHook, enabled, setting, envNumber, log, oneLine, stateDir, blocked, recordEvent }

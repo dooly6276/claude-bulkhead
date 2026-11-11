@@ -1,9 +1,11 @@
 'use strict'
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const { spawn } = require('child_process')
 const { stateDir, log } = require('./hook')
 const { readMemory } = require('./memory')
+const { option: sharedOption, numberOption } = require('./cli-util')
 const { take, release, readSlots, staleReason, slotDir, admit, queueDir, enqueue } = require('./slots')
 
 const USAGE = `usage:
@@ -14,14 +16,22 @@ run waits until the machine has room for a job of N GB (default 3), runs the
 command, and releases the slot when it exits, even on failure. The exit code is
 the command's. status shows who holds slots and whether a new job would start.`
 
+// --name=value or --name value
 function option(args, name, fallback) {
-  const hit = args.find(a => a.startsWith(`--${name}=`))
-  return hit ? hit.slice(name.length + 3) : fallback
+  const v = sharedOption(args, name)
+  return typeof v === 'string' ? v : fallback
 }
 
-function gbOption(args) {
-  const n = Number(option(args, 'gb', 3))
-  return n > 0 && n <= 256 ? n : 3
+// The job size, or an error to print: --gb 4 and --gb=4 both work, nothing else is guessed.
+function gbOption(args, totalGb = os.totalmem() / 2 ** 30) {
+  return numberOption(args, 'gb', {
+    fallback: 3, max: totalGb, tooBig: n => `--gb ${n} is more than this machine's RAM (${Math.round(totalGb * 10) / 10} GB)`,
+  })
+}
+
+function bad(message) {
+  console.error(`bulkhead-slot: ${message}`)
+  process.exit(1)
 }
 
 function findGitBash(env = process.env, exists = fs.existsSync) {
@@ -59,9 +69,13 @@ function run(args) {
   }
   const opts = args.slice(0, sep)
   const command = args.slice(sep + 1)
-  const gb = gbOption(opts)
+  const g = gbOption(opts)
+  if (g.error) return bad(g.error)
+  const gb = g.value
+  const w = numberOption(opts, 'wait', { fallback: 30, inclusive: true })
+  if (w.error) return bad(w.error)
   const label = option(opts, 'label', command.join(' ').slice(0, 80))
-  const deadline = Date.now() + Number(option(opts, 'wait', 30)) * 60000
+  const deadline = Date.now() + w.value * 60000
   const dir = slotDir(stateDir())
   let announced = false
   let queued = null
@@ -122,7 +136,9 @@ function holders(dir) {
 
 function status(args) {
   const dir = slotDir(stateDir())
-  const gb = gbOption(args)
+  const g = gbOption(args)
+  if (g.error) return bad(g.error)
+  const gb = g.value
   const held = readSlots(dir)
   if (!held.length) console.log('no slots held')
   for (const s of held) {

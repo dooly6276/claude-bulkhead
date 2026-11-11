@@ -65,11 +65,15 @@ Commit with the git identity already configured: leave user.name and user.email 
 
 Passes: a `Co-Authored-By: Claude` trailer in the message, `git log --author=claude`, any other name, and text inside a heredoc handed to a script.
 
+## self-allow
+
+Blocks a Bash call that runs `bulkhead allow <code>` (any spelling: `claude-bulkhead`, `bulkhead-cli`, `node .../bin/bulkhead`, `npx claude-bulkhead`, inside `bash -c`, `eval`, `env`, `sudo` or a subshell) or that writes into the allow state folder with a redirect, `tee`, `cp`, `mv`, `sed -i` or a script. Otherwise the agent could approve its own blocks and [allow once](../commands.md#bulkhead-allow) would mean nothing. Reading the folder is fine, and so is text that only mentions the command (`echo`, `grep`, a commit message). This rule never gets an allow code.
+
 ## Turn off or tune
 
-- `BULKHEAD_DISABLE=basics` turns all four off.
-- `BULKHEAD_DISABLE=rm-root`, `force-push-main`, `discard-changes` or `agent-author` turns off one rule.
-- In a config file: `basics.enabled`, `basics.rmRoot`, `basics.forcePushMain`, `basics.discardChanges`, `basics.agentAuthor`, and `basics.protectedBranches`, for example `["main", "master", "release"]`. See [configuration](../configuration.md).
+- `BULKHEAD_DISABLE=basics` turns all the rules off.
+- `BULKHEAD_DISABLE=rm-root`, `force-push-main`, `discard-changes`, `agent-author` or `self-allow` turns off one rule.
+- In a config file: `basics.enabled`, `basics.rmRoot`, `basics.forcePushMain`, `basics.discardChanges`, `basics.agentAuthor`, `basics.selfAllow`, and `basics.protectedBranches`, for example `["main", "master", "release"]`. See [configuration](../configuration.md).
 
 ## Limits
 

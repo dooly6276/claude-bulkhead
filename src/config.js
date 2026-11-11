@@ -5,7 +5,7 @@ const path = require('path')
 const { pathKey } = require('./paths')
 
 // Settings come from three places, later ones winning:
-//   1. defaults below
+//   1. defaults below, then the preset ("preset" in a config file or BULKHEAD_PRESET) over them
 //   2. <state dir>/config.json                      (global, usually ~/.claude/bulkhead/config.json)
 //   3. <project>/.claude/bulkhead.json              (project, merged over global)
 //   4. environment variables                        (always win)
@@ -27,6 +27,7 @@ const RULES = {
   'force-push-main': 'basics.forcePushMain',
   'discard-changes': 'basics.discardChanges',
   'agent-author': 'basics.agentAuthor',
+  'self-allow': 'basics.selfAllow',
   'stage-all': 'checkoutGuard.stageAll',
   'remove-session-dir': 'checkoutGuard.removeSessionDir',
 }
@@ -56,6 +57,8 @@ const KEYS = {
   'basics.forcePushMain': bool(true, 'Block force-pushes to the protected branches.'),
   'basics.discardChanges': bool(true, 'Block git reset --hard and git clean -fd that would lose work.'),
   'basics.agentAuthor': bool(true, 'Block commits authored as Claude or Anthropic (--author, git config user.*, GIT_AUTHOR_*), so the work counts as yours.'),
+  'basics.selfAllow': bool(true, 'Block the agent running bulkhead allow or writing the allow state files, so only the user approves a block.'),
+  'allowOnce.ttlMinutes': { type: 'number', default: 10, doc: 'Minutes an allow-once code stays valid, and how long an approved command can still be run once.' },
   'orphanReaper.enabled': on('orphan-reaper'),
   'orphanReaper.onSessionEnd': bool(true, 'Also reap right after a session exits, not only when the next session starts.'),
   'orphanReaper.extraNames': { type: 'string[]', default: [], doc: 'More program names orphan-reaper stops once the session that started them has exited.' },
@@ -64,6 +67,35 @@ const KEYS = {
   // Global file only (see src/remotes.js for why).
   'remote.default': { type: 'string', default: null, globalOnly: true, doc: 'The remote bulkhead remote uses when several are configured and --remote is not given.' },
   remotes: { type: 'remotes', default: {}, globalOnly: true, doc: 'Machines bulkhead remote can run jobs on: { name: { host, shell, dir, copies, maxJobs, minFreeGb, sshOptions } }.' },
+}
+
+// Layered defaults: a preset only changes the default of the keys it names, so any key a config
+// file sets, and any environment variable, still wins. normal is the plain defaults. A value
+// that is a function gets the machine's RAM in GB, so a threshold scales on small machines.
+const round1 = n => Math.round(n * 10) / 10
+const PRESETS = {
+  normal: {},
+  // only what protects one session from another, plus the two rules that cannot be undone
+  quiet: {
+    'waitGuard.enabled': false,
+    'diskGuard.enabled': false,
+    'basics.discardChanges': false,
+    'basics.agentAuthor': false,
+  },
+  // everything on, with tighter limits: waits over a minute, less free RAM tolerated, more protected branches
+  strict: {
+    'waitGuard.limitSeconds': 60,
+    'memory.minFreeGb': gb => Math.min(5, round1(gb * 0.2)),
+    'memory.slotFloorGb': gb => Math.min(8, round1(gb * 0.35)),
+    'memory.maxCommitPct': 65,
+    'basics.protectedBranches': ['main', 'master', 'develop', 'release', 'production'],
+  },
+}
+
+function presetValues(name, totalGb = os.totalmem() / 2 ** 30) {
+  const out = {}
+  for (const [k, v] of Object.entries(PRESETS[name] || {})) out[k] = typeof v === 'function' ? v(totalGb) : v
+  return out
 }
 
 function stateDir(env = process.env) {
@@ -122,6 +154,11 @@ function flatten(obj, file, warnings, scope = 'global') {
       out.remotes = remotes
       continue
     }
+    if (section === 'preset') {
+      if (PRESETS[body]) out.preset = body
+      else warnings.push(`${file}: "preset" should be one of ${Object.keys(PRESETS).join(', ')}`)
+      continue
+    }
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       warnings.push(`${file}: "${section}" should be an object`)
       continue
@@ -159,8 +196,8 @@ function envValue(spec, env) {
   return raw
 }
 
-// Defaults with both files merged over them. Read once per process.
-function fileLayer({ env = process.env, cwd = env.CLAUDE_PROJECT_DIR || process.cwd(), read } = {}) {
+// Defaults, then the preset, then both files merged over them. Read once per process.
+function fileLayer({ env = process.env, cwd = env.CLAUDE_PROJECT_DIR || process.cwd(), read, totalGb } = {}) {
   const warnings = []
   const values = {}
   const sources = {}
@@ -169,16 +206,29 @@ function fileLayer({ env = process.env, cwd = env.CLAUDE_PROJECT_DIR || process.
     sources[k] = 'default'
   }
   const files = { global: globalFile(env), project: projectFile(cwd) }
+  const parsed = []
   for (const [scope, file] of [['global', files.global], ['project', files.project]]) {
     if (!file) continue
     const got = readFile(file, warnings, read, scope)
-    if (!got) continue
+    if (got) parsed.push({ file, got })
+  }
+  // the project file's preset wins over the global one; BULKHEAD_PRESET wins over both
+  let preset = 'normal'
+  let presetFrom = 'default'
+  for (const { file, got } of parsed) if (got.preset) [preset, presetFrom] = [got.preset, file]
+  if (PRESETS[String(env.BULKHEAD_PRESET || '').trim()]) [preset, presetFrom] = [env.BULKHEAD_PRESET.trim(), 'env BULKHEAD_PRESET']
+  for (const [k, v] of Object.entries(presetValues(preset, totalGb))) {
+    values[k] = v
+    sources[k] = `preset ${preset}`
+  }
+  for (const { file, got } of parsed) {
     for (const [k, v] of Object.entries(got)) {
+      if (k === 'preset') continue
       values[k] = v
       sources[k] = file
     }
   }
-  return { values, sources, files, warnings }
+  return { values, sources, files, warnings, preset, presetFrom }
 }
 
 // { values, sources, files, warnings }. sources[key] is 'default', a file path or 'env NAME'.
@@ -211,7 +261,7 @@ function withEnv(layer, env) {
       sources[k] = 'env BULKHEAD_DISABLE'
     }
   }
-  return { values, sources, files: layer.files, warnings: layer.warnings }
+  return { values, sources, files: layer.files, warnings: layer.warnings, preset: layer.preset, presetFrom: layer.presetFrom }
 }
 
 let cached = null
@@ -233,4 +283,4 @@ function isEnabled(name, cfg = current()) {
   return key ? cfg.values[key] !== false : true
 }
 
-module.exports = { load, current, reset, get, isEnabled, projectFile, globalFile, KEYS, GUARDS, RULES, flatten }
+module.exports = { load, current, reset, get, isEnabled, projectFile, globalFile, KEYS, GUARDS, RULES, PRESETS, presetValues, flatten }

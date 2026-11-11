@@ -284,6 +284,7 @@ Environment variables still work and win over both files. The simplest place for
 | Variable | Default | Same as |
 |---|---|---|
 | `BULKHEAD_DISABLE` | empty | Comma-separated guards to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `disk-guard`, `orphan-reaper`, `basics`, or `all`. Single rules can be turned off too: `rm-root`, `force-push-main`, `discard-changes`, `agent-author`, `stage-all`, `remove-session-dir`. A name here is off whatever the files say |
+| `BULKHEAD_PRESET` | `normal` | The preset: `quiet`, `normal` or `strict` |
 | `BULKHEAD_WAIT_MAX_SEC` | 180 | `waitGuard.limitSeconds` |
 | `BULKHEAD_MIN_FREE_GB` | 3, or 15% of RAM if less | `memory.minFreeGb` |
 | `BULKHEAD_SLOT_FLOOR_GB` | 5, or 25% of RAM if less | `memory.slotFloorGb` |
@@ -293,6 +294,37 @@ Environment variables still work and win over both files. The simplest place for
 | `BULKHEAD_SSH` | `ssh` on `PATH` | The ssh client `bulkhead remote` runs |
 
 </details>
+
+## When it blocks something you meant
+
+A block is a question, not a verdict. Three ways out, from the smallest:
+
+1. Allow it once. Every block message ends with a short code. In your own terminal, run `bulkhead allow 7F3K`. The agent's next identical call (same command, same folder) goes through, once, within 10 minutes. The agent cannot do this for you: bulkhead blocks any attempt to run `bulkhead allow` or to write its state files.
+2. See why first. `bulkhead explain -- <command>` runs the command through every guard against the live sessions, ports and git tree, without running it, and prints who owns what is in the way, the exact message the agent sees, and how to allow it.
+3. Allow it for good, or change how much it blocks. Put the rule in `.claude/bulkhead.json` (the table below), or pick a preset: `bulkhead config --preset quiet` keeps only the cross-session guards and the two rules that cannot be undone, `strict` turns everything on with tighter limits, `normal` is the default. Your own keys and environment variables win over a preset.
+
+### Blocked something you meant? cheat sheet
+
+The one-time way is always `bulkhead allow <code>`, run by you. The permanent way, for the rule that fired:
+
+| Guard | Rule | Permanent, in `.claude/bulkhead.json` |
+|---|---|---|
+| kill-guard | `pkill`, `taskkill-im`, `stop-process-name` and the other kills by name | `{"killGuard":{"allowNames":["ffmpeg"]}}` |
+| wait-guard | `long-sleep`, `poll-loop`, `follow` | `{"waitGuard":{"limitSeconds":600}}` |
+| memory-guard | `low-memory` | `{"memory":{"minFreeGb":1}}` |
+| memory-guard | `slot-files` | `{"memoryGuard":{"enabled":false}}` |
+| port-guard | `port-in-use`, `kill-by-port` | `{"portGuard":{"ignorePorts":[3000]}}` |
+| checkout-guard | `stage-all` | `{"checkoutGuard":{"stageAll":false}}` |
+| checkout-guard | `remove-session-dir` | `{"checkoutGuard":{"removeSessionDir":false}}` |
+| checkout-guard | `git-checkout`, `git-pull` and the other tree changes | `{"checkoutGuard":{"enabled":false}}` |
+| disk-guard | `disk-wide-find`, `parallel-disk-scan`, `disk-wide-scan` | `{"diskGuard":{"enabled":false}}` |
+| basics | `rm-root` | `{"basics":{"rmRoot":false}}` |
+| basics | `force-push-main` | `{"basics":{"forcePushMain":false}}` |
+| basics | `discard-changes` | `{"basics":{"discardChanges":false}}` |
+| basics | `agent-author` | `{"basics":{"agentAuthor":false}}` |
+| basics | `self-allow` | cannot be allowed once; only you can approve |
+
+The same switch as an environment variable is `BULKHEAD_DISABLE=<guard or rule name>`. Everything is in [docs/configuration.md](docs/configuration.md) and [docs/commands.md](docs/commands.md).
 
 ## See what is running
 

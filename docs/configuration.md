@@ -6,7 +6,7 @@ Every guard works without configuration. When one gets in the way of a project, 
 
 From lowest to highest priority:
 
-1. Built-in defaults.
+1. Built-in defaults, with the [preset](#presets) layered over them (`"preset"` in a file, or `BULKHEAD_PRESET`).
 2. The global file, `~/.claude/bulkhead/config.json` (`$BULKHEAD_STATE_DIR/config.json` when that variable is set).
 3. The project file, `.claude/bulkhead.json` in the project. It is looked up from the project directory (`CLAUDE_PROJECT_DIR`, else the working directory) upward, and the search stops at the first folder that contains `.git` or at the home directory. A key set here replaces the same key from the global file; lists are replaced, not merged.
 4. Environment variables. They always win. Set them in the `env` block of `~/.claude/settings.json` to apply them to every session.
@@ -22,6 +22,25 @@ Both files are plain JSON (no comments) with one object per section. [`config.ex
   "basics": { "protectedBranches": ["main", "master", "release"] }
 }
 ```
+
+## Presets
+
+A preset changes the defaults of many keys at once. It sits between the built-in defaults and the files, so any key you set yourself, in either file or in an environment variable, still wins.
+
+```
+bulkhead config --preset quiet            # for every project
+bulkhead config --preset strict --project # for this project only
+```
+
+This writes `"preset": "quiet"` (or `"normal"`, `"strict"`) at the top level of the global file, or with `--project` of `.claude/bulkhead.json`, and keeps every other key. A project preset wins over the global one, and `BULKHEAD_PRESET` wins over both. `bulkhead config` and `bulkhead doctor` show the active preset, and `bulkhead config` marks every value that comes from it as `preset NAME`.
+
+| Preset | What it sets |
+|---|---|
+| `normal` | The defaults below. Nothing changes. |
+| `quiet` | Only the guards that protect one session from another, and the rules that cannot be undone. Stays on: kill-guard, port-guard, checkout-guard, memory-guard, orphan-reaper, and in basics `rmRoot`, `forcePushMain` and `selfAllow`. Turned off: `waitGuard.enabled`, `diskGuard.enabled`, `basics.discardChanges`, `basics.agentAuthor`. |
+| `strict` | Everything on, with tighter limits: `waitGuard.limitSeconds` 60 (default 180); `memory.minFreeGb` 20% of RAM, at most 5 GB (default 15%, at most 3 GB); `memory.slotFloorGb` 35% of RAM, at most 8 GB (default 25%, at most 5 GB); `memory.maxCommitPct` 65 (default 75, Windows); `basics.protectedBranches` `["main", "master", "develop", "release", "production"]`. |
+
+The limits scale with the RAM of the machine, so a small laptop is not locked out of every build. To keep one strict value and relax another, set the key: `{ "preset": "strict", "waitGuard": { "limitSeconds": 120 } }`.
 
 ## Broken files
 
@@ -90,12 +109,19 @@ The built-in shared list is: node, python, python3, py, pythonw, ruby, java, jav
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `enabled` | boolean | `true` | Turns all four rules on or off |
+| `enabled` | boolean | `true` | Turns all the rules on or off |
 | `protectedBranches` | list of branch names | `["main", "master"]` | Branches the force-push rule protects |
 | `rmRoot` | boolean | `true` | `rm -rf` and its PowerShell and cmd forms at a root, a top-level folder such as `/srv`, the home directory, a folder directly in it (caches excepted), or a folder above the repository |
 | `forcePushMain` | boolean | `true` | `git push --force` to a protected branch. `--force-with-lease` always passes |
 | `discardChanges` | boolean | `true` | `git reset --hard` or `git clean -fd` that would lose uncommitted work |
 | `agentAuthor` | boolean | `true` | Commits authored as Claude or Anthropic: `--author`, `git config user.name/user.email`, `GIT_AUTHOR_*` |
+| `selfAllow` | boolean | `true` | The agent running `bulkhead allow` or writing the allow state files, which would let it approve its own blocks. Leave it on: [allow once](commands.md#bulkhead-allow) is only worth anything while the user is the one who approves |
+
+### allowOnce
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `ttlMinutes` | number | `10` | Minutes a code from a block message stays valid, and how long an approved command can still be run once after `bulkhead allow <code>` |
 
 ### orphanReaper
 
@@ -151,7 +177,8 @@ An entry with a problem (a missing `host`, an unknown key, a value of the wrong 
 
 | Variable | Same as |
 |---|---|
-| `BULKHEAD_DISABLE` | Comma-separated names to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `basics`, `orphan-reaper`, the basics rules `rm-root`, `force-push-main`, `discard-changes`, or `all`. A name listed here is off whatever the files say |
+| `BULKHEAD_DISABLE` | Comma-separated names to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `basics`, `orphan-reaper`, the basics rules `rm-root`, `force-push-main`, `discard-changes`, `agent-author`, `self-allow`, or `all`. A name listed here is off whatever the files say |
+| `BULKHEAD_PRESET` | The preset: `quiet`, `normal` or `strict`. Wins over the `preset` key in the files |
 | `BULKHEAD_WAIT_MAX_SEC` | `waitGuard.limitSeconds` |
 | `BULKHEAD_MIN_FREE_GB` | `memory.minFreeGb` |
 | `BULKHEAD_SLOT_FLOOR_GB` | `memory.slotFloorGb` |

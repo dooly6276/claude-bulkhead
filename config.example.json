@@ -1,4 +1,5 @@
 {
+  "preset": "normal",
   "killGuard": {
     "enabled": true,
     "allowNames": ["ffmpeg"],
@@ -34,7 +35,11 @@
     "rmRoot": true,
     "forcePushMain": true,
     "discardChanges": true,
-    "agentAuthor": true
+    "agentAuthor": true,
+    "selfAllow": true
+  },
+  "allowOnce": {
+    "ttlMinutes": 10
   },
   "orphanReaper": {
     "enabled": true,

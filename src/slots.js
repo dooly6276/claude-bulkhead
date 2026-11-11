@@ -13,10 +13,16 @@ const SMALL_MACHINE_GB = 24
 // So the defaults are 15% and 25% of total RAM, capped at those values.
 const round1 = n => Math.round(n * 10) / 10
 
+// What the two RAM limits are when the config leaves them on auto.
+function autoLimits(totalGb = os.totalmem() / 2 ** 30) {
+  return { minFreeGb: Math.min(3, round1(totalGb * 0.15)), floorGb: Math.min(5, round1(totalGb * 0.25)) }
+}
+
 function limits(totalGb = os.totalmem() / 2 ** 30) {
+  const auto = autoLimits(totalGb)
   return {
-    minFreeGb: setting('memory.minFreeGb', Math.min(3, round1(totalGb * 0.15))),
-    floorGb: setting('memory.slotFloorGb', Math.min(5, round1(totalGb * 0.25))),
+    minFreeGb: setting('memory.minFreeGb', auto.minFreeGb),
+    floorGb: setting('memory.slotFloorGb', auto.floorGb),
     maxCommitPct: setting('memory.maxCommitPct', 75),
   }
 }
@@ -165,4 +171,4 @@ function release(file) {
   try { fs.unlinkSync(file) } catch {}
 }
 
-module.exports = { admit, take, release, reclaim, readSlots, staleReason, slotDir, limits, queueDir, enqueue, readQueue }
+module.exports = { autoLimits, admit, take, release, reclaim, readSlots, staleReason, slotDir, limits, queueDir, enqueue, readQueue }

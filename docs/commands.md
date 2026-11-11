@@ -2,6 +2,8 @@
 
 `bulkhead` and `bulkhead-slot` are in the plugin's `bin/` directory, which Claude Code puts on the Bash tool's `PATH` while the plugin is enabled. Outside Claude Code, call them by path, for example `node ~/.claude/plugins/cache/bulkhead/bulkhead/<version>/bin/bulkhead status`.
 
+`bulkhead --version` prints the version, `bulkhead <command> --help` and `bulkhead help <command>` print that command's usage, and an unknown command is named in the error. Options that take a number refuse a value they cannot use (`bulkhead-slot run --gb abc`, `--gb=0`, `--gb=999` on a smaller machine, `log -n abc`, `top --interval=abc`) instead of falling back to a default.
+
 Every command that prints a table also takes `--json`. Colors are used only when the output is a terminal and `NO_COLOR` is not set.
 
 | Command | What it does |
@@ -11,7 +13,9 @@ Every command that prints a table also takes `--json`. Colors are used only when
 | [`bulkhead scan`](#bulkhead-scan) | Replays your Claude Code transcripts against the guards: what they would have stopped |
 | [`bulkhead log`](#bulkhead-log) | What the guards blocked and what orphan-reaper stopped |
 | [`bulkhead doctor`](#bulkhead-doctor) | Checks the install, the settings and this machine |
-| [`bulkhead config`](#bulkhead-config) | Effective settings and where each one came from |
+| [`bulkhead config`](#bulkhead-config) | Effective settings and where each one came from; `--preset` switches to fewer or more guards |
+| [`bulkhead explain`](#bulkhead-explain) | What every guard would say about a command, against this machine right now, without running it |
+| [`bulkhead allow`](#bulkhead-allow) | You allow one blocked command once, from your own terminal |
 | [`bulkhead port`](#bulkhead-port) | A port nothing is listening on |
 | [`bulkhead reap`](#bulkhead-reap) | Stops what sessions that have exited left running, or lists it with `--dry-run` |
 | [`bulkhead-slot`](#bulkhead-slot) | Queues heavy commands against a shared RAM budget |
@@ -244,23 +248,97 @@ OK    git             2.52.0.windows.1
 
 ```
 bulkhead config [--json]
+bulkhead config --preset quiet|normal|strict [--project]
 ```
 
-Prints which config files were found, every setting with its effective value, and where that value came from: `default`, a file path, or `env NAME`. Values left at their default are dimmed in a terminal. Problems with the files are listed at the end as `WARN` lines. See [configuration.md](configuration.md) for the keys.
+Prints which config files were found, the active preset, every setting with its effective value, and where that value came from: `default`, `preset NAME`, a file path, or `env NAME`. Values left at their default are dimmed in a terminal. A limit left on `auto` shows what it works out to on this machine, such as `auto (3 GB on this machine)`. Problems with the files are listed at the end as `WARN` lines. See [configuration.md](configuration.md) for the keys.
 
 ```
 $ bulkhead config
 Files (project wins over global, environment wins over both)
   global   ~/.claude/bulkhead/config.json  loaded
   project  ~/src/acme-web/.claude/bulkhead.json  loaded
+  preset   quiet  (from ~/.claude/bulkhead/config.json)
 
-KEY                            VALUE               FROM
-killGuard.enabled              true                default
-killGuard.allowNames           ["ffmpeg"]          ~/.claude/bulkhead/config.json
-waitGuard.limitSeconds         300                 ~/src/acme-web/.claude/bulkhead.json
-memory.minFreeGb               2                   env BULKHEAD_MIN_FREE_GB
+KEY                            VALUE                        FROM
+killGuard.enabled              true                         default
+killGuard.allowNames           ["ffmpeg"]                   ~/.claude/bulkhead/config.json
+waitGuard.enabled              false                        preset quiet
+waitGuard.limitSeconds         300                          ~/src/acme-web/.claude/bulkhead.json
+memory.minFreeGb               auto (3 GB on this machine)  default
 ...
 ```
+
+`--preset` writes `"preset"` into the global config file (`~/.claude/bulkhead/config.json`), or with `--project` into the project's `.claude/bulkhead.json` (created when missing), and keeps every other key in the file. A file that is not valid JSON is never overwritten. `quiet` keeps only the guards that protect one session from another and the two rules that cannot be undone; `normal` is the defaults; `strict` has everything on with tighter limits. Keys you set yourself and environment variables still win over a preset. The exact contents of each preset are in [configuration.md](configuration.md#presets).
+
+```
+$ bulkhead config --preset quiet
+preset quiet written to ~/.claude/bulkhead/config.json (every project; a project file or BULKHEAD_PRESET can still override it)
+```
+
+## bulkhead explain
+
+```
+bulkhead explain [--cwd DIR] [--session-id ID|PID] [--timeout MS] [--json] -- <command...>
+```
+
+Runs the command through every Bash guard in the order the hooks run them, against the sessions, processes, ports and git tree on this machine right now, and prints what each one would do. Nothing is executed, nothing is written to the event log, and no allow code is created. The command can be given as separate words after `--` or as one quoted string.
+
+For each guard it prints `pass`, `BLOCK` or `off`; for a block, the rule, the evidence (which live session owns the process, port or tree, with its pid and project), the exact message the agent would see, the one-time way out (`bulkhead allow <code>`, see below) and the permanent one (the config key, and the `BULKHEAD_DISABLE` name). The process table is read only when a guard needs it: a command that matches no guard costs about what the hooks cost.
+
+```
+$ bulkhead explain -- pkill -f node
+command  pkill -f node
+folder   ~/src/acme-web
+as       a new session (--session-id names one)
+verdict  BLOCKED by kill-guard pkill
+
+kill-guard      BLOCK  rule pkill
+  evidence   node pid 3941, 3966 runs in the session with pid 2729 (~/src/blog)
+  evidence   node pid 5873 runs in the session with pid 3517 (~/src/shop)
+  the agent sees:
+    [bulkhead] kill-guard: pkill/killall matches every process with that name
+    ...
+    If the user wants this on purpose, ask them to run `bulkhead allow <code>` in their own terminal (allows it once), or set {"killGuard":{"allowNames":["node"]}} in .claude/bulkhead.json.
+  allow once   the user runs `bulkhead allow <code>` in their terminal; the code is in the real block message
+  allow always {"killGuard":{"allowNames":["node"]}} in .claude/bulkhead.json
+  or           BULKHEAD_DISABLE=kill-guard
+
+wait-guard      pass
+memory-guard    pass
+port-guard      pass
+checkout-guard  pass
+disk-guard      pass
+basics          pass
+```
+
+Which session is "me" decides port-guard and checkout-guard. `--session-id` takes a session id or the pid of a running session and judges the command as that session. Without it, the shell's own session is used when the command runs inside Claude Code (`CLAUDE_PID`), and otherwise the command is judged as a new session that none of the running ones is. `--cwd` sets the working directory (default: the current one) and `--timeout` the tool call's timeout in milliseconds, which wait-guard reads. `--json` prints `{ command, cwd, session, blocked, guards: [{ guard, status, rule, evidence, message, allowOnce, config, disable }] }`. The exit code is 0 whether the command passes or not; 1 means bad arguments.
+
+## bulkhead allow
+
+```
+bulkhead allow <code>
+bulkhead allow --list [--json]
+```
+
+Run this yourself, in your own terminal. Every block message ends with a short code: ``If the user wants this on purpose, ask them to run `bulkhead allow 7F3K` in their own terminal (allows it once), or set {...} in .claude/bulkhead.json.`` After `bulkhead allow 7F3K`, the agent's next identical tool call (the same command text, run from the same folder) passes the guard that blocked it, once. The hook deletes the approval when it uses it, so a second run is blocked again with a new code.
+
+```
+$ bulkhead allow 5CNWZ
+Allowed once: pkill -f node
+  folder /tmp
+  guards kill-guard pkill
+The agent can run exactly that command now, once, within 10 min.
+$ bulkhead allow --list
+CODE   STATE    GUARD       RULE   FOLDER  COMMAND        BLOCKED   LEFT
+5CNWZ  waiting  kill-guard  pkill  /tmp    pkill -f node  just now  10 min
+```
+
+- A code is valid for `allowOnce.ttlMinutes` (default 10) after the block, and an approved command for as long again after you approve it. Expired and unreadable entries are deleted when the state is read.
+- When several guards block one command, they share one code, and `bulkhead allow` approves all of them.
+- The state is one small JSON file per guard in `~/.claude/bulkhead/allow/` (`$BULKHEAD_STATE_DIR/allow/`), written atomically. A corrupt file is ignored and deleted: the block stays, the hook never fails because of it.
+- The agent cannot approve its own blocks. The `basics` rule `self-allow` (on by default) blocks any Bash or PowerShell call that runs `bulkhead allow`, `claude-bulkhead allow`, `bulkhead-cli allow`, `node .../bin/bulkhead allow`, `npx claude-bulkhead allow` and the like, through `bash -c`, `eval`, `env`, `sudo`, subshells and other wrappers, and any call that writes into the allow folder with a redirect, `tee`, `cp`, `mv`, `sed -i`, `touch` or a script. It never offers a code itself, and `bulkhead explain` shows it as not allowable. This is a guardrail against mistakes, not a sandbox: an agent that is determined to run arbitrary code has other ways to write files, which is why the approval has to come from you.
+- Run it in a terminal. Claude Code's `!` shell mode is not documented as running `PreToolUse` hooks, so bulkhead does not rely on it: use your own terminal, or the terminal pane in your editor.
 
 ## bulkhead port
 

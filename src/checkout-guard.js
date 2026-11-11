@@ -206,6 +206,7 @@ function classify(cmd, {
         const [pid, f] = hit
         return {
           rule: 'remove-session-dir',
+          owner: { pid, cwd: f.cwd },
           why: `[bulkhead] checkout-guard: \`${seg}\` removes ${r.dir}, and another Claude session works in it (pid ${pid}, started ${when(f.startedAt)}, in ${f.cwd}).\n` +
             'Its files, its dev server and its next commit would disappear under it.\n' +
             'Leave this folder to that session. If it is really finished, wait until it exits (`bulkhead status` lists the live sessions), then remove it.',
@@ -237,6 +238,7 @@ function classify(cmd, {
       if (!changed.length) continue
       return {
         rule: 'stage-all',
+        owner: { pid: o.pid, cwd: o.cwd },
         why: `[bulkhead] checkout-guard: \`${oneLine(seg, 120)}\` stages every change in ${top} (${changed.length} file${changed.length === 1 ? '' : 's'}), ` +
           `and ${who}.\n` +
           'Some of those changes are probably its half-finished work, and they would go into your commit.\n' +
@@ -253,6 +255,7 @@ function classify(cmd, {
     if (call.sub === 'pull') {
       return {
         rule: 'git-pull',
+        owner: { pid: o.pid, cwd: o.cwd },
         why: `[bulkhead] checkout-guard: \`${oneLine(seg, 120)}\` ${what} in ${top}, and ${who}.\n` +
           'A pull rewrites the files that session has open, and a conflict would stop halfway through its edits.\n' +
           'Wait until it has committed or stashed its changes, or pull from a clone no other session is using.',
@@ -260,6 +263,7 @@ function classify(cmd, {
     }
     return {
       rule: `git-${call.sub}`,
+      owner: { pid: o.pid, cwd: o.cwd },
       why: `[bulkhead] checkout-guard: \`${oneLine(seg, 120)}\` ${what} in ${top}, and ${who}.\n` +
         'Its files and branch would change under it. Work in your own worktree instead:\n' +
         `  git worktree add ../${name}-<task> -b <branch>`,
