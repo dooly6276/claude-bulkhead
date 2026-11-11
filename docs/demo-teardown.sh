@@ -16,4 +16,6 @@ rm -rf "$repo" /tmp/demo
 # transcripts the recorded claude wrote for the demo repo
 rm -rf "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/projects/*-code-storefront-*
 rmdir "$HOME/code" 2>/dev/null
+# the recorded claude's session-end hook can still write /tmp/demo/state a moment later
+sleep 2; rm -rf /tmp/demo
 exit 0

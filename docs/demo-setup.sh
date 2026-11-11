@@ -38,10 +38,31 @@ Next.js storefront. Each worktree runs its own dev server on a fixed port.
 MD
 # hooks-only copy of the plugin (no skill, so Claude does not know about the guards in advance) and a
 # safety net: if a hook ever failed, pkill/killall here would do nothing instead of killing node.
+# A pkill that would only reach the demo's own processes (pattern names a demo folder, or every
+# process it matches runs from the demo search worktree) runs for real: what Claude reports afterwards
+# must match what bulkhead did (it allows such a kill).
 P=/tmp/demo/plugin; rm -rf $P; mkdir -p $P/.claude-plugin
 ln -s "$root/src" $P/src; ln -s "$root/hooks" $P/hooks; ln -s "$root/bin" $P/bin
 cp "$root/.claude-plugin/plugin.json" $P/.claude-plugin/
 for n in pkill killall; do printf '#!/bin/sh\necho "demo safety shim: %s not executed" >&2\nexit 0\n' $n > /tmp/demo/safe/$n; chmod +x /tmp/demo/safe/$n; done
+cat > /tmp/demo/safe/pkill <<SHIM
+#!/bin/sh
+case "\$*" in
+  *"$DEMO_REPO/"*|*"~/code/storefront/"*) exec /usr/bin/pkill "\$@" ;;
+esac
+pids=\$(/usr/bin/pgrep "\$@" 2>/dev/null | grep -vx "\$\$")
+if [ -n "\$pids" ]; then
+  ok=1
+  for p in \$pids; do
+    cwd=\$(lsof -a -p "\$p" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+    case "\$cwd" in "$DEMO_REPO"/search|"$DEMO_REPO"/search/*) ;; *) ok=0 ;; esac
+  done
+  [ \$ok = 1 ] && exec /usr/bin/pkill "\$@"
+fi
+echo "demo safety shim: pkill not executed" >&2
+exit 0
+SHIM
+chmod +x /tmp/demo/safe/pkill
 export PATH=/tmp/demo/safe:$PATH
 bash "$root/docs/demo-up.sh" >/dev/null 2>&1
 # Tear down afterwards with: bash docs/demo-teardown.sh
