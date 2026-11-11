@@ -283,13 +283,27 @@ function withEnv(layer, env) {
   return { values, sources, files: layer.files, warnings: layer.warnings, preset: layer.preset, presetFrom: layer.presetFrom }
 }
 
+// A hook asks for many settings per call; the files are read once and the environment layer is
+// rebuilt only when one of the variables it reads has changed.
 let cached = null
+let withEnvCache = null
+let envNames = null
+function envKey(env) {
+  if (!envNames) envNames = [...new Set(Object.values(KEYS).map(s => s.env).filter(Boolean)), 'BULKHEAD_NO_LOG', 'BULKHEAD_DISABLE']
+  return envNames.map(n => (env[n] === undefined ? '\u0000' : env[n])).join('\u0001')
+}
 function current() {
-  if (!cached) cached = fileLayer()
-  return withEnv(cached, process.env)
+  if (!cached) {
+    cached = fileLayer()
+    withEnvCache = null
+  }
+  const key = envKey(process.env)
+  if (!withEnvCache || withEnvCache.key !== key) withEnvCache = { key, cfg: withEnv(cached, process.env) }
+  return withEnvCache.cfg
 }
 function reset() {
   cached = null
+  withEnvCache = null
 }
 
 function get(key, cfg = current()) {
