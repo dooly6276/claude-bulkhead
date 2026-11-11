@@ -78,11 +78,17 @@ The built-in shared list is: node, python, python3, py, pythonw, ruby, java, jav
 | Key | Type | Default | Environment | Meaning |
 |---|---|---|---|---|
 | `memoryGuard.enabled` | boolean | `true` | | Turns memory-guard on or off |
+| `memoryGuard.autoQueue` | boolean | `false` | | Instead of blocking a heavy command, rewrite it to run through `bulkhead-slot` so every session waits in one line. See [auto-queue](commands.md#auto-queue) |
+| `memoryGuard.estimatesGb` | object | built in | | RAM in GB assumed per program when auto-queueing, for example `{ "gradle": 6, "cargo": 8 }` |
+| `memoryGuard.waitMinutes` | number | `10` | | How long an auto-queued command waits for room before it gives up (exit code 3) |
+| `memoryGuard.subagents` | boolean | `false` | | Block starting a new subagent (the `Agent` tool) while memory pressure is critical |
 | `memory.minFreeGb` | number | 3, or 15% of RAM if less | `BULKHEAD_MIN_FREE_GB` | Free RAM below which memory-guard blocks heavy commands, and the first bulkhead-slot job waits |
 | `memory.slotFloorGb` | number | 5, or 25% of RAM if less | `BULKHEAD_SLOT_FLOOR_GB` | RAM bulkhead-slot keeps free when it starts a second job |
 | `memory.maxCommitPct` | number | `75` | `BULKHEAD_MAX_COMMIT_PCT` | Windows only: commit charge above which bulkhead-slot holds a second job |
 
 `bulkhead doctor` shows the values computed for the machine it runs on.
+
+Critical memory pressure for `memoryGuard.subagents` means macOS `kern.memorystatus_vm_pressure_level` 4, Linux `/proc/pressure/memory` with `full avg10` at 10 or more (or `some avg10` at 50 or more), or Windows with less than 8% of physical memory free. The reading is cached for 5 seconds.
 
 ### portGuard
 

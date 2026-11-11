@@ -43,6 +43,10 @@ const KEYS = {
   'waitGuard.enabled': on('wait-guard'),
   'waitGuard.limitSeconds': { type: 'number', default: 180, env: 'BULKHEAD_WAIT_MAX_SEC', doc: 'Longest foreground wait allowed, in seconds.' },
   'memoryGuard.enabled': on('memory-guard'),
+  'memoryGuard.autoQueue': bool(false, 'Instead of blocking a heavy command, run it through bulkhead-slot so every session waits in one line.'),
+  'memoryGuard.estimatesGb': { type: 'numbers', default: null, doc: 'RAM in GB bulkhead assumes per tool when auto-queueing, by program name: { "gradle": 6 }.' },
+  'memoryGuard.waitMinutes': { type: 'number', default: 10, doc: 'How long an auto-queued command waits for room before giving up (bulkhead-slot --wait).' },
+  'memoryGuard.subagents': bool(false, 'Block starting a new subagent while memory pressure is critical.'),
   'memory.minFreeGb': { type: 'number', default: null, env: 'BULKHEAD_MIN_FREE_GB', doc: 'Free RAM below which memory-guard blocks heavy commands. Default: 3, or 15% of RAM if less.' },
   'memory.slotFloorGb': { type: 'number', default: null, env: 'BULKHEAD_SLOT_FLOOR_GB', doc: 'RAM bulkhead-slot keeps free when it starts a second job. Default: 5, or 25% of RAM if less.' },
   'memory.maxCommitPct': { type: 'number', default: 75, env: 'BULKHEAD_MAX_COMMIT_PCT', doc: 'Windows commit charge above which bulkhead-slot holds a second job.' },
@@ -135,6 +139,7 @@ function typeOk(type, v) {
   if (type === 'string') return typeof v === 'string'
   if (type === 'string[]') return Array.isArray(v) && v.every(x => typeof x === 'string')
   if (type === 'number[]') return Array.isArray(v) && v.every(x => Number.isInteger(x) && x > 0 && x < 65536)
+  if (type === 'numbers') return Boolean(v) && typeof v === 'object' && !Array.isArray(v) && Object.values(v).every(x => typeof x === 'number' && x > 0)
   return false
 }
 

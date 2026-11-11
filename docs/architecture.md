@@ -15,6 +15,7 @@ claude-bulkhead is a Claude Code plugin made of small Node scripts. There is no 
 | `PreToolUse` | `Bash\|PowerShell` | kill-guard, wait-guard, disk-guard, basics | 10 s |
 | | | memory-guard, checkout-guard | 15 s |
 | | | port-guard | 20 s |
+| `PreToolUse` | `Agent\|Task` | subagent-guard (does nothing unless `memoryGuard.subagents` is on) | 10 s |
 
 The registration lives in [hooks/hooks.json](../hooks/hooks.json). The timeouts are upper bounds that Claude Code enforces; a normal run takes about 50 ms.
 
@@ -79,6 +80,7 @@ Every session on the machine uses the same directory, `~/.claude/bulkhead` by de
   events.jsonl.1    the previous log, after rotation at 1 MB
   statusline.json   the cached status line, 5 seconds
   session-state/    one JSON file per session: working, waiting or needs permission, and since when
+  pressure.json     the cached memory pressure reading, 5 seconds (subagent-guard)
   remote-logs/      full output of bulkhead remote run --tail, the newest 50
   remote-last.json  the copy each project's last remote run used, for bulkhead remote fetch
 ```

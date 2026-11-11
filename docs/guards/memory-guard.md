@@ -2,7 +2,7 @@
 
 [Back to README](../../README.md) | [All guards](../../README.md#guards)
 
-memory-guard blocks heavy commands when free RAM is low. bulkhead-slot is a small CLI that queues heavy work against one RAM budget that every session on the machine shares.
+memory-guard blocks heavy commands when free RAM is low, or queues them when `memoryGuard.autoQueue` is on. It can also refuse to start a new subagent while memory pressure is critical. bulkhead-slot is a small CLI that queues heavy work against one RAM budget that every session on the machine shares.
 
 ## Why
 
@@ -15,6 +15,7 @@ Three sessions start a build, a test suite and a browser run in the same minute,
 The threshold is 3 GB. On machines with less than 20 GB it is 15% of total RAM instead, so 1.2 GB on an 8 GB laptop. Below it, these are blocked:
 
 ```
+xcodebuild -scheme App   swift build/test  fastlane <lane>     go build -race ./...
 npx vitest run           jest              npx playwright test     cypress run
 ./gradlew assembleDebug  gradle build      mvn clean install       ./mvnw test
 emulator -avd Pixel_7    dotnet build      dotnet test             tsc -b
@@ -38,12 +39,39 @@ memory-guard also blocks commands that write, touch, move or delete files in the
 ### What Claude sees
 
 ```
-[bulkhead] memory-guard: only 1.8 GB of RAM is free (minimum 3 GB) and this looks like a heavy command.
-Other sessions are probably building or testing right now. Starting more work at this point is how machines freeze.
-Either wait a minute and retry with fewer workers (for example --maxWorkers=2), or queue it:
-  bulkhead-slot run --gb=3 -- <command>
+[bulkhead] memory-guard: only 1.4 GB of RAM is free (minimum 2.4 GB: 15% of this machine's 16 GB) and this looks like a heavy command.
+3 Claude sessions are running and may be building or testing too.
+Starting more work at this point is how machines freeze. Wait a minute, use fewer workers (for example --maxWorkers=2), or queue it:
+  bulkhead-slot run --gb=4 -- 'cargo build --release'
 bulkhead-slot waits until there is room, runs the command, and frees the slot when it exits.
 ```
+
+The session count is real: with one session it says that only this session is running, so other programs are using the RAM. The GB figure is the estimate for that tool.
+
+On macOS the free RAM is `kern.memorystatus_level` (the percentage `memory_pressure` prints as free, with reclaimable file cache and compressed pages counted), and memory-guard also reads `kern.memorystatus_vm_pressure_level`. At normal pressure a heavy command is blocked only below the minimum; at warning or critical it is blocked whatever the estimate says. If the reading fails or takes more than 1.5 seconds, nothing is blocked.
+
+### Auto-queue instead of blocking
+
+```json
+{ "memoryGuard": { "autoQueue": true } }
+```
+
+Every heavy command is then rewritten to `bulkhead-slot run --gb=<estimate> --label=<name> --wait=10 -- bash -c '<original>'`, whatever the free RAM is, so all sessions share one fair queue and nobody has to remember the slot. Backgrounded commands, commands run on another machine, commands that stay up until stopped (`next dev`, `emulator`) and commands already queued are left as they are. The mechanism, the quoting for bash and PowerShell, the estimates and `memoryGuard.estimatesGb` are in [commands.md](../commands.md#auto-queue). `strict` presets turn it on together with `memoryGuard.subagents`.
+
+### Subagents under memory pressure
+
+```json
+{ "memoryGuard": { "subagents": true } }
+```
+
+A PreToolUse hook on the `Agent` tool (`Task` in older Claude Code versions) blocks starting another subagent while memory pressure is critical: macOS pressure level 4, Linux memory stalls (`/proc/pressure/memory`), Windows under 8% free RAM. Claude sees:
+
+```
+[bulkhead] subagent-guard: memory pressure is critical (macOS memory pressure level 4). Do not start another subagent now.
+Finish the work you have, or wait for the running subagents to return, then try again in a minute. `bulkhead status` shows free RAM.
+```
+
+The reading is one `sysctl` call, one small file read or one memory query, cached for 5 seconds, and any failure lets the subagent start.
 
 ## bulkhead-slot
 
@@ -72,7 +100,7 @@ The command's exit code is passed through. The slot is released when the command
 
 - Linux: `MemAvailable` from `/proc/meminfo`.
 - Windows: available physical memory, plus commit charge from `Win32_OperatingSystem`.
-- macOS: `os.freemem()` is close to zero on a healthy machine, so bulkhead estimates what Activity Monitor shows from `vm_stat`: total minus app memory (anonymous minus purgeable pages), wired and compressed pages.
+- macOS: `os.freemem()` is close to zero on a healthy machine, so bulkhead reads `kern.memorystatus_level`, the same free percentage `memory_pressure` reports. If `sysctl` fails it estimates from `vm_stat` (total minus app memory, wired and compressed pages), and if that fails too it assumes the RAM is free.
 
 Slot files live in `~/.claude/bulkhead/slots`.
 
@@ -90,6 +118,6 @@ The same thresholds can be set in a config file as `memory.minFreeGb`, `memory.s
 ## Limits
 
 - Only RAM is measured. CPU, disk and GPU are not limited.
-- bulkhead-slot is only used when called. Nothing forces every session to queue through it.
+- bulkhead-slot is only used when called, unless `memoryGuard.autoQueue` is on. Auto-queue wraps what the hook sees; a heavy command started by a script the agent wrote (a Makefile target, a shell script) is not recognised.
 - The heavy command list is fixed and matched on command text.
 - On Windows, `bulkhead-slot` runs through Git Bash when it is installed and through `cmd.exe` otherwise.

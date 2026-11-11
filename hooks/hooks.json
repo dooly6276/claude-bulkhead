@@ -75,6 +75,12 @@
           { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/disk-guard.js"], "timeout": 10 },
           { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/basics.js"], "timeout": 10 }
         ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/subagent-guard.js"], "timeout": 10 }
+        ]
       }
     ]
   }
