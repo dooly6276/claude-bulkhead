@@ -473,3 +473,40 @@ test('bulkhead worktree is wired into the cli and rejects unknown input', async 
   const h = await run(['--help'])
   assert.match(h.out, /bulkhead worktree add/)
 })
+
+test('prune: a squash-merged branch counts as merged and is deleted with -D; one with more work is kept', async () => {
+  const { root } = makeRepo()
+  const squashed = mergedBranch(root, 'sq', { merge: false })
+  sh(root, 'merge', '-q', '--squash', 'sq')
+  sh(root, 'commit', '-q', '-m', 'squash sq')
+  const more = mergedBranch(root, 'more', { merge: false })
+  sh(root, 'merge', '-q', '--squash', 'more')
+  sh(root, 'commit', '-q', '-m', 'squash more')
+  fs.writeFileSync(path.join(more, 'later.txt'), 'later')
+  sh(more, 'add', '-A')
+  sh(more, 'commit', '-q', '-m', 'after the squash')
+  const dry = JSON.parse((await run(['prune', '--json'], { cwd: root })).out)
+  assert.deepStrictEqual(dry.safe.map(s => [s.branch, s.squashed]), [['sq', true]])
+  assert.match(dry.kept.find(k => k.branch === 'more').why, /not merged into main/)
+  const r = await run(['prune', '--yes'], { cwd: root })
+  assert.strictEqual(r.code, 0, r.err)
+  assert.match(r.out, /removed .*\(sq, squash-merged\)/)
+  assert.ok(!fs.existsSync(squashed) && fs.existsSync(more))
+  assert.strictEqual(sh(root, 'branch', '--list', 'sq'), '')
+})
+
+test('list: the .env copies and PORT line from add do not make a worktree dirty', async () => {
+  // a repository whose .gitignore does not list the env files, so they show up as untracked
+  const { root } = makeRepo()
+  fs.writeFileSync(path.join(root, '.gitignore'), 'node_modules\n')
+  sh(root, 'commit', '-q', '-am', 'narrow ignore')
+  fs.writeFileSync(path.join(root, '.env'), 'A=1\n')
+  const wt = JSON.parse((await run(['add', 'fresh', '--json'], { cwd: root })).out).path
+  assert.ok(fs.existsSync(path.join(wt, '.env.local')) && fs.existsSync(path.join(wt, '.env')))
+  assert.match(sh(wt, 'status', '--porcelain'), /\?\? \.env/)
+  let row = JSON.parse((await run(['list', '--json'], { cwd: root })).out).worktrees[1]
+  assert.strictEqual(row.dirty, false)
+  fs.writeFileSync(path.join(wt, 'notes.txt'), 'mine')
+  row = JSON.parse((await run(['list', '--json'], { cwd: root })).out).worktrees[1]
+  assert.strictEqual(row.dirty, true)
+})

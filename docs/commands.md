@@ -504,7 +504,7 @@ PATH                  BRANCH       AGE  STATE  VS origin/main  SESSION   PORT
 
 Lists the worktrees that are safe to remove, and removes them only with `--yes`. A worktree is safe when all of these hold, and the others are printed with the reason they are kept:
 
-- its branch is merged into `--merged-into` (default: the default branch) and has commits or is older than `--older-than`; a branch nobody has committed to yet is never called merged unless `--older-than` is given and met (`7d`, `12h`, `2w`, `30m`; last commit or last change to the folder, whichever is newer),
+- its branch is merged into `--merged-into` (default: the default branch), by a merge, a fast-forward, or a squash or rebase whose changes are all in that branch already (git 2.38 or later; squash-merged branches are deleted with `git branch -D`), and has commits or is older than `--older-than`; a branch nobody has committed to yet is never called merged unless `--older-than` is given and met (`7d`, `12h`, `2w`, `30m`; last commit or last change to the folder, whichever is newer),
 - no uncommitted changes, no untracked files besides copied env files, and no ignored files besides rebuildable ones (`node_modules`, build output, caches, logs and the env files); an untracked env file counts only when it is identical to the main checkout's, or is the `PORT=` line this command wrote,
 - no live session works in it, and you are not standing in it,
 - it is not the main worktree, not locked, not missing, not a detached HEAD.

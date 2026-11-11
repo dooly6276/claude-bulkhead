@@ -267,8 +267,9 @@ function inspect(c, info, base, sessions) {
     const present = fs.existsSync(t.path)
     const row = { path: t.path, branch: t.branch, main: i === 0, detached: t.detached, locked: t.locked, missing: t.prunable || !present, ahead: null, behind: null, dirty: null, ageSeconds: null, sessions: map.get(t.path), port: present ? readPort(t.path) : null }
     if (!present) return row
+    // the .env copies and the PORT line `worktree add` wrote are not the user's changes
     const st = c.git(['status', '--porcelain'], t.path)
-    row.dirty = st.status === 0 ? st.stdout.trim().length > 0 : null
+    row.dirty = st.status === 0 ? st.stdout.split('\n').filter(l => l && !(l.startsWith('?? ') && isDefaultName(l.slice(3)))).length > 0 : null
     const lr = c.git(['rev-list', '--left-right', '--count', `${base}...HEAD`], t.path)
     if (lr.status === 0) [row.behind, row.ahead] = lr.stdout.trim().split(/\s+/).map(Number)
     const ct = c.git(['log', '-1', '--format=%ct'], t.path)
@@ -336,6 +337,16 @@ function lostWork(c, t, mainDir, includeSet) {
   return { why: null, disposable }
 }
 
+// A branch merged with --squash or rebased is not an ancestor of ref, but merging it into ref
+// changes nothing: the merge result has ref's own tree. Needs git 2.38+ (merge-tree --write-tree);
+// older git answers no and the branch is kept.
+function squashMerged(c, dir, branch, ref) {
+  const m = c.git(['merge-tree', '--write-tree', ref, branch], dir)
+  if (m.status !== 0) return false
+  const t = c.git(['rev-parse', `${ref}^{tree}`], dir)
+  return t.status === 0 && m.stdout.trim().split('\n')[0] === t.stdout.trim()
+}
+
 function judge(c, t, ctx) {
   const { info, ref, olderThan, sessions } = ctx
   if (t.path === info.main) return 'main worktree'
@@ -347,7 +358,10 @@ function judge(c, t, ctx) {
   if (sessionMap(sessions, [t], c.platform).get(t.path).length) return 'a live session works in it'
   if (inside(c.cwd, t.path, c.platform) || inside(real(c.cwd), real(t.path), c.platform)) return 'you are inside it'
   const merged = c.git(['merge-base', '--is-ancestor', t.branch, ref], info.main).status === 0
-  if (!merged) return `not merged into ${ref}`
+  if (!merged) {
+    if (!squashMerged(c, info.main, t.branch, ref)) return `not merged into ${ref}`
+    ctx.squashed.add(t.branch)
+  }
   // a branch nobody has committed to is "merged" into anything ahead of it; its reflog has the creation entry only
   const untouched = c.git(['reflog', 'show', '--format=%H', `refs/heads/${t.branch}`], info.main).stdout.split('\n').filter(Boolean).length <= 1
   const idle = c.now / 1000 - lastActivity(c, t)
@@ -372,13 +386,13 @@ function prune(args, c) {
   const ageArg = option(args, 'older-than')
   const olderThan = ageArg === undefined ? null : parseDuration(ageArg)
   if (ageArg !== undefined && olderThan === null) return fail(c, `--older-than needs a number and m, h, d or w, like 7d (got ${ageArg})`)
-  const ctx = { info, ref, olderThan, sessions: c.getSessions(), disposable: new Map() }
+  const ctx = { info, ref, olderThan, sessions: c.getSessions(), disposable: new Map(), squashed: new Set() }
   const keep = []
   const safe = []
   for (const t of info.trees) {
     const why = judge(c, t, ctx)
     if (why === 'main worktree') continue
-    ;(why ? keep : safe).push({ path: t.path, branch: t.branch, why })
+    ;(why ? keep : safe).push({ path: t.path, branch: t.branch, why, squashed: ctx.squashed.has(t.branch) })
   }
   const removed = []
   const failed = []
@@ -390,15 +404,15 @@ function prune(args, c) {
     }
   }
   if (failed.length) process.exitCode = 1
-  if (args.includes('--json')) return c.stdout.write(JSON.stringify({ ref, dryRun: !args.includes('--yes'), safe: safe.map(s => ({ path: s.path, branch: s.branch })), kept: keep, removed: removed.map(s => ({ path: s.path, branch: s.branch })), failed }) + '\n')
+  if (args.includes('--json')) return c.stdout.write(JSON.stringify({ ref, dryRun: !args.includes('--yes'), safe: safe.map(s => ({ path: s.path, branch: s.branch, squashed: s.squashed })), kept: keep, removed: removed.map(s => ({ path: s.path, branch: s.branch })), failed }) + '\n')
   const out = []
   const verb = args.includes('--yes') ? 'removed' : 'would remove'
   const done = args.includes('--yes') ? removed : safe
-  for (const s of done) out.push(`${verb} ${shortPath(s.path)} (${s.branch})`)
+  for (const s of done) out.push(`${verb} ${shortPath(s.path)} (${s.branch}${s.squashed ? ', squash-merged' : ''})`)
   for (const f of failed) out.push(`could not remove ${shortPath(f.path)}: ${f.error}`)
   for (const k of keep) out.push(`keep ${shortPath(k.path)} (${k.branch || 'detached'}): ${k.why}`)
   if (!out.length) out.push('no other worktrees')
-  if (!args.includes('--yes') && safe.length) out.push(`dry run: run again with --yes to remove ${safe.length === 1 ? 'it' : 'them'} (merged branches are deleted with git branch -d)`)
+  if (!args.includes('--yes') && safe.length) out.push(`dry run: run again with --yes to remove ${safe.length === 1 ? 'it' : 'them'} (merged branches are deleted with git branch -d, squash-merged ones with -D)`)
   c.stdout.write(out.join('\n') + '\n')
 }
 
@@ -413,7 +427,8 @@ function removeOne(c, info, ctx, s) {
   }
   const r = c.git(['worktree', 'remove', s.path], info.main)
   if (r.status !== 0) return (r.stderr || r.stdout).trim().split('\n')[0]
-  const b = c.git(['branch', '-d', s.branch], info.main)
+  // -d refuses a squash-merged branch; its changes are in ref already (squashMerged checked the tree)
+  const b = c.git(['branch', s.squashed ? '-D' : '-d', s.branch], info.main)
   if (b.status !== 0) return `worktree removed, branch ${s.branch} kept: ${(b.stderr || b.stdout).trim().split('\n')[0]}`
   return null
 }
