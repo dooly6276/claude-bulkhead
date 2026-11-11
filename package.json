@@ -17,7 +17,10 @@
   ],
   "license": "MIT",
   "author": "Myeongseok Kang",
-  "repository": "github:dooly6276/claude-bulkhead",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dooly6276/claude-bulkhead.git"
+  },
   "homepage": "https://github.com/dooly6276/claude-bulkhead#readme",
   "bugs": {
     "url": "https://github.com/dooly6276/claude-bulkhead/issues"
