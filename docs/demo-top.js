@@ -8,6 +8,7 @@ const { readProcesses } = require(path.join(src, 'processes'))
 const { frame } = require(path.join(src, 'top'))
 const { tailEvents } = require(path.join(src, 'events'))
 const { stateDir } = require(path.join(src, 'hook'))
+const { stateLabel, needsUserFirst } = require(path.join(src, 'session-info'))
 const repo = process.env.DEMO_REPO
 let tick = 0
 function draw() {
@@ -17,6 +18,17 @@ function draw() {
     .map(s => ({ ...s, cwd: path.basename(s.cwd), ports: s.ports.map(p => ({ ...p, port: `${p.port} ${p.pid}` })) })) // PORTS shows port and the server's PID
   const view = { st, scanning: false, lastScanMs: null, interval: 1000, tick: tick++, events: tailEvents(stateDir(), 2).map(e => ({ ...e, project: path.basename(e.project || '') })) }
   let lines = frame(view, { width: process.stdout.columns, height: process.stdout.rows, color: true, home: '/nonexistent' })
+  // the pane is too narrow for top's PORTS column (it drops first), so the session rows are drawn
+  // here as PID STATE PROJECT PORTS: the point of the scene is which server holds which port
+  const sAt = lines.findIndex(l => l.includes('SESSIONS '))
+  if (sAt >= 0) {
+    let end = sAt + 1
+    while (end < lines.length && lines[end].replace(/\x1b\[[0-9;]*m/g, '').trim()) end++
+    const w = process.stdout.columns, pad = (s, n) => String(s).slice(0, n).padEnd(n)
+    const tone = s => s.state === 'permission' ? 31 : s.state === 'waiting' ? 33 : s.state === 'working' ? 32 : 2
+    const rows = needsUserFirst(st.sessions).map(s => `${pad(s.pid, 7)}  \x1b[${tone(s)}m${pad(stateLabel(s, Date.now()), 10)}\x1b[0m  ${pad(s.cwd, 9)}  ${pad(s.ports.map(p => ':' + p.port).join(' ') || '-', w - 32)}`.trimEnd())
+    lines.splice(sAt + 1, end - sAt - 1, `\x1b[2m${pad('PID', 7)}  ${pad('STATE', 10)}  ${pad('PROJECT', 9)}  PORTS\x1b[0m`, ...rows)
+  }
   // RECENT BLOCKS drawn here with short fields so nothing is cut off in the narrow pane
   const at = lines.findIndex(l => l.includes('RECENT BLOCKS'))
   if (at >= 0) {

@@ -38,14 +38,15 @@ for i, c in enumerate(caps, 1):
 PY
 seg() { echo "[0:v]trim=$2:$3,setpts=(PTS-STARTPTS)/$4[$1];"; }
 freeze() { local e; e=$(awk -v t="$2" 'BEGIN{printf "%.3f", t+0.05}'); echo "[0:v]trim=$2:$e,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=$3[$1];"; }
+# S_* are the speed of each part (below 1 slows it down); set them so each part keeps its output length
 # output timeline: typing 0-3.4, typed hold to 5.0, thinking to 7.3, block (slowed) to 10.5, restart, end hold
 : "${HOLD_END:=5.0}"
 filter="
-$(seg a0 $T_TYPE0 $T_TYPED 0.4)
+$(seg a0 $T_TYPE0 $T_TYPED ${S_TYPE:-0.4})
 $(freeze a1 $T_TYPED 1.6)
-$(seg a2 $T_TYPED $T_THINK 1.0)
-$(seg a3 $T_THINK $T_BLOCK1 0.3)
-$(seg a4 $T_BLOCK1 $T_GLITCH0 0.6)
+$(seg a2 $T_TYPED $T_THINK ${S_THINK:-1.0})
+$(seg a3 $T_THINK $T_BLOCK1 ${S_BLOCK:-0.3})
+$(seg a4 $T_BLOCK1 $T_GLITCH0 ${S_RESTART:-0.6})
 $(freeze a5 $T_FINAL $HOLD_END)
 [a0][a1][a2][a3][a4][a5]concat=n=6:v=1[c];
 [c]fps=25,split[l][b];
