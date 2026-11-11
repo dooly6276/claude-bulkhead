@@ -32,7 +32,7 @@ function checkPlugin(root = ROOT) {
   try {
     hooks = JSON.parse(fs.readFileSync(file, 'utf8')).hooks
   } catch (e) {
-    return fail('plugin', `${shortPath(file)} cannot be read: ${e.message}`)
+    return fail('package', `${shortPath(file)} cannot be read: ${e.message}`)
   }
   const missing = []
   const counts = []
@@ -49,8 +49,8 @@ function checkPlugin(root = ROOT) {
     }
     counts.push(`${n} ${event}`)
   }
-  if (missing.length) return fail('plugin', `hooks.json names scripts that are missing: ${missing.join(', ')}`)
-  return ok('plugin', `${shortPath(root)}, hooks: ${counts.join(', ')}`)
+  if (missing.length) return fail('package', `hooks.json names scripts that are missing: ${missing.join(', ')}`)
+  return ok('package', `this copy ${shortPath(root)}, hooks: ${counts.join(', ')}`)
 }
 
 function checkStateDir(dir = stateDir()) {
