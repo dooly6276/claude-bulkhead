@@ -13,6 +13,8 @@
 // mode is 'sh' (Bash tool), 'ps' (PowerShell tool) or 'cmd' (inside cmd /c). Every function is
 // linear in the length of its input: no regular expression here can backtrack across the text.
 
+const os = require('os')
+
 const MAX_DEPTH = 3
 
 // The program name of a command word: no directory, no Windows extension, lower case. Guards ask
@@ -252,7 +254,8 @@ function skipOptions(words, k, valued = new Set()) {
 // delete guards look after this machine only.
 function isRemote(argv) {
   const b = bin(argv[0].v)
-  if (b === 'ssh' || b === 'autossh' || b === 'mosh') return true
+  if (b === 'ssh') return !sshToThisMachine(argv)
+  if (b === 'autossh' || b === 'mosh') return true
   // bulkhead remote run sends its command to another machine
   if (b === 'bulkhead' && argv[1] && argv[1].v === 'remote') return true
   const sub = argv.slice(1, 5).map(w => w.v)
@@ -260,6 +263,16 @@ function isRemote(argv) {
   if (b === 'vagrant' || b === 'gcloud' || b === 'az' || b === 'fly' || b === 'flyctl') return sub.includes('ssh')
   if (b === 'heroku') return sub.includes('run')
   return false
+}
+
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0', os.hostname().toLowerCase()])
+
+// ssh localhost runs its command on this machine, so the guards read it like a local shell.
+function sshToThisMachine(argv) {
+  const at = skipOptions(argv, 1, SSH_VALUE)
+  if (at >= argv.length) return false
+  const host = argv[at].v.replace(/^.*@/, '').toLowerCase()
+  return LOCAL_HOSTS.has(host) || /^127\.\d+\.\d+\.\d+$/.test(host)
 }
 
 // UTF-16LE base64, as powershell -EncodedCommand takes it.
@@ -318,7 +331,11 @@ function innerOf(src, argv, mode) {
       else if (v === '--command') c = true
       k += SHELL_VALUE.has(v) ? 2 : 1
     }
-    return c && k < argv.length ? { text: vals[k], mode: 'sh' } : null
+    if (c && k < argv.length) return { text: vals[k], mode: 'sh' }
+    // bash <(echo "...") runs what the substitution prints
+    const sub = vals.find((v, j) => j >= k && /^<\(.*\)$/s.test(v))
+    const printed = sub && printedBy(sub.slice(2, -1), mode)
+    return printed ? { text: printed, mode: 'sh' } : null
   }
   if (b === 'powershell' || b === 'pwsh' || b === 'powershell_ise') {
     for (let k = 1; k < argv.length; k++) {
@@ -353,7 +370,17 @@ function innerOf(src, argv, mode) {
     }
     return null
   }
-  if (b === 'eval' && argv.length > 1) return { text: vals.slice(1).join(' '), mode }
+  if (b === 'ssh') return remoteInner(src, argv)
+  if (b === 'eval' && argv.length > 1) return { text: fed(vals.slice(1).join(' ')), mode }
+  if (b === 'source' || (b === '.' && mode === 'sh')) {
+    const sub = vals.find((v, k) => k > 0 && /^<\(.*\)$/s.test(v))
+    const printed = sub && printedBy(sub.slice(2, -1), mode)
+    return printed ? { text: printed, mode } : null
+  }
+  if (b === 'tmux') return tmuxInner(vals)
+  if (b === 'screen') return screenInner(argv)
+  if (b === 'script') return scriptInner(vals)
+  if (b === 'parallel') return parallelInner(vals)
   if (b === 'trap' && argv.length > 1 && vals[1] !== '-' && !vals[1].startsWith('-')) return { text: vals[1], mode }
   if (b === 'watch') {
     const k = skipOptions(argv, 1, WATCH_VALUE)
@@ -386,6 +413,84 @@ function innerOf(src, argv, mode) {
     return file ? { text: `${file} ${String(args).replace(/,/g, ' ')}`.trim(), mode: 'cmd' } : null
   }
   return null
+}
+
+// What echo or printf prints, when the text is that one command: the script a pipe, <( ) or
+// $( ) hands to a shell. Null for anything else.
+function printedBy(text, mode) {
+  const { cmds } = lex(String(text), mode)
+  if (cmds.length !== 1) return null
+  const ws = cmds[0].words.map(w => w.v)
+  const b = bin(ws[0] || '')
+  if (b !== 'echo' && b !== 'printf') return null
+  let k = 1
+  while (k < ws.length && /^-[neE]+$/.test(ws[k])) k++
+  const rest = ws.slice(k)
+  if (b === 'printf' && rest.length && !/%/.test(rest[0])) return rest[0]
+  return rest.join(' ') || null
+}
+
+// eval "$(echo ...)": the printed text is the code
+function fed(text) {
+  const m = /^\$\((.*)\)$|^`(.*)`$/s.exec(text.trim())
+  const printed = m && printedBy(m[1] || m[2], 'sh')
+  return printed || text
+}
+
+const TMUX_VALUE = new Set(['-s', '-n', '-t', '-c', '-x', '-y', '-e', '-f', '-F', '-l', '-L', '-S', '-T'])
+const TMUX_RUN = new Set(['new', 'new-session', 'new-window', 'neww', 'split-window', 'splitw', 'run-shell', 'run', 'respawn-pane', 'respawnp', 'respawn-window', 'respawnw', 'send-keys', 'send'])
+
+// tmux new -d 'cmd', tmux run-shell 'cmd', tmux send-keys 'cmd' Enter
+function tmuxInner(vals) {
+  let k = 1
+  while (k < vals.length && /^-/.test(vals[k])) k += TMUX_VALUE.has(vals[k]) ? 2 : 1
+  if (!TMUX_RUN.has(vals[k])) return null
+  const sub = vals[k]
+  const words = []
+  for (k++; k < vals.length; k++) {
+    const v = vals[k]
+    if (/^-/.test(v) && !words.length) { k += TMUX_VALUE.has(v) ? 1 : 0; continue }
+    if (/^send/.test(sub) && /^(?:Enter|C-m|C-j|KPEnter)$/.test(v)) continue
+    words.push(v)
+  }
+  return words.length ? { text: words.join(' '), mode: 'sh' } : null
+}
+
+// screen -dmS name cmd args
+function screenInner(argv) {
+  let k = 1
+  while (k < argv.length && /^-/.test(argv[k].v) && !argv[k].q) {
+    const v = argv[k].v
+    if (v === '--') { k++; break }
+    k += /^-[a-zA-Z]*[SsTtcpeXhLlQ]$/.test(v) && /[SsTtcpeXhLQ]$/.test(v) ? 2 : 1
+  }
+  return k < argv.length ? { text: argv.slice(k).map(w => w.v).join(' '), mode: 'sh' } : null
+}
+
+// script -q /dev/null cmd args (macOS), script -qc "cmd" /dev/null (Linux)
+function scriptInner(vals) {
+  let k = 1
+  let c = false
+  while (k < vals.length && /^-/.test(vals[k])) {
+    if (/^-[a-zA-Z]*c$/.test(vals[k]) || vals[k] === '--command') { c = true; k++; break }
+    k += /^-[tFTW]$/.test(vals[k]) ? 2 : 1
+  }
+  if (c) return vals[k] ? { text: vals[k], mode: 'sh' } : null
+  k++ // the typescript file
+  return k < vals.length ? { text: vals.slice(k).join(' '), mode: 'sh' } : null
+}
+
+// parallel pkill ::: node, parallel pkill {} ::: a b
+function parallelInner(vals) {
+  const at = vals.indexOf(':::')
+  if (at < 0) return null
+  let k = 1
+  while (k < vals.length && k < at && /^-/.test(vals[k])) k += /^-[jNnSaIlLsTtbCEiRrXx]$|^--(?:jobs|max-args|colsep|arg-file)$/.test(vals[k]) ? 2 : 1
+  const cmd = vals.slice(k, at)
+  const args = vals.slice(at + 1)
+  if (!cmd.length || !args.length) return null
+  const lines = args.slice(0, 50).map(a => cmd.some(w => w.includes('{}')) ? cmd.map(w => w.split('{}').join(a)).join(' ') : `${cmd.join(' ')} ${a}`)
+  return { text: lines.join('\n'), mode: 'sh' }
 }
 
 // Takes leading wrappers off a command's words. Returns { argv, inner, remote, at }.
@@ -422,6 +527,13 @@ function strip(src, words, mode) {
       continue
     }
     if (b === 'xargs') { k = skipOptions(words, k + 1, XARGS_VALUE); continue }
+    if (b === 'busybox' && words[k + 1] && !SHELLS.has(bin(words[k + 1].v))) { k++; continue }
+    // function k() { ...; }  and  k() { ...; }: the body runs when the function is called
+    if (!w.q && v === 'function' && words[k + 1]) {
+      k += words[k + 2] && words[k + 2].v === '()' ? 3 : 2
+      continue
+    }
+    if (!w.q && /^[A-Za-z_][\w-]*\(\)$/.test(v) && k === 0 && words[1] && words[1].v === '{') { k++; continue }
     break
   }
   const argv = words.slice(k)
@@ -431,7 +543,7 @@ function strip(src, words, mode) {
 }
 
 // Quick test before lexing for wrappers: most commands have none.
-const WRAPPER_HINT = /(?:^|[^\w-])(?:bash|sh|zsh|dash|ksh|ash|mksh|fish|busybox|powershell|pwsh|powershell_ise|cmd|eval|trap|watch|su|env|Start-Process|saps|start)(?:\.exe)?(?![\w-])/i
+const WRAPPER_HINT = /(?:^|[^\w-])(?:bash|sh|zsh|dash|ksh|ash|mksh|fish|busybox|powershell|pwsh|powershell_ise|cmd|eval|trap|watch|su|env|Start-Process|saps|start|ssh|tmux|screen|script|parallel|source|\.)(?:\.exe)?(?![\w-])/i
 const REMOTE_HINT = /(?:^|[^\w-])(?:ssh|docker|podman|nerdctl|kubectl|oc|bulkhead)(?:\.exe)?(?![\w-])/i
 
 // Every simple command the text runs, with wrappers taken off and shell wrappers opened.
@@ -446,9 +558,27 @@ function commands(src, mode = 'sh', depth = 0, out = []) {
   return out
 }
 
+// The text an echo or printf feeds into the shell that follows it in a pipe (echo "..." | sh),
+// or null when cmd is not that shell. prev is the command before it.
+function pipedScript(src, prev, c, s, mode) {
+  if (!prev || prev.seg !== c.seg || prev.sub !== c.sub || !s.argv.length || s.inner) return null
+  const b = bin(s.argv[0].v)
+  if (!SHELLS.has(b) && !(b === 'busybox' && SHELLS.has(bin((s.argv[1] || {}).v || '')))) return null
+  if (!/^\s*\|&?\s*$/.test(src.slice(prev.e, c.s))) return null
+  const text = printedBy(src.slice(prev.s, prev.e), mode)
+  return text
+}
+
 function collect(src, cmds, mode, depth, out) {
+  let prev = null
   for (const c of cmds) {
     const s = strip(src, c.words, mode)
+    const piped = depth < MAX_DEPTH && pipedScript(src, prev, c, s, mode)
+    prev = c
+    if (piped) {
+      commands(piped, mode, depth + 1, out)
+      continue
+    }
     if (s.inner && depth < MAX_DEPTH) {
       commands(s.inner.text, s.inner.mode, depth + 1, out)
       continue
@@ -468,9 +598,18 @@ function unwrap(src, mode = 'sh', depth = 0, { remote = false } = {}) {
   const cmds = lex(src, mode).cmds.sort((a, b) => a.s - b.s)
   const parts = []
   let last = 0
+  let prev = null
   for (const c of cmds) {
+    const before = prev
+    prev = c
     if (c.s < last) continue
     const s = strip(src, c.words, mode)
+    const piped = pipedScript(src, before, c, s, mode)
+    if (piped && before.s >= last) {
+      parts.push(src.slice(last, before.s), `( ${unwrap(piped, mode, depth + 1, { remote })} )`)
+      last = c.e
+      continue
+    }
     const inner = s.inner || (remote && s.remote ? remoteInner(src, s.argv) : null)
     if (!inner) continue
     const from = s.argv[0].s
@@ -485,17 +624,82 @@ function unwrap(src, mode = 'sh', depth = 0, { remote = false } = {}) {
 // ---------------------------------------------------------------------------------------------
 // Text that is never executed
 
-const EXEC_WORDS = /(?:^|[\s;&|(`"$])(?:bash|sh|zsh|eval|source|pwsh|powershell|python[\d.]*|py|node|deno|bun|ruby|perl|php|osascript)(?:\.exe)?(?=[\s"')]|$)/
 const MESSAGE_TOOLS = new Set(['git', 'gh', 'glab', 'hub', 'hg', 'svn', 'jj', 'tea'])
 const MESSAGE_FLAGS = /^(?:-m|--message|--title|--body|--notes|--description|--subject|--comment|-[a-z]*m)$/
 const GH_SHORT = /^-[tbd]$/
 
-// Heredocs whose body is never run: written to a file by cat or tee, printed by cat, or handed
-// to git and gh as a message (git commit -F -, gh pr create --body-file -). The opener line
-// stays; the body and terminator go. A tag is searched for once, so missing terminators cost
-// one pass in total.
-function stripHeredocs(src) {
-  const docs = heredocs(src, heredocNotRun)
+// What reads a heredoc decides what its body is. A shell (or eval, source, ssh to this machine)
+// runs it as shell code. An interpreter (python, node, ...) runs it as code in its own language,
+// and ssh, docker exec and the like run it on another machine. Anything else, cat, tee, read,
+// git, a loop, wc, a program with its own input, only reads it as data.
+const INTERPRETERS = /^(?:python[\d.]*|pythonw|py|node|nodejs|deno|bun|ruby|perl|php|lua|osascript)$/
+const KIND_RANK = { data: 0, interp: 1, remote: 2, shell: 3 }
+
+// python3 - <<E and node <<E run what is on stdin; python3 script.py <<E, node -e 'code' <<E and
+// python3 -m module <<E give stdin to a program as input.
+function readsScriptFromStdin(argv) {
+  for (let k = 1; k < argv.length; k++) {
+    const v = argv[k].v
+    if (v === '-') return true
+    if (/^-(?:c|e|E|m|p|r|-eval|-print)$/.test(v) || !/^-/.test(v) || argv[k].q) return false
+  }
+  return true
+}
+
+function stageKind(text, mode) {
+  let kind = 'data'
+  for (const c of lex(text, mode).cmds) {
+    const s = strip(text, c.words, mode)
+    if (!s.argv.length) continue
+    const b = bin(s.argv[0].v)
+    let k = 'data'
+    if (s.remote) k = 'remote'
+    else if (s.inner || SHELLS.has(b) || b === 'eval' || b === 'source' || (b === '.' && s.argv.length > 1) || /^(?:powershell|pwsh|cmd)$/.test(b)) k = 'shell'
+    else if (INTERPRETERS.test(b) && readsScriptFromStdin(s.argv)) k = 'interp'
+    if (KIND_RANK[k] > KIND_RANK[kind]) { kind = k; if (k !== 'data') kind = k }
+  }
+  return kind
+}
+
+// The statement the heredoc belongs to starts after the last ; && || & ( { `do` or `then`.
+function lastStage(prefix) {
+  let cut = 0
+  for (const m of prefix.matchAll(/;|&&|\|\||(?<![<>|&])&(?![>&])|(?<![$<>])\(|(?<!\$)\{|(?:^|\s)(?:do|then|else)\s/g)) cut = m.index + m[0].length
+  const stmt = prefix.slice(cut)
+  return stmt.slice(stmt.lastIndexOf('|') + 1)
+}
+
+// The pipeline after the opener: <<E | ssh host bash
+function pipeStages(after) {
+  const end = after.search(/;|&&|\|\||(?<![<>|&])&(?![>&])|\n/)
+  const line = end < 0 ? after : after.slice(0, end)
+  return line.includes('|') ? line.split('|').slice(1) : []
+}
+
+// 'shell', 'remote', 'interp' or 'data', and the program that reads it.
+function consumerOf(prefix, after, mode = 'sh') {
+  let kind = 'data'
+  for (const st of [lastStage(prefix), ...pipeStages(after)]) {
+    const k = stageKind(st, mode)
+    if (KIND_RANK[k] > KIND_RANK[kind]) kind = k
+  }
+  let name = ''
+  if (kind === 'interp') {
+    for (const st of [lastStage(prefix), ...pipeStages(after)]) {
+      const c = lex(st, mode).cmds.map(x => strip(st, x.words, mode).argv[0]).find(w => w && INTERPRETERS.test(bin(w.v)))
+      if (c) name = bin(c.v)
+    }
+  }
+  return { kind, bin: name }
+}
+
+// Heredocs whose body is not shell code are data and go: written to a file by cat or tee,
+// counted by wc, read by a loop, handed to git or gh as a message, read by python or node (code in
+// their own language, not shell). The opener line stays; the body and terminator go. keep lists
+// the kinds that stay: ['shell'] by default, which is what a guard that reads shell text wants.
+// A tag is searched for once, so missing terminators cost one pass in total.
+function stripHeredocs(src, keep = ['shell'], mode = 'sh') {
+  const docs = heredocs(src, (prefix, after) => !keep.includes(consumerOf(prefix, after, mode).kind))
   if (!docs.length) return src
   let out = ''
   let last = 0
@@ -544,11 +748,67 @@ function heredocs(src, want) {
   return out
 }
 
-function heredocNotRun(prefix, after) {
-  if (EXEC_WORDS.test(prefix)) return false
-  const piped = after.indexOf('|') >= 0 && !/\|\s*(?:gh|git|glab|tee|cat)\b/.test(after)
-  if (/(?:^|[\s;&|(`"])(?:cat|tee)\b[^|]*$/.test(prefix)) return !piped
-  return /(?:^|[\s;&|(`"$])(?:git|gh|glab)\b/.test(prefix)
+// Shell commands that interpreter code runs from string literals: os.system('pkill node'),
+// subprocess.run(['pkill', 'node']), execSync("pkill node"), spawn('pkill', ['node']),
+// system("pkill node"). Only literals are read; a command built at run time is not seen.
+const SHELL_CALL = /(?:\b(?:os\.system|os\.popen|subprocess\.\w+|(?:child_process\.)?(?:exec|execSync|spawn|spawnSync|execFile|execFileSync)|system|popen|shell_exec|passthru|proc_open))\s*[({]\s*/g
+const LITERAL = /^[rRbBfFuU]{0,2}(?:"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)')/
+
+// The code with string literals and comments blanked to spaces, same length: a call is found only
+// where the code makes it, not inside text the code edits or prints (a python script that rewrites
+// a markdown file holds os.system('...') as plain text).
+function maskLiterals(code) {
+  const n = code.length
+  const out = code.split('')
+  const blank = (from, to) => { for (let k = from; k < to && k < n; k++) if (out[k] !== '\n') out[k] = ' ' }
+  let i = 0
+  while (i < n) {
+    const c = code[i]
+    const spaceBefore = i === 0 || /[\s;]/.test(code[i - 1])
+    if ((c === '#' || (c === '/' && code[i + 1] === '/')) && spaceBefore) {
+      const nl = code.indexOf('\n', i)
+      const end = nl < 0 ? n : nl
+      blank(i, end)
+      i = end
+    } else if (c === '/' && code[i + 1] === '*') {
+      const close = code.indexOf('*/', i + 2)
+      const end = close < 0 ? n : close + 2
+      blank(i, end)
+      i = end
+    } else if (c === '"' || c === "'" || c === '`') {
+      const q = (c !== '`' && code.startsWith(c.repeat(3), i)) ? c.repeat(3) : c
+      let k = i + q.length
+      while (k < n && !code.startsWith(q, k)) {
+        if (code[k] === '\\') k++
+        else if (q.length === 1 && c !== '`' && code[k] === '\n') break
+        k++
+      }
+      blank(i + q.length, k)
+      i = k + q.length
+    } else i++
+  }
+  return out.join('')
+}
+
+function embeddedShell(code) {
+  const out = []
+  code = String(code || '').slice(0, 200000)
+  const masked = maskLiterals(code)
+  for (const m of masked.matchAll(SHELL_CALL)) {
+    if (out.length >= 20) break
+    const words = []
+    let at = m.index + m[0].length
+    for (let n = 0; n < 40; n++) {
+      const rest = code.slice(at, at + 2000)
+      const lead = /^[\s[,]*/.exec(rest)[0]
+      const lit = LITERAL.exec(rest.slice(lead.length))
+      if (!lit) break
+      words.push((lit[1] !== undefined ? lit[1] : lit[2]).replace(/\\(["'\\])/g, '$1'))
+      at += lead.length + lit[0].length
+    }
+    if (words.length) out.push(words.join(' '))
+  }
+  return out
 }
 
 // The quoted text after -m, --message, --title, --body, --notes in git, gh and similar commands
@@ -584,8 +844,8 @@ function stripMessages(src, mode) {
   return out + src.slice(last)
 }
 
-function prepare(src, mode = 'sh') {
-  return stripMessages(stripHeredocs(String(src || '')), mode)
+function prepare(src, mode = 'sh', keep = ['shell']) {
+  return stripMessages(stripHeredocs(String(src || ''), keep, mode), mode)
 }
 
 // The lexer mode for a hook payload's tool.
@@ -594,4 +854,4 @@ function modeFor(input) {
   return /powershell/i.test(String(tool || '')) ? 'ps' : 'sh'
 }
 
-module.exports = { lex, commands, unwrap, prepare, stripHeredocs, stripMessages, heredocs, strip, bin, modeFor, skipOptions, MAX_DEPTH }
+module.exports = { lex, commands, unwrap, prepare, stripHeredocs, stripMessages, heredocs, consumerOf, embeddedShell, strip, bin, modeFor, skipOptions, MAX_DEPTH }

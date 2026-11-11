@@ -26,6 +26,18 @@ test('macOS: parses lsof listening sockets', () => {
   assert.deepStrictEqual(parseLsof(lsof), [{ port: 3000, pid: 990 }, { port: 5173, pid: 1201 }])
 })
 
+test('macOS: withPorts: false skips lsof, the slowest call', () => {
+  const calls = []
+  const run = (file, args) => {
+    calls.push(file)
+    return args[0] === '-axo' ? '  990 node\n' : ps
+  }
+  const snap = readMac(run, { withPorts: false })
+  assert.strictEqual(snap.procs.length, 3)
+  assert.deepStrictEqual(snap.ports, [])
+  assert.ok(!calls.includes('lsof'))
+})
+
 test('macOS: lsof exiting 1 with no sockets is not an error', () => {
   const run = (file, args) => {
     if (file === 'lsof') throw Object.assign(new Error('exit 1'), { stdout: '' })

@@ -593,3 +593,145 @@ basics	git push -f origin release
 #@ config {"waitGuard":{"limitSeconds":60}}
 wait-guard,timeout=600000	sleep 90
 #@ config none
+
+# == kill-guard: dev server and tool names ==
+kill-guard	pkill -f next-server
+kill-guard	pkill next-server
+kill-guard	pkill next-router-worker
+kill-guard	pkill uvicorn
+kill-guard	pkill gunicorn
+kill-guard	pkill -f gunicorn
+kill-guard	pkill -f "rails s"
+kill-guard	pkill -f "flask run"
+kill-guard	pkill expo
+kill-guard	pkill -f metro
+kill-guard	pkill storybook
+kill-guard	pkill turbo
+kill-guard	pkill tsc
+kill-guard	pkill qemu
+kill-guard	pkill emulator
+kill-guard	pkill -f "node.*next"
+kill-guard	pkill nodemon
+kill-guard	pkill nodejs
+kill-guard	pkill node22
+kill-guard	pkill python3.11
+kill-guard	pkill chrome-headless-shell
+kill-guard	pkill headless_shell
+kill-guard	pkill 'ode'
+kill-guard	pkill -f dev
+kill-guard	pkill -f server
+kill-guard	pkill -f "http.server"
+kill-guard	pkill -f playwright
+kill-guard	pkill -f puppeteer
+kill-guard	pkill -f ms-playwright
+kill-guard	pkill "Google Chrome"
+kill-guard	killall "Google Chrome"
+kill-guard	pkill -x "Google Chrome"
+kill-guard	pkill -f "Google Chrome"
+kill-guard	killall "Google Chrome Helper"
+
+# == kill-guard: shell indirection ==
+kill-guard	echo "pkill node" | sh
+kill-guard	echo "pkill node" | bash
+kill-guard	echo "pkill node" | zsh
+kill-guard	printf 'pkill node' | sh
+kill-guard	source <(echo "pkill node")
+kill-guard	bash <(echo "pkill node")
+kill-guard	echo node | xargs pkill
+kill-guard	xargs -n1 pkill <<< node
+kill-guard	busybox pkill node
+kill-guard	function k() { pkill node; }; k
+kill-guard	k() { pkill node; }; k
+kill-guard	tmux new -d 'pkill node'
+kill-guard	screen -dmS x pkill node
+kill-guard	script -q /dev/null pkill node
+kill-guard	parallel pkill ::: node
+kill-guard	cmd=pkill; $cmd node
+kill-guard	python3 -c "import os; os.system('pkill node')"
+kill-guard	python3 -c "import subprocess; subprocess.run(['pkill', 'node'])"
+kill-guard	node -e "require('child_process').execSync('pkill node')"
+kill-guard	perl -e 'system("pkill node")'
+kill-guard	ssh localhost 'pkill node'
+kill-guard	ssh user@127.0.0.1 "pkill -9 node"
+kill-guard	cat <<'EOF' | ssh localhost bash<NL>pkill node<NL>EOF
+kill-guard	python3 - <<'PY'<NL>import os<NL>os.system("pkill node")<NL>PY
+kill-guard	eval "$(echo pkill node)"
+kill-guard	bash <<'EOF'<NL>pkill node<NL>EOF
+kill-guard	cat <<'EOF' | bash<NL>pkill node<NL>EOF
+
+# == kill-guard: another live session exists (state busy-ports) ==
+kill-guard,state=busy-ports	pkill -u $USER
+kill-guard,state=busy-ports	killall -u kms
+kill-guard,state=busy-ports	killall -9 -u $USER
+kill-guard,state=busy-ports	kill -9 -1
+kill-guard,state=busy-ports	kill -9 0
+kill-guard,state=busy-ports	docker rm -f $(docker ps -aq)
+kill-guard,state=busy-ports	docker stop $(docker ps -q)
+kill-guard,state=busy-ports	docker kill $(docker ps -q)
+kill-guard,state=busy-ports	docker ps -q | xargs docker stop
+kill-guard,state=busy-ports	docker system prune -af
+kill-guard,state=busy-ports	pm2 kill
+kill-guard,state=busy-ports	pm2 delete all
+kill-guard,state=busy-ports	adb kill-server
+kill-guard,state=busy-ports	adb emu kill
+kill-guard,state=busy-ports	xcrun simctl shutdown all
+kill-guard,state=busy-ports	xcrun simctl erase all
+kill-guard,state=busy-ports	osascript -e 'quit app "Safari"'
+kill-guard,state=busy-ports	osascript -e 'tell application "Slack" to quit'
+kill-guard,state=busy-ports	brew services stop postgresql@16
+kill-guard,state=busy-ports	brew services restart redis
+kill-guard,state=busy-ports	launchctl bootout gui/501/homebrew.mxcl.redis
+kill-guard,state=busy-ports	launchctl unload ~/Library/LaunchAgents/homebrew.mxcl.postgresql.plist
+kill-guard,state=busy-ports	launchctl kickstart -k gui/501/homebrew.mxcl.redis
+kill-guard,state=busy-ports	pkill Slack
+kill-guard,state=busy-ports	killall Finder
+kill-guard,state=busy-ports	killall Dock
+kill-guard,state=busy-ports	pkill Safari
+kill-guard,state=busy-ports	pkill -f CoreSimulator
+kill-guard,state=busy-ports	pkill -f simctl
+kill-guard,state=busy-ports	pkill redis-server
+kill-guard,state=busy-ports	pkill mongod
+kill-guard,state=busy-ports	pkill mysqld
+kill-guard,state=busy-ports	pkill nginx
+kill-guard,state=busy-ports	pkill caddy
+kill-guard,state=busy-ports	pkill ngrok
+kill-guard,state=busy-ports	pkill cloudflared
+kill-guard,state=busy-ports	pkill tmux
+kill-guard,state=busy-ports	pkill Terminal
+kill-guard,state=busy-ports	killall iTerm2
+kill-guard,state=busy-ports	pkill Spotify
+kill-guard,state=busy-ports	pkill Figma
+kill-guard,state=busy-ports	pkill Notion
+kill-guard,state=busy-ports	pkill Discord
+kill-guard,state=busy-ports	pkill zoom
+kill-guard,state=busy-ports	pkill -f WebKit
+kill-guard,state=busy-ports	pkill -f "Visual Studio Code"
+kill-guard,state=same-dir	docker compose down
+kill-guard,state=same-dir	docker-compose down
+kill-guard,state=same-dir	docker compose -p shop stop
+
+# == kill-guard: PIDs and patterns that belong to another session (state busy-ports) ==
+kill-guard,state=busy-ports	kill 900111
+kill-guard,state=busy-ports	kill -9 900111
+kill-guard,state=busy-ports	kill -TERM 900110 900111
+kill-guard,state=busy-ports	kill -- -900111
+kill-guard,state=busy-ports	kill -9 900100
+kill-guard,state=busy-ports	kill -9 900200
+kill-guard,state=busy-ports	taskkill /PID 900111 /F
+kill-guard,state=same-dir	pkill -f server.js
+kill-guard,state=same-dir	pkill -f /srv/other/server.js
+kill-guard,state=same-dir	pkill -fx "node /srv/other/server.js"
+kill-guard,state=same-dir	pkill -f "node /srv/other"
+#@ tool PowerShell
+kill-guard,state=busy-ports	Stop-Process -Id 900111 -Force
+kill-guard,state=busy-ports	taskkill /PID 900100 /F
+#@ tool Bash
+
+# == wait-guard: shell heredocs and interpreter code ==
+wait-guard,timeout=600000	bash <<'EOF'<NL>sleep 400<NL>EOF
+wait-guard,timeout=600000	cat <<'EOF' | bash<NL>sleep 400<NL>EOF
+wait-guard,timeout=600000	python3 - <<'PY'<NL>import os<NL>os.system("sleep 400")<NL>PY
+wait-guard,timeout=600000	node - <<'JS'<NL>await new Promise(r => setTimeout(r, 400000))<NL>JS
+wait-guard,timeout=600000	node -e "setTimeout(() => {}, 400000)"
+wait-guard,timeout=600000	python3 -c "import time; time.sleep(400)"
+wait-guard,timeout=600000	sleep 4m

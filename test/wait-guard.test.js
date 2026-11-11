@@ -61,6 +61,40 @@ const cases = [
   ['sleep 600 && echo done', 600000, true],
   ['curl "http://x/?a=1&b=2"; sleep 600', 600000, true],
   ['until [ -f a ]; do sleep 30 & done', 600000, true],
+  // minute and hour suffixes: 3m is exactly the limit, like sleep 180
+  ['sleep 3m', 600000, false],
+  ['sleep 181s', 600000, true],
+  ['sleep 4m', 600000, true],
+  ['sleep 0.1h', 600000, true],
+  ['sleep 2.5m', 600000, false],
+  // interpreter code is read in its own language, and quoted text is not code
+  ["python3 - <<'E'\nopen('t.js', 'w').write('await sleep(300)')\nE", 600000, false],
+  ["python3 - <<'E'\ns = \"await sleep(300)\"\nprint(s)\nE", 600000, false],
+  ["python3 - <<'E'\n# time.sleep(500)\nx = '''\nsleep(500)\n'''\nE", 600000, false],
+  ["node - <<'E'\nconst sleep = ms => new Promise(r => setTimeout(r, ms))\nawait sleep(500)\nE", 600000, false],
+  ['node -e "const sleep = ms => new Promise(r => setTimeout(r, ms)); sleep(500)"', 600000, false],
+  ["node - <<'E'\nawait sleep(400000)\nE", 600000, true],
+  ["node - <<'E'\nawait new Promise(r => setTimeout(r, 400000))\nE", 600000, true],
+  ["python3 - <<'E'\nimport time\ntime.sleep(300)\nE", 600000, true],
+  ["python3 - <<'E'\nimport asyncio\nawait asyncio.sleep(300)\nE", 600000, true],
+  ["python3 - <<'E'\nimport os\nos.system('sleep 300')\nE", 600000, true],
+  ['python3 -c "import time; time.sleep(300)"', 600000, true],
+  ['python3 -c "import time; time.sleep(5)"', 600000, false],
+  ['python3 -c "s = \'sleep 300\'; print(s)"', 600000, false],
+  ["ruby - <<'E'\nsleep 300\nE", 600000, true],
+  // a shell loop that has ended does not multiply the sleeps of a script that follows it
+  ["for id in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do cp a$id b$id; done; python3 - <<'E'\nimport time\nfor k in range(4):\n    time.sleep(10)\nE", 600000, false],
+  ["for f in a b c d e f g h i j k l m n o p q r s t u v w x y z; do python3 - <<'E'\nimport time\ntime.sleep(10)\nE\ndone", 600000, true],
+  ["for s in a b c; do case $s in a) b=1;; b) b=2;; esac; nohup node d.mjs $b & done; sleep 5; echo ok", 600000, false],
+  // a heredoc a program reads as data is not a wait
+  ["cat <<'E' | sort\nsleep 600\nE", 600000, false],
+  ["while read c; do echo \"$c\"; done <<'E'\nsleep 600\nE", 600000, false],
+  ["node test.js <<'E'\nsleep 600\nE", 600000, false],
+  ["cat <<E | wc -l\nsleep 600\nE", 600000, false],
+  // a heredoc a shell runs, here or over ssh, is
+  ["bash <<'E'\nsleep 400\nE", 600000, true],
+  ["cat <<'E' | bash\nsleep 400\nE", 600000, true],
+  ["ssh host bash <<'E'\nsleep 400\nE", 600000, true],
 ]
 
 test('estimates worst-case foreground waits', () => {

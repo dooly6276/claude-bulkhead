@@ -2,7 +2,13 @@
   "killGuard": {
     "enabled": true,
     "allowNames": ["ffmpeg"],
-    "extraSharedNames": ["postgres", "redis-server"]
+    "extraSharedNames": ["postgres", "redis-server"],
+    "massKill": true,
+    "dockerMass": true,
+    "deviceKill": true,
+    "appQuit": true,
+    "serviceStop": true,
+    "ownerCheck": true
   },
   "waitGuard": {
     "enabled": true,

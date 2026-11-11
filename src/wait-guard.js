@@ -52,6 +52,43 @@ function follows(argv) {
   return false
 }
 
+// Code with its string literals and comments blanked: a sleep inside a quoted file body or a
+// comment is text, not a wait. lang is 'python', 'js' or 'secs' (ruby, perl, php).
+function blankText(code, lang) {
+  code = String(code).slice(0, 200000)
+  let out = ''
+  let i = 0
+  const n = code.length
+  while (i < n) {
+    const c = code[i]
+    if ((c === '#' && lang !== 'js') || (c === '/' && code[i + 1] === '/' && lang === 'js')) {
+      const nl = code.indexOf('\n', i)
+      i = nl < 0 ? n : nl
+      continue
+    }
+    if (c === '/' && code[i + 1] === '*' && lang === 'js') {
+      const end = code.indexOf('*/', i + 2)
+      i = end < 0 ? n : end + 2
+      continue
+    }
+    if (c === '"' || c === "'" || c === '`') {
+      const q = lang === 'python' && code.startsWith(c.repeat(3), i) ? c.repeat(3) : c
+      i += q.length
+      while (i < n && !code.startsWith(q, i)) {
+        if (code[i] === '\\') i++
+        else if (q.length === 1 && q !== '`' && code[i] === '\n') break
+        i++
+      }
+      i += q.length
+      out += '""'
+      continue
+    }
+    out += c
+    i++
+  }
+  return out
+}
+
 // A loop inside an interpreter's code: Infinity for while loops, the count for range(N),
 // N.times or for (i = 0; i < N; ...), and 1 for no loop.
 function codeLoops(code) {
@@ -63,28 +100,34 @@ function codeLoops(code) {
   return best
 }
 
-// Worst-case wait in seconds of python -c, node -e, ruby -e, perl -e or php -r code:
-// sleep(300), time.sleep(300), sleep 300, setTimeout(f, 300000).
-function codeWait(code) {
-  const s = []
-  for (const m of code.matchAll(/\bsleep\s*\(?\s*(\d+(?:\.\d+)?)\s*\)?/g)) s.push(Number(m[1]))
-  for (const m of code.matchAll(/\bsetTimeout\s*\(([^;]{0,300}?),\s*(\d+(?:\.\d+)?)\s*\)/g)) s.push(Number(m[2]) / 1000)
+// Worst-case wait in seconds of python -c, node -e, ruby -e, perl -e or php -r code, or of a
+// python or node heredoc: time.sleep(300) and asyncio.sleep(300) wait seconds, sleep(500) and
+// setTimeout(f, 500) in JavaScript wait milliseconds. Strings that code hands to a shell
+// (os.system('sleep 300'), execSync("sleep 300")) are shell waits.
+function codeWait(code, lang = 'secs') {
+  const text = blankText(code, lang)
+  const s = shell.embeddedShell(code).flatMap(sleeps)
+  const unit = lang === 'js' ? 1000 : 1
+  for (const m of text.matchAll(/\bsleep\s*\(?\s*(\d+(?:\.\d+)?)\s*\)?/g)) s.push(Number(m[1]) / unit)
+  for (const m of text.matchAll(/\bsetTimeout\s*\(([^;]{0,300}?),\s*(\d+(?:\.\d+)?)\s*\)/g)) s.push(Number(m[2]) / 1000)
   if (!s.length) return 0
-  const loops = codeLoops(code)
+  const loops = codeLoops(text)
   return loops > 1 ? loops * s.reduce((a, b) => Math.max(a, b), 0) : s.reduce((a, b) => a + b, 0)
 }
 
+const INTERPRETER_WORD = /\b(?:python[\d.]*|py|pythonw|node|nodejs|deno|bun|ruby|perl|php|lua)\b/
 const INTERPRETER = /^(?:python[\d.]*|py|pythonw|node|deno|bun|ruby|perl|php)$/
-const INTERPRETER_HEREDOC = /(?:^|[\s;&|(])(?:python[\d.]*|py|node|deno|bun|ruby|perl|php)(?:\.exe)?(?:\s+-)?\s*$/
 const CODE_FLAG = { python: /^-c$/, node: /^(?:-e|--eval|-p|--print)$/, ruby: /^-e$/, perl: /^-[Ee]$/, php: /^-r$/ }
+const langOf = b => (/^py/.test(b) ? 'python' : /^(?:node|nodejs|deno|bun)$/.test(b) ? 'js' : 'secs')
 
+// { code, lang } of an interpreter command line, or null.
 function codeOf(argv) {
   const b = shell.bin(argv[0])
   if (!INTERPRETER.test(b)) return null
   const kind = /^py/.test(b) ? 'python' : /^(?:node|deno|bun)$/.test(b) ? 'node' : b
-  if (/^(?:deno|bun)$/.test(b) && argv[1] === 'eval') return argv[2] || null
+  if (/^(?:deno|bun)$/.test(b) && argv[1] === 'eval') return argv[2] ? { code: argv[2], lang: 'js' } : null
   const i = argv.findIndex((a, k) => k > 0 && CODE_FLAG[kind].test(a))
-  return i > 0 ? argv[i + 1] || null : null
+  return i > 0 && argv[i + 1] ? { code: argv[i + 1], lang: langOf(b) } : null
 }
 
 // Inert commands only print or search text: echo "sleep 600", git log -S "sleep 300".
@@ -106,7 +149,7 @@ function scan(text, mode) {
     const detached = s.remote && argv.some(v => v === '-d' || v === '--detach')
     if (INERT.test(shell.bin(argv[0])) || BACKGROUND.test(argv[0]) || detached) { cut.push([s.argv[0].s, c.e]); continue }
     const src = codeOf(argv)
-    if (src) code.push(codeWait(src))
+    if (src) code.push(codeWait(src.code, src.lang))
     if (follows(argv)) follow = true
   }
   if (!cut.length) return { text, code, follow }
@@ -160,6 +203,13 @@ function hasLoop(cmd) {
     /ForEach-Object|\|\s*%\s*\{/i.test(cmd)
 }
 
+// Is the end of this text inside a for, while or until loop that has not reached its done?
+function inLoop(before) {
+  const opened = (before.match(/\b(?:for|while|until)\b/g) || []).length
+  const closed = (before.match(/\bdone\b/g) || []).length
+  return opened > closed
+}
+
 const QUOTED = /"[^"]*"|'[^']*'/g
 
 const OPENERS = new Set(['do', 'if', 'case'])
@@ -170,7 +220,9 @@ const CLOSERS = new Set(['done', 'fi', 'esac'])
 // backgrounds both. Quotes, loops, groups and subshells are kept whole.
 function topLevelLists(cmd) {
   const out = []
-  let depth = 0
+  // what is open: 'p' parenthesis, 'b' brace, 'w' loop, if or case. A `)` that ends a case pattern
+  // (haeon) cmd;;) has no ( to close and must not close the case.
+  const open = []
   let start = 0
   let quote = null
   const push = (end, op) => {
@@ -186,16 +238,19 @@ function topLevelLists(cmd) {
     }
     if (c === '\\') { i++; continue }
     if (c === '"' || c === "'") { quote = c; continue }
-    if (c === '(' || c === '{') { depth++; continue }
-    if (c === ')' || c === '}') { depth = Math.max(0, depth - 1); continue }
+    if (c === '(' || c === '{') { open.push(c === '(' ? 'p' : 'b'); continue }
+    if (c === ')' || c === '}') {
+      if (open[open.length - 1] === (c === ')' ? 'p' : 'b')) open.pop()
+      continue
+    }
     if (/[a-z]/i.test(c) && (i === 0 || /[\s;&|]/.test(cmd[i - 1]))) {
       const word = /^[\w.-]+/.exec(cmd.slice(i, i + 64))[0]
-      if (OPENERS.has(word)) depth++
-      else if (CLOSERS.has(word)) depth = Math.max(0, depth - 1)
+      if (OPENERS.has(word)) open.push('w')
+      else if (CLOSERS.has(word) && open[open.length - 1] === 'w') open.pop()
       i += word.length - 1
       continue
     }
-    if (depth) continue
+    if (open.length) continue
     if (c === ';' || c === '\n') push(i, c)
     else if (c === '&') {
       const prev = cmd[i - 1]
@@ -221,22 +276,31 @@ function dropBackgrounded(cmd) {
 
 // Worst-case wait in seconds, capped by the tool timeout. Returns null when within the limit.
 function judge(cmd, timeoutMs, maxSec = 180, mode = 'sh') {
-  const opened = shell.unwrap(shell.prepare(String(cmd || ''), mode), mode, 0, { remote: true })
+  const raw = String(cmd || '')
+  // a heredoc that a shell runs, here or over ssh, is shell text; one that python or node reads is code
+  const opened = shell.unwrap(shell.prepare(raw, mode, ['shell', 'remote']), mode, 0, { remote: true })
   const { text, code, follow } = scan(dropBackgrounded(opened), mode)
-  // python3 - <<'EOF' ... EOF: the body is the interpreter's code
-  if (opened.includes('<<')) {
-    for (const d of shell.heredocs(opened, prefix => INTERPRETER_HEREDOC.test(prefix))) code.push(codeWait(d.body))
+  // python3 - <<'EOF' ... EOF: the body is the interpreter's code, in its own language. Its waits
+  // are added to the shell's, not multiplied by a shell loop that ended before it.
+  let after = 0
+  if (raw.includes('<<') && INTERPRETER_WORD.test(raw)) {
+    for (const d of shell.heredocs(raw, (prefix, rest) => shell.consumerOf(prefix, rest, mode).kind === 'interp')) {
+      const w = codeWait(d.body, langOf(shell.consumerOf(d.prefix, d.rest, mode).bin))
+      if (inLoop(raw.slice(0, d.start))) code.push(w)
+      else after += w
+    }
   }
   // Quoted text is an argument, not shell code: a `for (` inside node -e "..." is not a loop.
   const bare = text.replace(QUOTED, '_')
   const s = sleeps(bare).concat(code.filter(n => n > 0))
   if (follow) s.push(Infinity)
-  if (!s.length) return null
+  if (!s.length && !after) return null
   const wrapped = bare.match(/\b(?:g?timeout)\s+(?:-\w+\s+)*(\d+)s?\b/)
   if (wrapped && Number(wrapped[1]) <= maxSec) return null
   const cap = Number(timeoutMs) > 0 ? Number(timeoutMs) / 1000 : DEFAULT_TOOL_TIMEOUT_S
   const loop = hasLoop(bare)
-  const worst = loop ? loopCount(bare) * s.reduce((a, b) => Math.max(a, b), 0) : s.reduce((a, b) => a + b, 0)
+  const inShell = !s.length ? 0 : loop ? loopCount(bare) * s.reduce((a, b) => Math.max(a, b), 0) : s.reduce((a, b) => a + b, 0)
+  const worst = inShell + after
   const est = Math.min(worst, cap)
   return est > maxSec ? { est, maxSec, rule: follow && !loop ? 'follow' : loop ? 'poll-loop' : 'long-sleep' } : null
 }
