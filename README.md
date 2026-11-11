@@ -87,7 +87,7 @@ You do not have to guess. Claude Code keeps every session's transcript in `~/.cl
 /bulkhead:scan 30d
 ```
 
-It only reads, masks anything that looks like a secret before printing, and sends nothing anywhere. port-guard and the low-RAM check are not replayed, because transcripts do not record which ports and how much RAM were in use; checkout-guard is rebuilt from which sessions were active in the same git tree at that minute. Details: [docs/commands.md](docs/commands.md#bulkhead-scan).
+It only reads, masks anything that looks like a secret before printing, and sends nothing anywhere. port-guard and the low-RAM check are not replayed, because transcripts do not record which ports and how much RAM were in use; checkout-guard is rebuilt from which sessions were active in the same git tree at that minute. `bulkhead scan --share` prints a 5 to 8 line summary with counts only (no paths, no commands) that you can paste into a post or a chat, and `--explain 1` shows one example in full with the part that matched. Details: [docs/commands.md](docs/commands.md#bulkhead-scan).
 
 ## Why this exists
 
@@ -132,7 +132,7 @@ A scripted run of `bulkhead status`, port-guard, kill-guard and wait-guard, reco
 
 1. Install the plugin as above and start a new Claude Code session.
 2. See what it would have caught: run `/bulkhead:scan 30d`, or `bulkhead scan` in the Bash tool. It reads your last month of transcripts and changes nothing.
-3. Check the setup. Inside Claude Code run `/bulkhead:doctor`, or run `bulkhead doctor` in the Bash tool. Every line should say `OK`. A `WARN` or `FAIL` line names the guard and the reason.
+3. Check the setup. Inside Claude Code run `/bulkhead:doctor`, or run `bulkhead doctor` in the Bash tool. Every line should say `OK`. A `WARN` or `FAIL` line names the guard and the reason. The Enforcement section at the end proves the hooks block: it runs the installed hook with a canary command and checks the exit code, the message and the latency, and it flags `disableAllHooks`, a disabled plugin or a missing `node`.
 4. Open a terminal next to your sessions and run `npx claude-bulkhead top` (or `bulkhead top` after `npm install -g claude-bulkhead`) to watch sessions, RAM, ports and heavy jobs live. Press `q` to quit.
 
 After that there is nothing to do. The guards run on every Bash and PowerShell call. To see what they stopped, run `bulkhead log` or `/bulkhead:log`; `bulkhead log --summary` counts blocks per guard on your machine. To change a threshold or allow a command, see [docs/configuration.md](docs/configuration.md). All commands are listed in [docs/commands.md](docs/commands.md).
@@ -374,7 +374,7 @@ PROJECT                  COUNT
 
 ### bulkhead doctor
 
-Checks Node, the plugin files, the state directory, the config files, each guard (on or off, and why), a real hook run, the process reader with its timing, the session files, the RAM limits computed for this machine, held slots, the event log and git. The exit code is 1 when any check fails.
+Checks Node, the plugin files, the state directory, the config files, each guard (on or off, and why), the process reader with its timing, the session files, the RAM limits computed for this machine, held slots, the event log and git. Then an Enforcement section proves the installed hooks block: the install and `enabledPlugins`, duplicate installs, settings that turn hooks off, `node` on the hook `PATH`, and a real run of each guard's hook command against a canary, with its latency. The exit code is 1 when any check fails.
 
 ```
 $ bulkhead doctor
@@ -390,8 +390,7 @@ OK    checkout-guard  on
 OK    disk-guard      on
 OK    basics          on, protected branches: main, master
 OK    orphan-reaper   on, at session start and after each session ends
-OK    hook run        kill-guard blocked a test command in 90 ms
-OK    processes       356 processes, 21 listening ports, 8 Claude sessions in 2.4s
+OK    processes       356 processes, 21 listening ports, 8 Claude sessions (8 with a session file) in 2.4s
 OK    sessions        ~/.claude/sessions (8 session files)
 OK    memory          12.2 of 31.8 GB free, commit 43%, memory-guard blocks heavy commands below 3 GB, bulkhead-slot keeps 5 GB free for a second job, and waits while commit is above 75%
 OK    slots           none held

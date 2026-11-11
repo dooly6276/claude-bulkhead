@@ -8,10 +8,13 @@ const os = require('os')
 const path = require('path')
 const { claudeDir } = require('./sessions')
 const { setting } = require('./hook')
-const { useColor, paint, shortPath, option, fit, table, bytes } = require('./cli-util')
+const { useColor, paint, shortPath, option, table, bytes } = require('./cli-util')
 const { parseSince } = require('./log-cli')
+const scanReport = require('./scan-report')
 
 const USAGE = `usage: bulkhead scan [30d|DATE] [--since 30d|DATE] [--path DIR|FILE] [--project TEXT] [-n N] [--json]
+       bulkhead scan [30d] --share [--markdown]
+       bulkhead scan [30d] --explain N
 
 Replays the shell commands in your Claude Code transcripts against bulkhead's guards and shows
 what they would have stopped. Read-only. Nothing leaves this machine.
@@ -19,7 +22,9 @@ what they would have stopped. Read-only. Nothing leaves this machine.
   --path P         transcripts to read (default: ~/.claude/projects)
   --project TEXT   only sessions whose folder contains TEXT
   -n N             examples to show per rule (default 3, 0 for none)
-  --json           machine-readable output`
+  --json           machine-readable output
+  --share          5 to 8 plain lines with counts only, to paste in a post or a chat (--markdown: a small table)
+  --explain N      one example in full: the command, the part that matched, the rule, and the guard's docs`
 
 // Minutes on either side of a command in which another session counts as active.
 const ACTIVE_WINDOW_MIN = 10
@@ -410,51 +415,108 @@ const RULE_NOTES = {
   'checkout-guard': 'another session was active in the same tree at that minute',
 }
 
+// Examples in the order the report prints them, numbered for --explain.
+function exampleList(r, n) {
+  const out = []
+  for (const x of r.summary.rules) for (const e of x.examples.slice(0, n)) out.push({ n: out.length + 1, rule: x, example: e })
+  return out
+}
+
+// Rules where at least half of the hits were already stopped by a hook or declined by the user.
+function mostlyStopped(rules) {
+  return rules.filter(x => x.hook + x.user > 0 && (x.hook + x.user) * 2 >= x.count)
+}
+
 function renderScan(r, { color = false, home = os.homedir(), examples = 3, width = 120 } = {}) {
   const out = []
   const b = s => paint(color, 'bold', s)
-  out.push(`${b('bulkhead scan')}  replaying your Claude Code sessions against the guards`)
-  out.push(`  read     ${plural(r.files, 'transcript')} (${bytes(r.bytes)}), ${plural(r.sessions, 'session')}, ${plural(r.commands, 'shell command')} in ${r.seconds.toFixed(1)}s`)
-  if (r.first) out.push(`  span     ${day(r.first)} .. ${day(r.last)}${r.sinceLabel ? `  (since ${r.sinceLabel})` : ''}`)
-  if (r.concurrency.max >= 2) {
-    out.push(`  overlap  up to ${b(r.concurrency.max)} sessions running at once (${day(Date.parse(r.concurrency.at))}), ` +
-      `${plural(r.concurrency.overlapDays, 'day')} with two or more at once`)
+  const s = r.summary
+  out.push(`${b('bulkhead scan')}  what your past Claude Code sessions would have run into`)
+  if (!r.commands) {
+    out.push('No shell commands found in these transcripts.')
+    return out.join('\n')
   }
+  if (!s.rules.length) out.push(`Found nothing bulkhead would have stopped in ${plural(r.commands, 'shell command')} from ${plural(r.sessions, 'session')}.`)
+  else {
+    out.push(`Found ${b(plural(s.commandsHit, 'shell command'))} in ${s.sessionsHit.toLocaleString('en-US')} of your ${plural(r.sessions, 'session')} that bulkhead would have stopped.`)
+    const top = scanReport.groups(r).slice(0, 2).map(g => `${g.count.toLocaleString('en-US')} ${g.text}`)
+    out.push(`Most common: ${top.join('; ')}.`)
+  }
+  if (r.concurrency.max >= 2) {
+    out.push(`Up to ${b(r.concurrency.max)} Claude Code sessions ran at the same time (${day(Date.parse(r.concurrency.at))}); ` +
+      `on ${plural(r.concurrency.overlapDays, 'day')} two or more did.`)
+  }
+  out.push(paint(color, 'dim', `  read ${plural(r.files, 'transcript')} (${bytes(r.bytes)}), ${plural(r.commands, 'shell command')} in ${r.seconds.toFixed(1)}s` +
+    (r.first ? `, ${day(r.first)} .. ${day(r.last)}${r.sinceLabel ? ` (since ${r.sinceLabel})` : ''}` : '')))
   out.push('')
-  if (!r.summary.rules.length) {
-    out.push(r.commands ? 'Nothing in these transcripts would have been stopped.' : 'No shell commands found.')
+  if (!s.rules.length) {
+    out.push('Nothing in these transcripts would have been stopped.')
     return out.join('\n')
   }
   const rows = [['GUARD', 'RULE', 'HITS', 'SESSIONS', 'STOPPED', 'LAST']]
-  for (const x of r.summary.rules) {
+  for (const x of s.rules) {
     const stopped = x.hook + x.user
     rows.push([x.guard, x.rule, String(x.count).padStart(4), String(x.sessions).padStart(8), stopped ? `${stopped}`.padStart(7) : '      -', x.last ? day(x.last) : ''])
   }
   const lines = table(rows)
   out.push(b(lines[0]), ...lines.slice(1))
+  out.push(paint(color, 'dim', 'STOPPED: hits a hook already stopped or you declined, as the transcript recorded them. "-" means none recorded: the command ran.'))
   if (examples > 0) {
     let lastGuard = null
-    for (const x of r.summary.rules) {
+    const mark = color ? t => paint(color, 'bold', t) : t => `[${t}]`
+    const numbered = exampleList(r, examples)
+    for (const x of s.rules) {
       out.push('')
       const note = x.guard !== lastGuard && RULE_NOTES[x.guard] ? paint(color, 'dim', `  ${RULE_NOTES[x.guard]}`) : ''
       lastGuard = x.guard
       out.push(`${paint(color, x.guard === 'checkout-guard' || x.guard === 'kill-guard' ? 'red' : 'yellow', `${x.guard}  ${x.rule}`)}  ${plural(x.count, 'time')} in ${plural(x.sessions, 'session')}${note}`)
-      for (const e of x.examples.slice(0, examples)) {
+      for (const { n, example: e } of numbered.filter(y => y.rule === x)) {
         const tag = e.outcome === 'hook' ? '  [stopped by a hook]' : e.outcome === 'user' ? '  [declined by you]' : ''
-        const meta = `${shortPath(e.cwd ? treeRoot(e.cwd) : '?', home)}  ${e.ts ? day(e.ts) : ''}${tag}`
+        const meta = `${shortPath(e.cwd ? treeRoot(e.cwd) : '?', home)}  ${e.ts ? day(e.ts) : ''}${tag}  #${n}`
         const room = Math.max(30, width - meta.length - 8)
-        out.push(`  $ ${fit(e.command.replace(/\s*\n\s*/g, ' ⏎ '), room)}  ${paint(color, 'gray', meta)}`)
+        out.push(`  $ ${scanReport.clipAround(e.command, scanReport.findMatch(x.guard, x.rule, e.command), room, mark)}  ${paint(color, 'gray', meta)}`)
       }
     }
+    if (!color) out.push('', paint(color, 'dim', 'The part of a command that matched is shown in [brackets].'))
   }
   out.push('')
-  const s = r.summary
   const already = s.rules.reduce((n, x) => n + x.hook + x.user, 0)
   out.push(b(`${plural(s.commandsHit, 'command')} in ${plural(s.sessionsHit, 'session')} would have been stopped by bulkhead.`) +
     (already ? ` ${already.toLocaleString('en-US')} of the hits were already stopped by a hook or declined by you.` : ''))
+  const mostly = mostlyStopped(s.rules)
+  if (mostly.length) {
+    const names = mostly.slice(0, 3).map(x => `${x.guard} ${x.rule} (${x.hook + x.user} of ${x.count})`).join(', ')
+    out.push(`Most hits of ${names} were already stopped by your own hooks or by you, so bulkhead adds less there than the count suggests.`)
+  }
   out.push(paint(color, 'dim', 'A hit means the command had the shape a guard blocks, not that damage was done. port-guard and the low-RAM check depend on'))
   out.push(paint(color, 'dim', 'what was running at that moment and are not replayed. checkout-guard is replayed from which sessions were active in the same folder.'))
+  out.push(paint(color, 'dim', 'Share these numbers: bulkhead scan --share'))
+  if (examples > 0) out.push(paint(color, 'dim', 'One example in full, with the matched part and the rule: bulkhead scan --explain 1'))
   return out.join('\n')
+}
+
+// One example in full: the whole command, what matched, the rule and where it is documented.
+function renderExplain(r, number, { examples = 3, home = os.homedir(), color = false } = {}) {
+  const list = exampleList(r, examples > 0 ? examples : 3)
+  const hit = list.find(y => y.n === number)
+  if (!hit) return `No example #${number}: this scan has ${list.length}. Examples are numbered in the report (#1 ...).`
+  const { rule: x, example: e } = hit
+  const match = scanReport.findMatch(x.guard, x.rule, e.command)
+  const mark = color ? t => paint(color, 'bold', t) : t => `[${t}]`
+  const full = e.command.length > 4000 ? e.command.slice(0, 4000) + '\n…' : e.command
+  const body = match && match.end <= full.length ? full.slice(0, match.start) + mark(full.slice(match.start, match.end)) + full.slice(match.end) : full
+  const outcome = e.outcome === 'hook' ? 'stopped by a hook at the time' : e.outcome === 'user' ? 'declined by you at the time' : 'it ran'
+  return [
+    `${paint(color, 'bold', `Example #${number}`)}  ${x.guard} ${x.rule}`,
+    `  when     ${e.ts ? day(e.ts) : '?'}   in ${shortPath(e.cwd ? treeRoot(e.cwd) || e.cwd : '?', home)}   (${outcome})`,
+    `  meaning  ${scanReport.describe(x.guard, x.rule)}`,
+    RULE_NOTES[x.guard] ? `  why      ${RULE_NOTES[x.guard]}` : null,
+    match ? `  matched  ${e.command.slice(match.start, match.end).replace(/\s*\n\s*/g, ' ⏎ ')}` : '  matched  (the whole command; scan could not narrow it down)',
+    `  docs     ${scanReport.docsLink(x.guard)}`,
+    '',
+    'The command (secret-looking values are masked):',
+    body.replace(/^/gm, '  '),
+  ].filter(l => l !== null).join('\n')
 }
 
 function toJson(r) {
@@ -531,8 +593,8 @@ async function scan({ dir = path.join(claudeDir(), 'projects'), since = null, pr
   }
 }
 
-const VALUE_FLAGS = ['since', 'path', 'project']
-const BOOL_FLAGS = ['json']
+const VALUE_FLAGS = ['since', 'path', 'project', 'explain']
+const BOOL_FLAGS = ['json', 'share', 'markdown']
 // The first bare argument that is not a flag's value: `bulkhead scan 30d`.
 function positionals(args) {
   const out = []
@@ -554,6 +616,11 @@ function checkArgs(args) {
     const name = a.startsWith('--') ? a.slice(2).split('=')[0] : null
     if (!name || ![...VALUE_FLAGS, ...BOOL_FLAGS].includes(name)) return `unknown option ${a}`
   }
+  if (args.includes('--markdown') && !args.includes('--share')) return '--markdown goes with --share'
+  const explain = option(args, 'explain')
+  if (explain !== undefined && !(Number.isInteger(Number(explain)) && Number(explain) >= 1)) return '--explain takes an example number, 1 or more'
+  const modes = ['json', 'share', 'explain'].filter(m => args.some(a => a === `--${m}` || a.startsWith(`--${m}=`)))
+  if (modes.length > 1) return `use one of --${modes.join(', --')}, not several`
   const pos = positionals(args)
   if (pos.length > 1) return `unexpected argument ${pos[1]}`
   if (pos.length && option(args, 'since') !== undefined) return `give the time span once: --since ${option(args, 'since')} or ${pos[0]}, not both`
@@ -598,7 +665,9 @@ async function main(args, { env = process.env, stdout = process.stdout, stderr =
   if (shown) stderr.write('\r\x1b[2K')
   r.sinceLabel = typeof sinceArg === 'string' ? sinceArg : null
   if (args.includes('--json')) return stdout.write(JSON.stringify(toJson(r), null, 2) + '\n')
+  if (args.includes('--share')) return stdout.write((args.includes('--markdown') ? scanReport.shareMarkdown(r) : scanReport.shareText(r)) + '\n')
+  if (option(args, 'explain') !== undefined) return stdout.write(renderExplain(r, Number(option(args, 'explain')), { examples: n, color: useColor(stdout, env) }) + '\n')
   stdout.write(renderScan(r, { color: useColor(stdout, env), examples: n, width: stdout.columns || 120 }) + '\n')
 }
 
-module.exports = { main, scan, timeSpan, replay, renderScan, toJson, mask, outcomeOf, sessionKey, findTranscripts, concurrency, USAGE }
+module.exports = { main, scan, timeSpan, replay, renderScan, renderExplain, exampleList, toJson, mask, outcomeOf, sessionKey, findTranscripts, concurrency, USAGE }
