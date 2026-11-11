@@ -340,11 +340,15 @@ function lostWork(c, t, mainDir, includeSet) {
 // A branch merged with --squash or rebased is not an ancestor of ref, but merging it into ref
 // changes nothing: the merge result has ref's own tree. Needs git 2.38+ (merge-tree --write-tree);
 // older git answers no and the branch is kept.
+// Merged without being an ancestor: squash-merged (merging it would change nothing), or every
+// commit already applied on ref by cherry-pick or rebase (git cherry marks each one with "-").
 function squashMerged(c, dir, branch, ref) {
   const m = c.git(['merge-tree', '--write-tree', ref, branch], dir)
-  if (m.status !== 0) return false
   const t = c.git(['rev-parse', `${ref}^{tree}`], dir)
-  return t.status === 0 && m.stdout.trim().split('\n')[0] === t.stdout.trim()
+  if (m.status === 0 && t.status === 0 && m.stdout.trim().split('\n')[0] === t.stdout.trim()) return true
+  const ch = c.git(['cherry', ref, branch], dir)
+  const lines = ch.status === 0 ? ch.stdout.split('\n').filter(Boolean) : []
+  return lines.length > 0 && lines.every(l => l.startsWith('-'))
 }
 
 function judge(c, t, ctx) {

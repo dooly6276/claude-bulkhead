@@ -495,6 +495,23 @@ test('prune: a squash-merged branch counts as merged and is deleted with -D; one
   assert.strictEqual(sh(root, 'branch', '--list', 'sq'), '')
 })
 
+test('prune: a branch whose commits were cherry-picked onto main counts as merged, even after main moved on', async () => {
+  const { root } = makeRepo()
+  const picked = mergedBranch(root, 'picked', { merge: false })
+  const head = sh(picked, 'rev-parse', 'HEAD').trim()
+  // main moves first, so the pick is a new commit and not the branch's own (same second, same hash)
+  fs.writeFileSync(path.join(root, 'other.txt'), 'other\n')
+  sh(root, 'add', 'other.txt')
+  sh(root, 'commit', '-q', '-m', 'other work on main')
+  sh(root, 'cherry-pick', head)
+  // main changes the same file again afterwards, so merging the branch would not be a no-op
+  const file = sh(root, 'show', '--name-only', '--format=', 'HEAD').trim().split('\n')[0]
+  fs.appendFileSync(path.join(root, file), 'edited on main\n')
+  sh(root, 'commit', '-q', '-am', 'edit after the pick')
+  const dry = JSON.parse((await run(['prune', '--json'], { cwd: root })).out)
+  assert.deepStrictEqual(dry.safe.map(s => [s.branch, s.squashed]), [['picked', true]])
+})
+
 test('list: the .env copies and PORT line from add do not make a worktree dirty', async () => {
   // a repository whose .gitignore does not list the env files, so they show up as untracked
   const { root } = makeRepo()

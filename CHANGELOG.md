@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `bulkhead worktree prune` counts a branch as merged when every commit on it was cherry-picked or rebased onto the base, not only when it was merged or squash-merged.
+
 ## 0.3.0 - 2026-11-12
 
 ### New
