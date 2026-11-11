@@ -10,6 +10,8 @@ const USAGE = `usage:
   bulkhead doctor [--json] [--no-remote] check the install, settings and this machine
   bulkhead config [--json]              effective settings and where each one came from
   bulkhead port [--near PORT] [--json]  a port no process is listening on
+  bulkhead port --stable [--name NAME] [--range 3000-3999]
+                                        this worktree's own port, the same every time
   bulkhead reap [--dry-run] [--json]    stop what exited sessions left running
   bulkhead slot run [--gb=N] [--wait=MINUTES] [--label=TEXT] -- <command...>
   bulkhead slot status [--gb=N]         same as bulkhead-slot

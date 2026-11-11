@@ -108,6 +108,21 @@ The built-in shared list is: node, python, python3, py, pythonw, ruby, java, jav
 
 The built-in rules and keep list are in [guards/orphan-reaper.md](guards/orphan-reaper.md#what-it-stops).
 
+### sessionState
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Turns the session state hooks off. `status` and `top` then show `-` in the STATE column |
+
+### notify
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `command` | string | none (off) | A command run when a session starts waiting for you or needs a permission. Global config file only; a project file cannot set it, so a repository cannot make your machine run a command |
+| `minIntervalSeconds` | number | `30` | The least time between two notifications for the same session |
+
+The command runs through the shell, detached, with output discarded, so it never blocks Claude Code. It gets `BULKHEAD_SESSION_PROJECT`, `BULKHEAD_SESSION_STATE` (`waiting` or `permission`) and `BULKHEAD_SESSION_PID`. Examples for macOS, Linux and Windows are in [commands.md](commands.md#session-state-and-notifications).
+
 ### log
 
 | Key | Type | Default | Environment | Meaning |

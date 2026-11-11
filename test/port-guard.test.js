@@ -26,7 +26,7 @@ const as = me => ({ cwd: '/w', probe: async () => true, snapshot: () => snap, fi
 
 test('blocks a port held by another session and names it', async () => {
   const msg = await check('npx next dev', as(200))
-  assert.match(msg, /port 3000 is already used by another Claude session \(session pid 100, \/home\/dev\/src\/acme-web\): node pid 111/)
+  assert.match(msg, /port 3000 is already used by another Claude session \(session 100 in \/home\/dev\/src\/acme-web\): node pid 111/)
   assert.match(msg, /Port 3002 is free:\n {2}npx next dev --port 3002/)
   assert.match(await check('python -m http.server 3000', as(200)), /http\.server 3002/)
 })
@@ -100,7 +100,7 @@ test('finds the ports a kill-by-port command aims at', () => {
 
 test('blocks a kill by port only when another session owns the port', async () => {
   const msg = (await checkKill('npx kill-port 3000', as(200))).message
-  assert.match(msg, /`npx kill-port 3000` would stop node pid 111, the server another Claude session runs on port 3000 \(session pid 100, \/home\/dev\/src\/acme-web\)/)
+  assert.match(msg, /`npx kill-port 3000` would stop node pid 111, the server another Claude session runs on port 3000 \(session 100 in \/home\/dev\/src\/acme-web\)/)
   assert.match(msg, /3002 is free/)
   assert.match(msg, /bulkhead port/)
   assert.ok(await checkKill('lsof -ti :3000 | xargs kill -9', as(200)))
@@ -113,6 +113,27 @@ test('blocks a kill by port only when another session owns the port', async () =
   assert.strictEqual(await checkKill('npx kill-port 3000', { ...as(200), probe: async () => false, snapshot: () => assert.fail('no scan') }), null)
   assert.strictEqual(await checkKill('npx kill-port 3000', { ...as(200), snapshot: () => null }), null)
   assert.strictEqual(await checkKill('ls', { ...as(200), probe: () => assert.fail('no probe') }), null)
+})
+
+test('suggests the stable port of the current worktree when the cwd is in a git tree', async () => {
+  const fs = require('fs')
+  const path = require('path')
+  const { tempDir } = require('./helpers')
+  const { pickFree, keyFor, sequence } = require('../src/stable-port')
+  const repo = tempDir()
+  fs.mkdirSync(path.join(repo, '.git'))
+  fs.mkdirSync(path.join(repo, 'web'))
+  const msg = await check('npx next dev', { ...as(200), cwd: path.join(repo, 'web') })
+  const stable = pickFree(keyFor(repo), new Set([3000, 3001, 5173, 5432]))
+  assert.match(msg, new RegExp(`Port ${stable} is free \\(this worktree's own port\\):\\n {2}npx next dev --port ${stable}`))
+  // the same answer every time
+  assert.strictEqual(await check('npx next dev', { ...as(200), cwd: repo }), msg)
+  // a busy stable port moves on to the next one in the fixed order
+  const first = sequence(keyFor(repo))[0]
+  const busy = { ...snap, ports: [...snap.ports, { port: first, pid: 300 }] }
+  const next = pickFree(keyFor(repo), new Set(busy.ports.map(l => l.port)))
+  const msg2 = await check('npx next dev', { ...as(200), cwd: repo, snapshot: () => busy })
+  assert.ok(msg2.includes(`--port ${next}`), msg2)
 })
 
 test('hook fails open', () => {

@@ -20,16 +20,17 @@ const snapshot = {
 }
 const files = new Map([[812, { cwd: '/home/dev/src/acme-web', startedAt: 0 }]])
 const slots = [{ file: '/s/slot-1.json', label: 'npx playwright test', gb: 4, pid: 4321, at: now - 12 * 60e3 }]
+const enrichOpts = { states: new Map(), git: () => null, cwds: () => new Map() }
 const mem = { freeGb: 9.14, totalGb: 31.8, commitPct: null }
 
 test('renders sessions, their ports, slots and free RAM', () => {
-  const st = collect({ snapshot, files, slots, mem, now })
+  const st = collect({ snapshot, files, slots, mem, now, enrichOpts })
   assert.strictEqual(render(st, { home: '/home/dev' }), [
-    'SESSION  STARTED       RSS     PROJECT',
-    '812      Oct 12 22:05  1.6 GB  ~/src/acme-web',
+    'SESSION  STATE  STARTED       RSS     BRANCH  PROJECT',
+    '812      -      Oct 12 22:05  1.6 GB  -       ~/src/acme-web',
     '  :3000  node  pid 990',
     '  :9229  node  pid 990',
-    '1001     11:40         300 MB  ?',
+    '1001     -      11:40         300 MB  -       (unknown)',
     '',
     'SLOT    GB  PID   AGE     COMMAND',
     'slot-1  4   4321  12 min  npx playwright test',
@@ -39,18 +40,18 @@ test('renders sessions, their ports, slots and free RAM', () => {
 })
 
 test('says so when nothing is running', () => {
-  const st = collect({ snapshot: null, files, slots: [], mem: { ...mem, commitPct: 61 }, now })
+  const st = collect({ snapshot: null, files, slots: [], mem: { ...mem, commitPct: 61 }, now, enrichOpts })
   assert.strictEqual(render(st), 'no Claude sessions found\n\nno heavy jobs in bulkhead-slot\n\n9.1 GB free of 31.8 GB, commit 61%')
 })
 
 test('bold headers only when asked', () => {
-  const st = collect({ snapshot, files, slots, mem, now })
+  const st = collect({ snapshot, files, slots, mem, now, enrichOpts })
   assert.ok(!render(st).includes('\x1b['))
   assert.ok(render(st, { color: true }).startsWith('\x1b[1mSESSION'))
 })
 
 test('json keeps raw numbers and ISO times', () => {
-  const j = toJson(collect({ snapshot, files, slots, mem, now }))
+  const j = toJson(collect({ snapshot, files, slots, mem, now, enrichOpts }))
   assert.strictEqual(j.sessions[0].rss, 1600 * MB)
   assert.strictEqual(j.sessions[0].start, new Date(2026, 9, 12, 22, 5).toISOString())
   assert.deepStrictEqual(j.sessions[0].ports[0], { port: 3000, pid: 990, name: 'node' })

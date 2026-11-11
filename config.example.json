@@ -42,6 +42,13 @@
     "extraNames": ["my-server"],
     "keepNames": ["mongod"]
   },
+  "sessionState": {
+    "enabled": true
+  },
+  "notify": {
+    "command": "osascript -e 'display notification \"'\"$BULKHEAD_SESSION_STATE\"'\" with title \"Claude: '\"$BULKHEAD_SESSION_PROJECT\"'\"'",
+    "minIntervalSeconds": 30
+  },
   "log": {
     "enabled": true
   },

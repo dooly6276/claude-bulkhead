@@ -1,6 +1,5 @@
 'use strict'
 const net = require('net')
-const os = require('os')
 const { runHook, blocked, setting, oneLine } = require('./hook')
 const { detect } = require('./dev-servers')
 const { readProcesses } = require('./processes')
@@ -15,10 +14,18 @@ function freePort(port, taken) {
   return null
 }
 
-function shortPath(p) {
-  const home = os.homedir()
-  return p && p.toLowerCase().startsWith(home.toLowerCase()) ? '~' + p.slice(home.length).replace(/\\/g, '/') : p || 'unknown directory'
+// The port this worktree always gets (see bulkhead port --stable), when it is free; only called after a block.
+function preferredPort(cwd, taken) {
+  try {
+    const { pickFree, keyFor } = require('./stable-port')
+    const { gitInfo } = require('./git-info')
+    const g = gitInfo(cwd)
+    return g ? pickFree(keyFor(g.root), taken) : null
+  } catch { return null }
 }
+
+// Loaded only on the block path, which keeps the allow path as fast as it was.
+const describeSession = (...a) => require('./session-info').describeSession(...a)
 
 // A connect attempt takes a few milliseconds; reading the process list takes a second or two
 // on Windows, so we only read it when something answers on the port.
@@ -49,12 +56,14 @@ async function check(cmd, {
   const me = self(snap.procs)
   if (!me || me === owner.pid) return null
   const name = (snap.procs.find(p => p.pid === holder.pid) || {}).name || 'a process'
-  const free = freePort(server.port, new Set(snap.ports.map(l => l.port)))
+  const taken = new Set(snap.ports.map(l => l.port))
+  const stable = preferredPort(cwd, taken)
+  const free = stable || freePort(server.port, taken)
   return `[bulkhead] port-guard: port ${server.port} is already used by another Claude session ` +
-    `(session pid ${owner.pid}, ${shortPath(owner.cwd)}): ${name} pid ${holder.pid}.\n` +
+    `(${describeSession(owner)}): ${name} pid ${holder.pid}.\n` +
     'Leave that server alone; it is the other session\'s work. If you start yours anyway, it either fails or moves to the ' +
     `next port, and requests to localhost:${server.port} reach the other project.\n` +
-    (free ? `Port ${free} is free:\n  ${server.hint(free)}` : `Pick a free port and pass it explicitly; \`bulkhead port --near ${server.port}\` prints one.`)
+    (free ? `Port ${free} is free${stable ? ' (this worktree\'s own port)' : ''}:\n  ${server.hint(free)}` : `Pick a free port and pass it explicitly; \`bulkhead port --near ${server.port}\` prints one.`)
 }
 
 const numbers = s => (String(s).match(/\d+/g) || []).map(Number).filter(n => n > 0 && n < 65536)
@@ -116,7 +125,7 @@ async function checkKill(cmd, {
       return {
         port,
         message: `[bulkhead] port-guard: \`${oneLine(cmd, 120)}\` would stop ${name} pid ${holder.pid}, the server another Claude session ` +
-          `runs on port ${port} (session pid ${owner.pid}, ${shortPath(owner.cwd)}).\n` +
+          `runs on port ${port} (${describeSession(owner)}).\n` +
           'That server is the other session\'s work. Stopping it breaks whatever that session is running or testing.\n' +
           (free ? `If you need a server of your own, start it on a free port instead: ${free} is free.\n` : 'If you need a server of your own, start it on another port.\n') +
           `\`bulkhead port --near ${port}\` prints a port no session holds.\n` +
