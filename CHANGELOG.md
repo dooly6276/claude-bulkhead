@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.0 - 2026-11-12
+
+### New
+
+- **One hook process for every Bash guard.** `src/bash-guards.js` runs the guards in a row, text-only checks first and the ones that read git, memory, processes or ports last, and stops at the first block. A Bash call used to start seven Node processes. With 10 sessions making a tool call at the same moment, each now waits about 89 ms instead of 318 ms (611 ms to 109 ms with 20). `node scripts/bench-hooks.js 9 --sessions 10` measures it on your machine.
+- **`bulkhead explain -- <command>`** shows what every guard would say about a command, with the evidence (which session owns the process or port, how much RAM is free) and how to allow it, without running anything.
+- **Allow once.** Every block message ends with a code: the user runs `bulkhead allow <code>` in their own terminal and the same command passes once within 10 minutes. The new basics rule `self-allow` blocks the agent from running `bulkhead allow` or writing the allow files itself, in 25 spellings.
+- **Presets.** `bulkhead config --preset quiet|normal|strict [--project]`. `quiet` keeps only what protects one session from another and the rules that cannot be undone; `strict` tightens the limits, scaled to the machine's RAM, and turns secrets-guard on.
+- **`bulkhead worktree add|list|prune`.** `add` makes `../<repo>-<name>` on a new branch, copies your `.env` files (or what `.worktreeinclude` lists), installs dependencies with the lockfile's package manager and writes a stable `PORT` to `.env.local`. `list` shows branch, age, changes, ahead and behind, live session and port. `prune` removes worktrees that are merged (squash and rebase merges included), clean and idle, never one a live session works in, and is a dry run until `--yes`.
+- **`bulkhead port --stable`** gives a worktree the same port every time, and port-guard suggests it first.
+- **Auto-queue.** With `{"memoryGuard":{"autoQueue":true}}`, a heavy command is not refused: the hook rewrites it to run through `bulkhead-slot` and it starts when there is room. Waiting jobs are served first in, first out, poll once a second, and print their place in line every 30 seconds.
+- **subagent-guard** (opt-in, `memoryGuard.subagents`) stops new subagents while memory pressure is critical.
+- **edit-guard** tells the agent, before it edits a file, that another live session edited the same file in the last 30 minutes, in this tree or another worktree of the repository. Advisory by default; `editGuard.mode` can be `ask` or `block`.
+- **secrets-guard** (off by default, on in `strict`) blocks showing `.env` files, private keys, cloud and registry credentials, and the whole environment to the model, through the Read and Grep tools or a shell command. `.env.example`, `ls ~/.ssh`, `.pub` files and appending to `.env` pass.
+- **Codex, Gemini CLI, Copilot CLI, Cursor, Windsurf, Droid, Devin, Cline, opencode and Amp.** `bulkhead setup <agent> --write` registers the same guards in that agent's hook config, with a backup of the original. Their CLI sessions count as sessions for port-guard, checkout-guard and `bulkhead status`.
+- **`bulkhead status` and `top`** show a `STATE` column (working, waiting for you, waiting for a permission) and a `BRANCH` column, the session and project of each queued job, and duplicate MCP servers that several sessions start. A `notify.command` runs when a session starts waiting for you.
+- **`bulkhead doctor`** has an Enforcement section: it runs a harmless command through each guard and shows the block and how long it took, and finds settings that switch the hooks off, duplicate installs and a `node` missing from the hooks' `PATH`.
+- **`bulkhead scan --share`** prints a short summary with counts only, for a post or a chat. `--explain N` shows one hit in full with the part that matched.
+- orphan-reaper keeps processes started with `BULKHEAD_KEEP=1`, SSH tunnels, `cloudflared` and databases, and anything matching `orphanReaper.keepPatterns`. The next session start tells you what it stopped.
+
+### Changed
+
+- On macOS, free RAM comes from `kern.memorystatus_level` and the memory pressure level instead of a `vm_stat` estimate, which counted far too little as free on a Mac with a lot of file cache. memory-guard blocks heavy commands at pressure level 2 or higher. When neither can be read, heavy commands are let through instead of blocked.
+- More heavy commands are recognised: `xcodebuild`, `swift build` and `swift test`, `fastlane`, `bundle exec`, `go build` and `go test` with `-race` or `./...`, and `nx run|build|test|e2e`.
+- Block messages name the other session by project and branch, and end with the exact config line that would allow the rule.
+- `bulkhead --version`, `bulkhead help <command>` and `<command> --help`; unknown commands and options that need a number are rejected with a clear message.
+- Inside a hook, reading the process table gives up after 4 seconds (8 on Windows) and lets the call through, instead of waiting up to 15 (60).
+- `guards.log` is rotated at 1 MB like `events.jsonl`, and two hooks rotating at the same moment no longer lose the older log.
+
+### Fixed
+
+- Claude Code sessions started by the macOS desktop app were not seen as sessions.
+- `bulkhead doctor` reported the plugin as installed when run through `npx` from an unrelated copy.
+
 ## 0.2.2 - 2026-11-11
 
 ### Fixed
