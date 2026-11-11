@@ -15,7 +15,8 @@ in the way, the message the agent would see, and how to allow it once or for goo
 judged as a new session that none of the running ones is. --timeout is the tool call's timeout
 in milliseconds, which wait-guard reads (the Bash tool's default is 120000).`
 
-const ORDER = ['kill-guard', 'wait-guard', 'memory-guard', 'port-guard', 'checkout-guard', 'disk-guard', 'secrets-guard', 'basics']
+// the order the hook runs them in (bash-guards.js)
+const ORDER = require('./bash-guards').ORDER.map(([name]) => name)
 const PREVIEW_SESSION = 'explain-preview'
 
 // Reads the process table at most once, and only when a guard asks for it.
