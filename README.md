@@ -36,6 +36,16 @@ Then see what it would have stopped in your own last month, without changing any
 /bulkhead:scan 30d
 ```
 
+Other agents load the same guards as a plugin:
+
+| Agent | Install |
+|---|---|
+| Copilot CLI | `copilot plugin marketplace add dooly6276/claude-bulkhead`, then `copilot plugin install bulkhead@bulkhead` |
+| Cursor | `git clone https://github.com/dooly6276/claude-bulkhead ~/.cursor/plugins/local/bulkhead`, then **Developer: Reload Window** |
+| opencode | add `"plugin": ["claude-bulkhead"]` to `opencode.json` |
+
+For the others (Codex, Gemini CLI, Windsurf, Droid, Devin, Cline, Amp), see [Codex, Gemini and other agents](#codex-gemini-and-other-agents).
+
 Node 18 or later must be on `PATH` (the native Claude Code installer does not install it; check with `node --version`).
 
 | Install | What you get |
@@ -289,7 +299,7 @@ bulkhead setup codex            # prints the config for ~/.codex/hooks.json
 bulkhead setup codex --write    # merges it (original saved as hooks.json.bulkhead-backup)
 ```
 
-`bulkhead setup <agent>` works for `codex`, `gemini`, `copilot`, `cursor`, `windsurf`, `droid`, `devin`, `cline`, `opencode` and `amp`. Each agent calls `bulkhead hook --agent <name>` before a shell command and gets its own block format back. The agents, config files, what is guarded and the documentation each row was checked against are in [docs/other-agents.md](docs/other-agents.md).
+Copilot CLI, Cursor and opencode can also load bulkhead as a plugin (see [Install](#install)), which needs no `npm install -g` and no change to your own config files. `bulkhead setup <agent>` works for `codex`, `gemini`, `copilot`, `cursor`, `windsurf`, `droid`, `devin`, `cline`, `opencode` and `amp`. Each agent calls `bulkhead hook --agent <name>` before a shell command and gets its own block format back. The agents, config files, what is guarded and the documentation each row was checked against are in [docs/other-agents.md](docs/other-agents.md).
 
 ## How bulkhead relates to other hook packs
 

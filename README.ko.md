@@ -36,6 +36,16 @@ Claude Code 안에서 입력합니다.
 /bulkhead:scan 30d
 ```
 
+다른 에이전트는 같은 가드를 플러그인으로 불러옵니다.
+
+| 에이전트 | 설치 |
+|---|---|
+| Copilot CLI | `copilot plugin marketplace add dooly6276/claude-bulkhead` 다음 `copilot plugin install bulkhead@bulkhead` |
+| Cursor | `git clone https://github.com/dooly6276/claude-bulkhead ~/.cursor/plugins/local/bulkhead` 다음 **Developer: Reload Window** |
+| opencode | `opencode.json` 에 `"plugin": ["claude-bulkhead"]` 추가 |
+
+그 밖의 에이전트(Codex, Gemini CLI, Windsurf, Droid, Devin, Cline, Amp)는 [Codex, Gemini 와 다른 에이전트](#codex-gemini-와-다른-에이전트)를 보세요.
+
 `PATH` 에 Node 18 이상이 있어야 합니다(Claude Code 네이티브 설치 프로그램은 Node 를 깔지 않으니 `node --version` 으로 확인하세요).
 
 | 설치 | 얻는 것 |
@@ -289,7 +299,7 @@ bulkhead setup codex            # prints the config for ~/.codex/hooks.json
 bulkhead setup codex --write    # merges it (original saved as hooks.json.bulkhead-backup)
 ```
 
-`bulkhead setup <agent>` 는 `codex`, `gemini`, `copilot`, `cursor`, `windsurf`, `droid`, `devin`, `cline`, `opencode`, `amp` 에서 됩니다. 각 에이전트는 셸 명령 전에 `bulkhead hook --agent <name>` 을 부르고, 자기 형식의 막힘 응답을 받습니다. 에이전트별 설정 파일, 지키는 범위, 각 항목을 확인한 문서는 [docs/other-agents.md](docs/other-agents.md) 에 있습니다.
+Copilot CLI, Cursor, opencode 는 bulkhead 를 플러그인으로도 불러올 수 있습니다([설치](#설치) 참고). 이 길은 `npm install -g` 도, 내 설정 파일 수정도 필요 없습니다. `bulkhead setup <agent>` 는 `codex`, `gemini`, `copilot`, `cursor`, `windsurf`, `droid`, `devin`, `cline`, `opencode`, `amp` 에서 됩니다. 각 에이전트는 셸 명령 전에 `bulkhead hook --agent <name>` 을 부르고, 자기 형식의 막힘 응답을 받습니다. 에이전트별 설정 파일, 지키는 범위, 각 항목을 확인한 문서는 [docs/other-agents.md](docs/other-agents.md) 에 있습니다.
 
 ## 다른 훅 모음과의 관계
 

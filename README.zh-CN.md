@@ -36,6 +36,16 @@
 /bulkhead:scan 30d
 ```
 
+其他代理可以把同样的防护作为插件加载：
+
+| 代理 | 安装 |
+|---|---|
+| Copilot CLI | `copilot plugin marketplace add dooly6276/claude-bulkhead`，然后 `copilot plugin install bulkhead@bulkhead` |
+| Cursor | `git clone https://github.com/dooly6276/claude-bulkhead ~/.cursor/plugins/local/bulkhead`，然后执行 **Developer: Reload Window** |
+| opencode | 在 `opencode.json` 中加入 `"plugin": ["claude-bulkhead"]` |
+
+其他代理（Codex、Gemini CLI、Windsurf、Droid、Devin、Cline、Amp）见 [Codex、Gemini 和其他代理](#codexgemini-和其他代理)。
+
 `PATH` 里需要有 Node 18 或更高版本（Claude Code 的原生安装程序不会装 Node，请用 `node --version` 确认）。
 
 | 安装方式 | 你会得到什么 |
@@ -289,7 +299,7 @@ bulkhead setup codex            # prints the config for ~/.codex/hooks.json
 bulkhead setup codex --write    # merges it (original saved as hooks.json.bulkhead-backup)
 ```
 
-`bulkhead setup <agent>` 支持 `codex`、`gemini`、`copilot`、`cursor`、`windsurf`、`droid`、`devin`、`cline`、`opencode` 和 `amp`。每个代理在执行 shell 命令之前调用 `bulkhead hook --agent <name>`，并拿到属于自己的拦截格式。各个代理、配置文件、受保护的内容，以及每一行所依据的官方文档，见 [docs/other-agents.md](docs/other-agents.md)。
+Copilot CLI、Cursor 和 opencode 也可以把 bulkhead 作为插件加载（见[安装](#安装)），这样既不需要 `npm install -g`，也不用改你自己的配置文件。`bulkhead setup <agent>` 支持 `codex`、`gemini`、`copilot`、`cursor`、`windsurf`、`droid`、`devin`、`cline`、`opencode` 和 `amp`。每个代理在执行 shell 命令之前调用 `bulkhead hook --agent <name>`，并拿到属于自己的拦截格式。各个代理、配置文件、受保护的内容，以及每一行所依据的官方文档，见 [docs/other-agents.md](docs/other-agents.md)。
 
 ## 与其他 hook 集合的关系
 

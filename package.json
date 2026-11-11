@@ -1,6 +1,6 @@
 {
   "name": "claude-bulkhead",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Claude Code hooks for a machine shared by many sessions and subagents",
   "keywords": [
     "claude-code",
@@ -13,7 +13,11 @@
     "ports",
     "memory",
     "worktrees",
-    "cli"
+    "cli",
+    "opencode",
+    "opencode-plugin",
+    "copilot-cli",
+    "cursor"
   ],
   "license": "MIT",
   "author": "Myeongseok Kang",
@@ -27,6 +31,14 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "main": "opencode/plugin.mjs",
+  "exports": {
+    ".": "./opencode/plugin.mjs",
+    "./server": "./opencode/plugin.mjs",
+    "./opencode": "./opencode/plugin.mjs",
+    "./package.json": "./package.json",
+    "./*": "./*"
   },
   "bin": {
     "claude-bulkhead": "bin/bulkhead",
@@ -50,6 +62,7 @@
     "bin",
     "src",
     "hooks",
+    "opencode",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"

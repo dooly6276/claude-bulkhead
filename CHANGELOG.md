@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2 - 2026-11-12
+
+### New
+
+- **Plugin bundles for Copilot CLI, Cursor and opencode.** The repository is now also an Agent Plugins 1.0.0 plugin (`plugin.json` at the root, hooks in `com.github.copilot/hooks/hooks.json`) that Copilot CLI installs with `copilot plugin marketplace add dooly6276/claude-bulkhead` and `copilot plugin install bulkhead@bulkhead`; a Cursor plugin (`.cursor-plugin/plugin.json` with its own `.cursor-plugin/hooks.json`); and an opencode plugin from npm (`"plugin": ["claude-bulkhead"]`, entry `opencode/plugin.mjs`). Each calls `bulkhead hook --agent <name>` from the plugin's own copy, so the guards are the same as with `bulkhead setup <agent>` and nothing is written to the agent's config. The Claude Code plugin and `hooks/hooks.json` are unchanged.
+
 ## 0.3.1 - 2026-11-12
 
 ### Changed

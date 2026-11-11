@@ -1,0 +1,16 @@
+{
+  "name": "bulkhead",
+  "displayName": "bulkhead",
+  "version": "0.3.2",
+  "description": "Guards for a machine where many coding agent sessions run at once. Before Cursor's agent runs a shell command, bulkhead blocks name-based kills of another session's processes, port collisions, git commands that would move or delete another session's tree, whole-disk scans and long foreground sleeps, and holds heavy commands back when RAM runs low.",
+  "author": {
+    "name": "Myeongseok Kang"
+  },
+  "homepage": "https://github.com/dooly6276/claude-bulkhead#readme",
+  "repository": "https://github.com/dooly6276/claude-bulkhead",
+  "license": "MIT",
+  "keywords": ["hooks", "guard", "processes", "ports", "memory", "worktrees", "git", "parallel", "agents"],
+  "logo": ".claude-plugin/icon.png",
+  "skills": "skills/",
+  "hooks": ".cursor-plugin/hooks.json"
+}

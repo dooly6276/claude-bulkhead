@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "node \"$BULKHEAD_PLUGIN_ROOT/bin/bulkhead\" hook --agent copilot",
+        "powershell": "node (Join-Path $env:BULKHEAD_PLUGIN_ROOT 'bin/bulkhead') hook --agent copilot",
+        "env": {
+          "BULKHEAD_PLUGIN_ROOT": "${PLUGIN_ROOT}"
+        },
+        "timeoutSec": 30
+      }
+    ]
+  }
+}

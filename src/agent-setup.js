@@ -66,13 +66,9 @@ function ownedPlan(file, existing, content, agent) {
   return { file, snippet: content, next: existing === content ? null : content, mode: 0o755 }
 }
 
-const pluginSource = (agent, argv) => ({
-  opencode: `// ${MARK}: written by \`bulkhead setup opencode\`, safe to delete
-import { spawnSync } from 'node:child_process'
-
-const HOOK = ${JSON.stringify([...argv, 'hook', '--agent', 'opencode'])}
-
-export const BulkheadPlugin = async ({ directory }) => ({
+// The opencode plugin body after its HOOK line, shared with opencode/plugin.mjs, the copy that
+// ships in the npm package for opencode's `"plugin": ["claude-bulkhead"]` route.
+const OPENCODE_PLUGIN = `export const BulkheadPlugin = async ({ directory }) => ({
   'tool.execute.before': async (input, output) => {
     if (input.tool !== 'bash') return
     const command = output.args && output.args.command
@@ -84,7 +80,15 @@ export const BulkheadPlugin = async ({ directory }) => ({
     if (r.status === 2) throw new Error((r.stderr || 'blocked by bulkhead').trim())
   },
 })
-`,
+`
+
+const pluginSource = (agent, argv) => ({
+  opencode: `// ${MARK}: written by \`bulkhead setup opencode\`, safe to delete
+import { spawnSync } from 'node:child_process'
+
+const HOOK = ${JSON.stringify([...argv, 'hook', '--agent', 'opencode'])}
+
+${OPENCODE_PLUGIN}`,
   amp: `// ${MARK}: written by \`bulkhead setup amp\`, safe to delete
 import { spawnSync } from 'node:child_process'
 import type { PluginAPI } from '@ampcode/plugin'
@@ -253,4 +257,4 @@ function main(args, { stdout = process.stdout, stderr = process.stderr, exit = p
   return exit(0)
 }
 
-module.exports = { main, plan, apply, backupName, commandLine, isOurs, SETUP, AGENT_NAMES }
+module.exports = { main, plan, apply, backupName, commandLine, isOurs, SETUP, AGENT_NAMES, OPENCODE_PLUGIN, pluginSource }

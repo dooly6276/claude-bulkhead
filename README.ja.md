@@ -36,6 +36,16 @@ Claude Code 内で実行します。
 /bulkhead:scan 30d
 ```
 
+ほかのエージェントは、同じガードをプラグインとして読み込めます。
+
+| エージェント | インストール |
+|---|---|
+| Copilot CLI | `copilot plugin marketplace add dooly6276/claude-bulkhead` のあと `copilot plugin install bulkhead@bulkhead` |
+| Cursor | `git clone https://github.com/dooly6276/claude-bulkhead ~/.cursor/plugins/local/bulkhead` のあと **Developer: Reload Window** |
+| opencode | `opencode.json` に `"plugin": ["claude-bulkhead"]` を追加 |
+
+それ以外のエージェント（Codex、Gemini CLI、Windsurf、Droid、Devin、Cline、Amp）は [Codex や Gemini などの他のエージェント](#codex-や-gemini-などの他のエージェント) を参照してください。
+
 Node 18 以降が `PATH` に通っている必要があります（Claude Code のネイティブインストーラーは Node をインストールしないので、`node --version` で確認してください）。
 
 | インストール | 得られるもの |
@@ -289,7 +299,7 @@ bulkhead setup codex            # prints the config for ~/.codex/hooks.json
 bulkhead setup codex --write    # merges it (original saved as hooks.json.bulkhead-backup)
 ```
 
-`bulkhead setup <agent>` は `codex`、`gemini`、`copilot`、`cursor`、`windsurf`、`droid`、`devin`、`cline`、`opencode`、`amp` で使えます。各エージェントはシェルコマンドの前に `bulkhead hook --agent <name>` を呼び出し、そのエージェント固有の形式でブロック結果を受け取ります。対応するエージェント、設定ファイル、保護の対象、各行を確認した根拠となったドキュメントは [docs/other-agents.md](docs/other-agents.md) にあります。
+Copilot CLI、Cursor、opencode では bulkhead をプラグインとしても読み込めます（[インストール](#インストール) を参照）。この方法なら `npm install -g` も、自分の設定ファイルの変更も要りません。`bulkhead setup <agent>` は `codex`、`gemini`、`copilot`、`cursor`、`windsurf`、`droid`、`devin`、`cline`、`opencode`、`amp` で使えます。各エージェントはシェルコマンドの前に `bulkhead hook --agent <name>` を呼び出し、そのエージェント固有の形式でブロック結果を受け取ります。対応するエージェント、設定ファイル、保護の対象、各行を確認した根拠となったドキュメントは [docs/other-agents.md](docs/other-agents.md) にあります。
 
 ## 他の hook 集との関係
 

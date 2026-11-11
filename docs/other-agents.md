@@ -38,6 +38,20 @@ backup of the original: /home/me/.codex/hooks.json.bulkhead-backup
 
 `--write` copies the original to `<file>.bulkhead-backup` first, keeps everything else in the file, and does nothing when bulkhead is already there, so it is safe to run again (run it again after you change your Node install, because the command holds the absolute path of the `node` that ran the setup). A config file that is not plain JSON (for example with comments) is never rewritten: setup prints the snippet and tells you to add it by hand. A file bulkhead does not own, such as an existing Cline `PreToolUse.sh`, is never replaced.
 
+## As a plugin: Copilot CLI, Cursor, opencode
+
+These three can load bulkhead as a plugin instead. The plugin calls the same `bulkhead hook --agent <name>` from its own copy of the package, so nothing is written to your config files and `npm install -g` is not needed. Node 18 or later must be on the agent's `PATH`; if `node` cannot be found the hook does not run (Copilot CLI turns a hook that fails to start into a denial, so it would refuse shell commands until `node` is found).
+
+| Agent | Install | Files in this repository |
+|---|---|---|
+| Copilot CLI | `copilot plugin marketplace add dooly6276/claude-bulkhead`, then `copilot plugin install bulkhead@bulkhead` | `plugin.json` (Agent Plugins 1.0.0 manifest), `com.github.copilot/hooks/hooks.json` (`preToolUse`, `bash` and `powershell`, root from `${PLUGIN_ROOT}`) |
+| Cursor | `git clone https://github.com/dooly6276/claude-bulkhead ~/.cursor/plugins/local/bulkhead`, then **Developer: Reload Window** | `.cursor-plugin/plugin.json`, whose `hooks` field points to `.cursor-plugin/hooks.json` (`beforeShellExecution`; Cursor runs plugin hooks from the plugin folder) |
+| opencode | add `"plugin": ["claude-bulkhead"]` to `opencode.json` | `opencode/plugin.mjs`, the package's `main` and `./server` export: the same plugin `bulkhead setup opencode` writes, with the path to `bin/bulkhead` taken from the package |
+
+`hooks/hooks.json` is the Claude Code file. Copilot CLI reads a plugin with a root `plugin.json` as an Agent Plugins plugin and takes its hooks only from `com.github.copilot/`, and Cursor reads only the file its manifest names, so neither picks up the Claude Code file. Copilot CLI ignores the `/bulkhead:` slash commands in `commands/` for the same reason; the skill in `skills/` loads in Copilot CLI and Cursor.
+
+Use the plugin or `bulkhead setup`, not both: with both, every command is checked twice.
+
 ## Which agents, and where
 
 Every agent in this table has a pre-tool hook that can block a shell command; each row was checked against the agent's own documentation or source (links below the table). "Sessions" says how `bulkhead status` and the guards recognize its live CLI process.
@@ -94,4 +108,4 @@ Not available for other agents: [orphan-reaper](guards/orphan-reaper.md) (it rel
 
 ## Removing it
 
-Delete the bulkhead entry from the config file (or restore `<file>.bulkhead-backup`), or for the plugin and file agents delete the file bulkhead created.
+Delete the bulkhead entry from the config file (or restore `<file>.bulkhead-backup`), or for the plugin and file agents delete the file bulkhead created. A plugin install is removed with `copilot plugin uninstall bulkhead`, by deleting `~/.cursor/plugins/local/bulkhead`, or by taking `claude-bulkhead` out of opencode's `plugin` list.

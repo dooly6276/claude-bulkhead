@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "node ./bin/bulkhead hook --agent cursor",
+        "timeout": 30
+      }
+    ]
+  }
+}

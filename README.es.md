@@ -36,6 +36,16 @@ Después, mira qué habría detenido en tu último mes, sin cambiar nada:
 /bulkhead:scan 30d
 ```
 
+Otros agentes cargan los mismos guards como plugin:
+
+| Agente | Instalación |
+|---|---|
+| Copilot CLI | `copilot plugin marketplace add dooly6276/claude-bulkhead` y luego `copilot plugin install bulkhead@bulkhead` |
+| Cursor | `git clone https://github.com/dooly6276/claude-bulkhead ~/.cursor/plugins/local/bulkhead` y luego **Developer: Reload Window** |
+| opencode | añade `"plugin": ["claude-bulkhead"]` a `opencode.json` |
+
+Para los demás (Codex, Gemini CLI, Windsurf, Droid, Devin, Cline, Amp), consulta [Codex, Gemini y otros agentes](#codex-gemini-y-otros-agentes).
+
 Node 18 o superior debe estar en el `PATH` (el instalador nativo de Claude Code no lo instala; compruébalo con `node --version`).
 
 | Instalación | Qué obtienes |
@@ -289,7 +299,7 @@ bulkhead setup codex            # prints the config for ~/.codex/hooks.json
 bulkhead setup codex --write    # merges it (original saved as hooks.json.bulkhead-backup)
 ```
 
-`bulkhead setup <agent>` funciona con `codex`, `gemini`, `copilot`, `cursor`, `windsurf`, `droid`, `devin`, `cline`, `opencode` y `amp`. Cada agente llama a `bulkhead hook --agent <name>` antes de un comando de shell y recibe de vuelta el bloqueo en su propio formato. Los agentes, los archivos de configuración, lo que se protege y la documentación con la que se comprobó cada fila están en [docs/other-agents.md](docs/other-agents.md).
+Copilot CLI, Cursor y opencode también pueden cargar bulkhead como plugin (ver [Instalación](#instalación)), sin `npm install -g` y sin tocar tus propios archivos de configuración. `bulkhead setup <agent>` funciona con `codex`, `gemini`, `copilot`, `cursor`, `windsurf`, `droid`, `devin`, `cline`, `opencode` y `amp`. Cada agente llama a `bulkhead hook --agent <name>` antes de un comando de shell y recibe de vuelta el bloqueo en su propio formato. Los agentes, los archivos de configuración, lo que se protege y la documentación con la que se comprobó cada fila están en [docs/other-agents.md](docs/other-agents.md).
 
 ## Cómo se relaciona bulkhead con otros paquetes de hooks
 
