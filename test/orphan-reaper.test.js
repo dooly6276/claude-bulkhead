@@ -113,7 +113,7 @@ test('windows: every rule in the table, each under a dead shell', () => {
   add('chrome.exe', 'chrome.exe --remote-debugging-pipe --user-data-dir=C:\\T\\playwright_chromiumdev_profile-abc', 'headless-browser')
   add('firefox.exe', 'firefox.exe -no-remote -headless -profile C:\\T\\playwright_firefoxdev_profile-x -juggler-pipe', 'headless-browser')
   add('msedge.exe', 'msedge.exe --headless --disable-gpu', 'headless-browser')
-  add('redis-server.exe', 'redis-server.exe --port 6390', 'dev-server', { listening: true })
+  add('my-api.exe', 'my-api.exe --port 6390', 'dev-server', { listening: true })
   add('myworker.exe', 'myworker.exe --queue jobs', 'extra-name')
   // not stopped: nothing heavy, a shared daemon, the user's own Chrome, a shell that only names vitest
   add('node.exe', 'node scripts/print.js')

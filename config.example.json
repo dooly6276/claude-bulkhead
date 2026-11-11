@@ -40,7 +40,8 @@
     "enabled": true,
     "onSessionEnd": true,
     "extraNames": ["my-server"],
-    "keepNames": ["mongod"]
+    "keepNames": ["mongod"],
+    "keepPatterns": ["my-tunnel.sh"]
   },
   "log": {
     "enabled": true

@@ -4,6 +4,16 @@
 
 Stops the heavy processes a Claude Code session left running after it exited: dev servers and anything else listening on a port, test runners and their workers, watchers, builders and automation browsers. It runs right after a session ends and, as a catch-all, in the background when a session starts. It only stops processes started from a Claude Code tool shell, and only once that session is proven gone.
 
+## The rule, and how to keep something
+
+A process is stopped only when a Claude Code tool shell started it, its session has exited, and it is a dev server (anything listening on a TCP port), a test runner, a watcher, a builder or an automation browser. Something you started on purpose to keep running, such as a tunnel or a local database, needs one of these:
+
+- Start it with the marker: `BULKHEAD_KEEP=1 nohup python3 -m http.server 8000 &`. The reaper never stops a process with `BULKHEAD_KEEP=1` (also `true` or `yes`) in its environment, nor what it started, because children inherit it. On Linux it reads `/proc/<pid>/environ`, on macOS `ps -axwwE` (macOS hides the environment of Apple's own programs such as `/bin/sleep`; those carry no `CLAUDE_PID` either, so the reaper never stops them). Windows cannot show another process's environment, so there the marker counts when the word `BULKHEAD_KEEP=1` is in the command line of the process or of a shell wrapping it, for example `bash -c "BULKHEAD_KEEP=1 node srv.js"`.
+- Or list it in `.claude/bulkhead.json` or the global config: `orphanReaper.keepNames` (program names) or `orphanReaper.keepPatterns` (text found in the command line, case ignored). See [configuration](../configuration.md#orphanreaper).
+- Already kept without any setting: ssh with `-L`, `-R`, `-D` or `-N`, autossh, cloudflared, ngrok, Tailscale, Postgres, MySQL, MariaDB, MongoDB, Redis, Valkey, Memcached, Jupyter, code-server, Syncthing, Docker, Colima, OrbStack, Ollama (full list under [Never stopped](#never-stopped)).
+
+It is never silent. When a pass stops something, the next session that starts prints one line, for example `bulkhead stopped 2 leftovers from ended sessions: vite :5231 (~/dev/web), node srv.js :4000. Keep one next time with BULKHEAD_KEEP=1. Details: bulkhead log --guard orphan-reaper`. Each stop is also an `orphan-reaper` event with the command, port and project, so `bulkhead log` lists it. `bulkhead reap --dry-run` shows what would be stopped right now.
+
 ## Why
 
 Processes started by agents outlive them: 60 Node processes in [#11502](https://github.com/anthropics/claude-code/issues/11502) and 550 pytest workers in [#25180](https://github.com/anthropics/claude-code/issues/25180). Each one keeps holding RAM, and servers keep the port that the next session in that worktree will want.
@@ -66,8 +76,12 @@ These are never stopped, and neither is anything they started, even under an orp
 | Terminals and multiplexers (Windows Terminal, iTerm2, GNOME Terminal, kitty, WezTerm, tmux, screen, ...) | A terminal opened from a tool shell is yours, and so is everything you run in it. |
 | macOS app bundles that are not automation browsers | GUI apps opened with `open` are yours. |
 | Shared build daemons (Gradle, Kotlin, MSBuild node reuse, VBCSCompiler, Bazel, Buck2, sccache, Turborepo and Nx daemons) | Builds in every session connect to the same daemon; stopping it breaks theirs. |
+| Anything started with `BULKHEAD_KEEP=1` | You marked it as meant to outlive the session. |
+| ssh tunnels and port forwards (`ssh -L`, `-R`, `-D`, `-N`), autossh, cloudflared, ngrok, Tailscale, frp | A tunnel is opened on purpose and nothing else reconnects it. |
+| Databases and local services (Postgres, MySQL, MariaDB, MongoDB, Redis, Valkey, Memcached, Jupyter, code-server, Syncthing) | Local services that other projects and sessions use. |
+| Container runtimes (Colima, Lima, OrbStack, Podman) | One runtime serves every session on the machine. |
 | Shared machine services (adb, the Android emulator, Docker, Ollama, watchman, ssh-agent, gpg-agent) | One instance serves every session on the machine. |
-| Program names in `orphanReaper.keepNames` | You listed them. |
+| Program names in `orphanReaper.keepNames`, and command lines containing a text from `orphanReaper.keepPatterns` | You listed them. |
 
 ## How it knows a session is gone
 
@@ -106,6 +120,7 @@ would stop 31020  dev-server  node ~/src/acme-web/node_modules/vite/bin/vite.js 
 | `orphanReaper.onSessionEnd` | `true` | `false` leaves only the pass at session start |
 | `orphanReaper.extraNames` | `[]` | More program names to stop once their session has exited, such as `["my-server"]` |
 | `orphanReaper.keepNames` | `[]` | Program names never to stop, nor anything they started, such as `["mongod"]` |
+| `orphanReaper.keepPatterns` | `[]` | Text that keeps a process when it appears in its command line, such as `["my-tunnel.sh"]`. Case is ignored |
 
 Names are matched without `.exe` and without regard to case. See [configuration.md](../configuration.md).
 

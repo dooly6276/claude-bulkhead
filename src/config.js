@@ -60,6 +60,7 @@ const KEYS = {
   'orphanReaper.onSessionEnd': bool(true, 'Also reap right after a session exits, not only when the next session starts.'),
   'orphanReaper.extraNames': { type: 'string[]', default: [], doc: 'More program names orphan-reaper stops once the session that started them has exited.' },
   'orphanReaper.keepNames': { type: 'string[]', default: [], doc: 'Program names orphan-reaper never stops, nor anything they started.' },
+  'orphanReaper.keepPatterns': { type: 'string[]', default: [], doc: 'Text that keeps a process when it appears in its command line, such as "ssh -L" or "my-tunnel.sh". Case is ignored.' },
   'log.enabled': bool(true, 'Write blocks to events.jsonl. BULKHEAD_NO_LOG=1 turns it off.'),
   // Global file only (see src/remotes.js for why).
   'remote.default': { type: 'string', default: null, globalOnly: true, doc: 'The remote bulkhead remote uses when several are configured and --remote is not given.' },

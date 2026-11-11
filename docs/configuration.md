@@ -105,6 +105,7 @@ The built-in shared list is: node, python, python3, py, pythonw, ruby, java, jav
 | `onSessionEnd` | boolean | `true` | Also reap right after a session exits. `false` leaves only the pass when a session starts |
 | `extraNames` | list of program names | `[]` | More programs to stop once the session that started them has exited, such as `["my-server"]`. Matched without `.exe`, ignoring case |
 | `keepNames` | list of program names | `[]` | Programs never to stop, nor anything they started, such as `["mongod"]` |
+| `keepPatterns` | list of text | `[]` | Text that keeps a process when it appears in its command line, such as `["my-tunnel.sh"]`, case ignored. A project file applies to the passes run by that project's sessions; `BULKHEAD_KEEP=1` on the command works for any project |
 
 The built-in rules and keep list are in [guards/orphan-reaper.md](guards/orphan-reaper.md#what-it-stops).
 
