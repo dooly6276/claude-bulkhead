@@ -33,7 +33,7 @@ const sessions = new Map([
   [500, { cwd: repo, startedAt: 0, sessionId: 'dead' }],
 ])
 const ctx = (over = {}) => ({
-  cwd: repo, sessionId: 'me', files: () => sessions, isAlive: pid => pid !== 500, run: fakeGit(), isDir: p => /[\\/](?:src|web|docs|lib)$/.test(p), ...over,
+  cwd: repo, sessionId: 'me', files: () => sessions, isAlive: pid => pid !== 500, run: fakeGit(), isDir: p => /[\\/](?:src|web|docs|lib)$/.test(p), folderExists: () => true, ...over,
 })
 
 test('blocks commands that move a tree another session is in', () => {
@@ -230,14 +230,14 @@ test('stage-all through pipes and substitutions', () => {
 test('git checkout -f, stash variants, restore and rm of a folder are blocked', () => {
   const dirty = ctx({ run: fakeGit({ status: ' M src/app.js\n?? notes.txt' }) })
   for (const cmd of ['git checkout -f', 'git checkout --force', 'git stash -a', 'git stash --all', 'git stash -q', 'git stash --quiet', 'git stash drop', 'git stash drop stash@{1}',
-    'git stash clear', 'git stash branch fix', 'git stash push', 'git stash push -m wip', 'git stash -m wip', 'git stash save wip', 'git rm -rf .', 'git rm -rf src', 'git rm -r web', "git rm '*.js'",
+    'git stash clear', 'git stash branch fix', 'git stash push', 'git stash push -m wip', 'git stash -m wip', 'git stash save wip', 'git rm -rf .', 'git rm -rf src', 'git rm -r web', 'git rm -r src/lib/',
     'git restore :/', 'git restore src', 'git restore src/', "git restore 'src/*'", 'git checkout -- src', 'git checkout HEAD -- src', 'git restore --source=HEAD~1 src',
     'git restore -W src', 'git restore --worktree --staged src']) {
     assert.ok(check(cmd, dirty), cmd)
   }
   // single files, folders with no uncommitted changes, index-only restores, usage output
   for (const cmd of ['git restore src/app.js', 'git checkout -- src/app.js', 'git checkout -- docs', 'git restore --staged src', 'git restore -S src', 'git rm src/app.js', 'git rm -f src/app.js',
-    'git rm --cached -r src', 'git rm -rn src', 'git stash list', 'git stash show', 'git stash create', 'git switch --help', 'git rebase --help', 'git merge -h', 'git checkout -h', 'git stash --help']) {
+    'git rm --cached -r src', 'git rm -rn src', "git rm 'public/sample-*.jpg'", 'git rm -rq src/a.ts src/b.ts', 'git rm -r src/old.ts', 'git reset -q $FILES', 'git stash list', 'git stash show', 'git stash create', 'git switch --help', 'git rebase --help', 'git merge -h', 'git checkout -h', 'git stash --help']) {
     assert.strictEqual(check(cmd, dirty), null, cmd)
   }
 })
@@ -335,4 +335,27 @@ test('a stale session file whose pid was reused is not a sharer', () => {
   assert.strictEqual(check('git checkout main', ctx({ files, isAlive })), null)
   assert.strictEqual(classify('rm -rf /work/shop', ctx({ files, isAlive })), null)
   assert.ok(check('git checkout main', ctx({ files: () => new Map([[200, { cwd: repo, startedAt: 1, sessionId: 'live' }]]), isAlive })))
+})
+
+test('a cd moves the folder that relative paths and git are read from', () => {
+  // the hook's folder is the repo, but the command works somewhere else
+  for (const cmd of ['cd /tmp/scratch && rm -rf ./*', 'cd /tmp/scratch && rm -rf *', 'cd ~/out; find . -delete', 'cd /tmp/x && git checkout main', 'cd "$D" && rm -rf ./*', 'cd - && rm -rf *', '(cd "$D" && rm -rf ./*)']) {
+    assert.strictEqual(classify(cmd, ctx({ run: fakeGit({ status: ' M a' }) })), null, cmd)
+  }
+  assert.strictEqual(classify('cd web && rm -rf *', ctx()).rule, 'remove-session-dir')
+  assert.strictEqual(classify('cd /work/shop && rm -rf ./*', ctx({ cwd: path.resolve('/tmp') })).rule, 'remove-session-dir')
+  assert.strictEqual(classify('cd "$D" && rm -rf /work/shop/*', ctx()).rule, 'remove-session-dir')
+  assert.strictEqual(classify('cd /tmp/x && cd /work/shop && git checkout main', ctx({ cwd: path.resolve('/tmp') })).rule, 'git-checkout')
+})
+
+test('a cd to a folder that does not exist leaves the command to be read from the hook folder', () => {
+  const hit = classify('cd /not/there && git checkout main', ctx({ folderExists: () => false }))
+  assert.strictEqual(hit.rule, 'git-checkout')
+  assert.strictEqual(classify('cd /not/there && rm -rf ./*', ctx({ folderExists: () => false })), null)
+})
+
+test('git checkout-index with a --prefix writes the copy elsewhere and passes', () => {
+  const dirty = ctx({ run: fakeGit({ status: ' M src/app.js' }) })
+  assert.strictEqual(check('git checkout-index -a -f --prefix=/tmp/idx/', dirty), null)
+  assert.ok(check('git checkout-index -a -f', dirty))
 })

@@ -2,7 +2,7 @@
 
 [Back to README](../../README.md) | [All guards](../../README.md#guards)
 
-Four narrow rules for mistakes that cannot be undone, on by default.
+Five narrow rules for mistakes that cannot be undone, on by default.
 
 ## rm-root
 
@@ -21,7 +21,7 @@ rm -rf ~/Documents       rm -rf "$HOME/Desktop"   rm -rf /srv
 
 Why folders directly in home: they are where people keep things that are not in any repository, such as exports, archives and originals another project still reads. An agent deleting one "because there is a cloud copy" can stop that other project for hours.
 
-Wrappers (`bash -c`, `cmd /c`, `sudo`, `env` and the others listed in [kill-guard](kill-guard.md)) are opened for all four rules. Commands run on another machine with `ssh` pass.
+Git options before the subcommand (`-C`, `-c`, `--git-dir`, `--work-tree`, `--no-pager`, `-p` ...) do not hide a push or a reset from the rules, and a `--git-dir` or `--work-tree` is passed on to the `git status` the discard check runs. Wrappers (`bash -c`, `cmd /c`, `sudo`, `env` and the others listed in [kill-guard](kill-guard.md)) are opened for all five rules. Commands run on another machine with `ssh` pass.
 
 Passes: `rm -rf node_modules`, `rm -rf ./dist`, `rm -rf ~/Documents/old-export`, and paths with variables it cannot expand.
 
@@ -36,6 +36,19 @@ git push origin +main
 ```
 
 Passes: `--force-with-lease`, and force-pushes to other branches.
+
+## protected-delete
+
+Blocks deleting a protected branch (`main` and `master` unless `basics.protectedBranches` says otherwise), on the remote or locally.
+
+```
+git push origin :main
+git push origin --delete main      git push origin -d master
+git push origin :refs/heads/main
+git branch -D main                 git branch --delete --force master
+```
+
+Passes: deleting any other branch, and `git branch -d main`, which git itself refuses while the branch has unmerged work.
 
 ## discard-changes
 
@@ -67,9 +80,9 @@ Passes: a `Co-Authored-By: Claude` trailer in the message, `git log --author=cla
 
 ## Turn off or tune
 
-- `BULKHEAD_DISABLE=basics` turns all four off.
-- `BULKHEAD_DISABLE=rm-root`, `force-push-main`, `discard-changes` or `agent-author` turns off one rule.
-- In a config file: `basics.enabled`, `basics.rmRoot`, `basics.forcePushMain`, `basics.discardChanges`, `basics.agentAuthor`, and `basics.protectedBranches`, for example `["main", "master", "release"]`. See [configuration](../configuration.md).
+- `BULKHEAD_DISABLE=basics` turns all five off.
+- `BULKHEAD_DISABLE=rm-root`, `force-push-main`, `protected-delete`, `discard-changes` or `agent-author` turns off one rule.
+- In a config file: `basics.enabled`, `basics.rmRoot`, `basics.forcePushMain`, `basics.protectedDelete`, `basics.discardChanges`, `basics.agentAuthor`, and `basics.protectedBranches`, for example `["main", "master", "release"]`. See [configuration](../configuration.md).
 
 ## Limits
 

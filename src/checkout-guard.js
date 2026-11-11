@@ -32,14 +32,24 @@ const longIs = (o, full, min = 3) => [...o.long].some(n => n.length >= min && fu
 const excluding = p => /^:(?:[!^]|\([^)]*\bexclude\b[^)]*\))/.test(p)
 
 // A list of changed files that git prints, as an argument: $(git ls-files -m), $(git diff --name-only).
-const CHANGED_LIST = /^(?:\$\(|`)\s*git\s+(?:-C\s+\S+\s+)?(?:ls-files|diff|status)\b/
+// Naming a folder or file ($(git ls-files -m src)) limits the list to it.
+function changedList(p) {
+  if (!/^(?:\$\(|`)/.test(p)) return false
+  const inner = shell.commands(p.replace(/^(?:\$\(|`)/, '').replace(/(?:\)|`)$/, ''))[0]
+  const call = inner && parseGitCall(inner.argv, '.')
+  const o = call && parseArgs(call.args)
+  if (!call || o.pos.length) return false
+  if (call.sub === 'diff') return o.long.has('name-only') || o.long.has('name-status')
+  if (call.sub === 'status') return o.long.has('porcelain') || o.long.has('short') || o.short.has('s')
+  return call.sub === 'ls-files'
+}
 
 // A pathspec that stands for the whole tree: ., ./, *, ./*, .*, :/, :(top), :(glob)**, $PWD,
 // $(pwd), $(git rev-parse --show-toplevel), and a list of every changed file.
 function wholeTree(p) {
   if (/^(?:\$\{?PWD\}?|\$\(\s*pwd\s*\)|`\s*pwd\s*`)\/?$/.test(p)) return true
   if (/^(?:\$\(|`)\s*git\s+rev-parse\s+--show-toplevel\s*(?:\)|`)\/?$/.test(p)) return true
-  if (CHANGED_LIST.test(p)) return !/\s--\s/.test(p)
+  if (changedList(p)) return true
   const rest = p.replace(/^:(?:\/|\((?:[a-z]+,?)+\))?/i, '').replace(/^(?:\.\/+)+/, '').replace(/\/+$/, '')
   return /^(?:|\.|\*\*?|\.\*|\*\/\*\*)$/.test(rest)
 }
@@ -112,6 +122,8 @@ function changesTree({ sub, args, dir = '.' }, exists = fs.existsSync, isDir = d
       const o = parseArgs(args)
       if (o.long.has('hard') || o.long.has('merge') || o.long.has('keep')) return 'resets the files'
       if (o.long.has('soft') || o.long.has('patch') || o.short.has('p')) return null
+      // a word with a variable may be a list of files; it is not guessed at
+      if (o.pos.some(p => p.includes('$'))) return null
       const specs = o.after.length ? o.after : o.pos.length > 1 ? o.pos.slice(1) : o.pos.length === 1 && exists(path.resolve(dir, o.pos[0])) ? o.pos : []
       if (specs.length && !specs.some(wholeTree)) return null
       return 'unstages'
@@ -139,6 +151,8 @@ function changesTree({ sub, args, dir = '.' }, exists = fs.existsSync, isDir = d
     }
     case 'checkout-index': {
       const o = parseArgs(args)
+      // --prefix writes the copy somewhere else
+      if (o.long.has('prefix')) return null
       return (o.short.has('a') || o.long.has('all')) && (o.short.has('f') || o.long.has('force')) ? 'overwrites the files from the index' : null
     }
     case 'read-tree': {
@@ -152,7 +166,8 @@ function changesTree({ sub, args, dir = '.' }, exists = fs.existsSync, isDir = d
     case 'rm': {
       const o = parseArgs(args)
       if (o.short.has('n') || o.long.has('dry-run') || o.long.has('cached')) return null
-      return o.short.has('r') || o.pos.some(p => wholeTree(p) || /[*?[]/.test(p)) ? 'removes files' : null
+      // a folder, or the whole tree; named files and narrow globs (sample-*.jpg) are an ordinary cleanup
+      return o.pos.some(p => wholeTree(p) || (o.short.has('r') && broad(p, dir, isDir) && !/[*?[]/.test(p.replace(/^.*\//, '')))) ? 'removes files' : null
     }
     // git add -A, git add ., git commit -a: everything changed in the tree goes into one commit,
     // including the files the other session is in the middle of editing. A pathspec narrows it:
@@ -254,7 +269,7 @@ function when(ms) {
 }
 
 // git worktree remove <path> and rm -rf <path>: the folders the command deletes.
-function removedDirs(c, cwd, home) {
+function removedDirs(c, cwd, home, known = true) {
   const call = gitCall(c.argv, cwd)
   if (call && call.sub === 'worktree' && call.args[0] === 'remove') {
     const rest = call.args.slice(1)
@@ -264,7 +279,7 @@ function removedDirs(c, cwd, home) {
   return [...rmTargets(c.argv), ...findDeletes(c.argv)]
     .map(t => expandHome(t, home))
     .map(t => expandPwd(t, cwd))
-    .map(t => deleted(t, cwd))
+    .map(t => deleted(t, cwd, known))
     .filter(Boolean)
 }
 
@@ -284,8 +299,9 @@ function findDeletes(t) {
 
 // What one deletion target removes: the folder it names; every file in the folder for dir/*; the
 // repository's whole folder for .git (without its history the folder is no longer a repository).
-function deleted(t, cwd) {
-  if (!t) return null
+function deleted(t, cwd, known = true) {
+  // after a cd we cannot follow, a relative target means a folder we do not know
+  if (!t || (!known && !path.isAbsolute(t))) return null
   const star = /^(?:(.*)[\\/])?\.?\*+$/.exec(t)
   if (star && !/[$%*?`]/.test(star[1] || '')) return { dir: path.resolve(cwd, star[1] || '.'), how: 'deleting', force: true, what: 'everything in' }
   if (/[$%*?`]/.test(t)) return null
@@ -362,17 +378,39 @@ function covers(spec, file, dir, top, platform) {
   return inside(key(abs, platform), key(path.resolve(base, body), platform))
 }
 
+// The folder each command runs in: the hook's folder, moved by the cd commands before it. A cd
+// to a folder we cannot work out (a variable, `cd -`, a folder that does not exist), or a ( cd x )
+// subshell, makes the folder unknown: the command is then read from the hook's folder, but
+// relative deletions are skipped.
+function cwdsOf(all, text, cwd, home, folderExists = fs.existsSync) {
+  let cur = cwd
+  let known = !/\(\s*(?:cd|pushd)\b/.test(text)
+  return all.map(c => {
+    const here = { cwd: cur, known }
+    if (c.depth === 0 && known && /^(?:cd|pushd|chdir)$/.test(shell.bin(c.argv[0]))) {
+      const t = c.argv.slice(1).find(a => !a.startsWith('-') || a === '-')
+      const dest = t === undefined ? home : expandPwd(expandHome(t, home), cur)
+      const next = path.resolve(cur, dest)
+      // a folder that is not there yet (made by this very command) or a Git Bash style /c/... path on Windows
+      if (t === '-' || /[$`%]/.test(dest) || !folderExists(next)) known = false
+      else cur = next
+    }
+    return here
+  })
+}
+
 function classify(cmd, {
   cwd = process.cwd(), sessionId = null, files = () => readSessionFiles(), isAlive = liveSession, run = git, platform = process.platform, mode = 'sh',
-  home = os.homedir(), links = linksIn, removeRule = () => enabled('remove-session-dir'), stageRule = () => enabled('stage-all'), isDir = dirOf,
+  home = os.homedir(), links = linksIn, removeRule = () => enabled('remove-session-dir'), stageRule = () => enabled('stage-all'), isDir = dirOf, folderExists = fs.existsSync,
 } = {}) {
   const text = shell.prepare(String(cmd || ''), mode)
   const all = shell.commands(text, mode).filter(c => !c.remote)
   let live = null
   const liveOthers = () => live || (live = new Map([...files()].filter(([pid, f]) => f.cwd && f.sessionId !== sessionId && isAlive(pid, f, false))))
 
-  for (const c of all) {
-    const removals = removedDirs(c, cwd, home)
+  const where = cwdsOf(all, text, cwd, home, folderExists)
+  for (const [i, c] of all.entries()) {
+    const removals = removedDirs(c, where[i].cwd, home, where[i].known)
     if (!removals.length) continue
     const seg = oneLine(c.argv.join(' '), 120)
     for (const r of removals) {
@@ -406,9 +444,9 @@ function classify(cmd, {
   }
 
   if (!sessionId) return null
-  for (const c of all) {
+  for (const [i, c] of all.entries()) {
     if (shell.bin(c.argv[0]) !== 'git') continue
-    const call = gitCall(c.argv, cwd, c.depth === 0 ? gitEnv(text.slice(c.s, c.e)) : {})
+    const call = gitCall(c.argv, where[i].cwd, c.depth === 0 ? gitEnv(text.slice(c.s, c.e)) : {})
     const seg = c.argv.join(' ')
     if (!call) continue
     let what = changesTree(call, fs.existsSync, isDir)
