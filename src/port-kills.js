@@ -156,27 +156,31 @@ function shellKillPorts(text) {
     if (!segs.has(c.seg)) segs.set(c.seg, [])
     segs.get(c.seg).push(c.argv)
   }
-  const found = []
-  const carried = new Map() // variable -> ports it came from: PID=$(lsof -ti :3000)
+  // variables a statement fills from a command: PID=$(lsof -ti :3000)
+  const assigned = new Map()
+  for (const c of lexed) {
+    if (c.sub) continue
+    const m = /^(?:\w+\s+)?(\w+)=(?:\$\(|`)/.exec(c.words.slice(0, 2).map(w => w.v).join(' '))
+    if (m) assigned.set(c.seg, (assigned.get(c.seg) || []).concat(m[1]))
+  }
+  const found = new Set()
+  const add = list => { for (const p of list) found.add(p) }
+  const carried = new Map() // variable -> ports it came from
   for (const seg of [...segs.keys()].sort((a, b) => a - b)) {
     const list = segs.get(seg)
     const info = statementPorts(list, vars)
-    found.push(...info.direct)
+    add(info.direct)
     if (info.kills) {
-      found.push(...info.looked)
-      for (const [name, ports] of carried) {
-        const ref = new RegExp('\\$\\{?' + name + '(?!\\w)')
-        if (list.some(argv => argv.some(w => ref.test(w)))) found.push(...ports)
+      add(info.looked)
+      if (carried.size) {
+        for (const argv of list) {
+          for (const w of argv) for (const m of w.matchAll(/\$\{?(\w+)/g)) if (carried.has(m[1])) add(carried.get(m[1]))
+        }
       }
     }
-    if (!info.looked.length) continue
-    for (const c of lexed) {
-      if (c.seg !== seg || c.sub) continue
-      const m = /^(?:\w+\s+)?(\w+)=(?:\$\(|`)/.exec(c.words.slice(0, 2).map(w => w.v).join(' '))
-      if (m) carried.set(m[1], info.looked)
-    }
+    if (info.looked.length) for (const name of assigned.get(seg) || []) carried.set(name, info.looked)
   }
-  return found
+  return [...found]
 }
 
 // Ports a kill-by-port command aims at, or [] when the command does not kill by port.
