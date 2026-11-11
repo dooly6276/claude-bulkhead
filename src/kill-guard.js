@@ -13,6 +13,8 @@ const SHARED = [
   // apps and servers the user or another session has open
   'electron', 'simulator', 'xcode', 'postgres',
   'docker desktop', 'code helper', 'cursor', 'cursor helper',
+  // other coding agents, whose sessions are as shared as Claude's
+  'codex', 'gemini', 'copilot', 'opencode', 'cline', 'droid', 'cursor-agent',
 ]
 const bare = n => String(n).trim().replace(/^["']+|["']+$/g, '').toLowerCase().replace(/\.exe$/, '')
 
@@ -422,14 +424,14 @@ function message(why, platform = process.platform) {
     'Stop only the processes you started, by PID:\n' + howToFindPid(platform)
 }
 
-if (require.main === module) {
-  runHook('kill-guard', input => {
-    const cmd = input.tool_input && input.tool_input.command
-    if (typeof cmd !== 'string' || !cmd) return
-    const hit = classify(cmd, { allowNames: setting('killGuard.allowNames', []), extraSharedNames: setting('killGuard.extraSharedNames', []) }, shell.modeFor(input))
-    if (!hit) return
-    return blocked('kill-guard', hit.rule, input, `${message(hit.why)}\n${ASK_USER}`)
-  })
+function handle(input) {
+  const cmd = input.tool_input && input.tool_input.command
+  if (typeof cmd !== 'string' || !cmd) return
+  const hit = classify(cmd, { allowNames: setting('killGuard.allowNames', []), extraSharedNames: setting('killGuard.extraSharedNames', []) }, shell.modeFor(input))
+  if (!hit) return
+  return blocked('kill-guard', hit.rule, input, `${message(hit.why)}\n${ASK_USER}`)
 }
 
-module.exports = { check, classify, message, nameHits, patternHits }
+if (require.main === module) runHook('kill-guard', handle)
+
+module.exports = { handle, check, classify, message, nameHits, patternHits }

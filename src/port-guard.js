@@ -5,6 +5,7 @@ const { runHook, blocked, setting, oneLine } = require('./hook')
 const { detect } = require('./dev-servers')
 const { readProcesses } = require('./processes')
 const { readSessionFiles, findSessions, ownSession } = require('./sessions')
+const { agentLabel } = require('./agents')
 const shell = require('./shell')
 
 // The command with heredoc bodies, commit messages and shell wrappers (bash -c "...") resolved.
@@ -50,7 +51,7 @@ async function check(cmd, {
   if (!me || me === owner.pid) return null
   const name = (snap.procs.find(p => p.pid === holder.pid) || {}).name || 'a process'
   const free = freePort(server.port, new Set(snap.ports.map(l => l.port)))
-  return `[bulkhead] port-guard: port ${server.port} is already used by another Claude session ` +
+  return `[bulkhead] port-guard: port ${server.port} is already used by another ${agentLabel(owner.agent)} session ` +
     `(session pid ${owner.pid}, ${shortPath(owner.cwd)}): ${name} pid ${holder.pid}.\n` +
     'Leave that server alone; it is the other session\'s work. If you start yours anyway, it either fails or moves to the ' +
     `next port, and requests to localhost:${server.port} reach the other project.\n` +
@@ -115,7 +116,7 @@ async function checkKill(cmd, {
       const free = freePort(port, new Set(snap.ports.map(l => l.port)))
       return {
         port,
-        message: `[bulkhead] port-guard: \`${oneLine(cmd, 120)}\` would stop ${name} pid ${holder.pid}, the server another Claude session ` +
+        message: `[bulkhead] port-guard: \`${oneLine(cmd, 120)}\` would stop ${name} pid ${holder.pid}, the server another ${agentLabel(owner.agent)} session ` +
           `runs on port ${port} (session pid ${owner.pid}, ${shortPath(owner.cwd)}).\n` +
           'That server is the other session\'s work. Stopping it breaks whatever that session is running or testing.\n' +
           (free ? `If you need a server of your own, start it on a free port instead: ${free} is free.\n` : 'If you need a server of your own, start it on another port.\n') +
@@ -127,16 +128,16 @@ async function checkKill(cmd, {
   return null
 }
 
-if (require.main === module) {
-  runHook('port-guard', async input => {
-    const cmd = input.tool_input && input.tool_input.command
-    if (typeof cmd !== 'string' || !cmd) return
-    const mode = shell.modeFor(input)
-    const why = await check(cmd, { cwd: input.cwd, mode })
-    if (why) return blocked('port-guard', 'port-in-use', input, why)
-    const kill = await checkKill(cmd, { mode })
-    if (kill) return blocked('port-guard', 'kill-by-port', input, kill.message)
-  })
+async function handle(input) {
+  const cmd = input.tool_input && input.tool_input.command
+  if (typeof cmd !== 'string' || !cmd) return
+  const mode = shell.modeFor(input)
+  const why = await check(cmd, { cwd: input.cwd, mode })
+  if (why) return blocked('port-guard', 'port-in-use', input, why)
+  const kill = await checkKill(cmd, { mode })
+  if (kill) return blocked('port-guard', 'kill-by-port', input, kill.message)
 }
 
-module.exports = { check, checkKill, killPorts, freePort, listening }
+if (require.main === module) runHook('port-guard', handle)
+
+module.exports = { handle, check, checkKill, killPorts, freePort, listening }

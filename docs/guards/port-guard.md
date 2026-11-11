@@ -2,7 +2,7 @@
 
 [Back to README](../../README.md) | [All guards](../../README.md#guards)
 
-Keeps one session from taking or killing a dev server port that another Claude session is using. This is the most common collision when several worktrees of one app run `npm run dev`.
+Keeps one session from taking or killing a dev server port that another Claude session is using. This is the most common collision when several worktrees of one app run `npm run dev`. Servers started by other agents (Codex, Gemini and others, see [Codex, Gemini and other agents](../other-agents.md)) count as another session's too.
 
 ## Starting a dev server on a taken port
 

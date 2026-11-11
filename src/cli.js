@@ -11,6 +11,8 @@ const USAGE = `usage:
   bulkhead config [--json]              effective settings and where each one came from
   bulkhead port [--near PORT] [--json]  a port no process is listening on
   bulkhead reap [--dry-run] [--json]    stop what exited sessions left running
+  bulkhead hook --agent NAME            the guards for Codex, Gemini, Copilot, Cursor and other agents (reads the pre-tool payload on stdin)
+  bulkhead setup AGENT [--print|--write] the hook config for that agent: print it, or merge it into the agent's config file
   bulkhead slot run [--gb=N] [--wait=MINUTES] [--label=TEXT] -- <command...>
   bulkhead slot status [--gb=N]         same as bulkhead-slot
   bulkhead remote run [--remote=NAME] [--gb=N] [--tail=N] -- <command...>
@@ -26,6 +28,8 @@ const COMMANDS = {
   config: './config-cli',
   port: './port-cli',
   reap: './reap-cli',
+  hook: './agent-hook',
+  setup: './agent-setup',
   slot: './slot-cli',
   remote: './remote',
 }

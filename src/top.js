@@ -129,7 +129,7 @@ function frame(view, { width = 100, height = 40, color = false, home = os.homedi
       switch (col.key) {
         case 'pid': return cell(s.pid, col.width)
         case 'started': return cell(when(s.start, now), col.width)
-        case 'project': return cell(shortPath(s.cwd, home), col.width)
+        case 'project': return cell((s.agent && s.agent !== 'claude' ? `[${s.agent}] ` : '') + shortPath(s.cwd, home), col.width)
         case 'rss': return cell(size(s.rss), col.width, true)
         case 'bar': return c('cyan', meter(s.rss / maxRss, col.width))
         case 'procs': return cell(s.children == null ? '-' : s.children, col.width, true)

@@ -2,7 +2,7 @@
 
 [Back to README](../../README.md) | [All guards](../../README.md#guards)
 
-Two sessions in one checkout share one branch and one set of files. When one of them runs `git checkout other-branch` or `git stash`, the other one's edits vanish or land on the wrong branch, and it usually does not notice. When one of them runs `git add -A`, the other one's half-finished edits go into its commit. checkout-guard blocks git commands that move or sweep up the working tree when another live Claude session works in the same tree, and deleting a folder another live session works in.
+Two sessions in one checkout share one branch and one set of files. When one of them runs `git checkout other-branch` or `git stash`, the other one's edits vanish or land on the wrong branch, and it usually does not notice. When one of them runs `git add -A`, the other one's half-finished edits go into its commit. checkout-guard blocks git commands that move or sweep up the working tree when another live Claude session (or another agent's CLI, see [Codex, Gemini and other agents](../other-agents.md)) works in the same tree, and deleting a folder another live session works in.
 
 ## Blocked
 

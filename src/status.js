@@ -57,10 +57,14 @@ function render(st, { color = false, home = os.homedir() } = {}) {
   const head = s => (color ? `\x1b[1m${s}\x1b[0m` : s)
   const out = []
   if (st.sessions.length) {
-    const rows = [['SESSION', 'STARTED', 'RSS', 'PROJECT']]
+    // the AGENT column only appears once a session is not Claude Code, so a Claude-only list reads as before
+    const withAgent = st.sessions.some(s => s.agent && s.agent !== 'claude')
+    const rows = [withAgent ? ['SESSION', 'AGENT', 'STARTED', 'RSS', 'PROJECT'] : ['SESSION', 'STARTED', 'RSS', 'PROJECT']]
     const portsAfter = new Map()
     for (const s of st.sessions) {
-      rows.push([s.pid, when(s.start, st.at), size(s.rss), shortPath(s.cwd, home)])
+      const cells = [s.pid, when(s.start, st.at), size(s.rss), shortPath(s.cwd, home)]
+      if (withAgent) cells.splice(1, 0, s.agent || 'claude')
+      rows.push(cells)
       portsAfter.set(rows.length - 1, s.ports)
     }
     const lines = table(rows)

@@ -132,14 +132,14 @@ function check(cmd, memory = () => readMemory(), minFreeGb, mode = 'sh', remote 
     (remote() ? '\nOr run it on another machine, so it uses that machine\'s RAM:\n  bulkhead remote run -- <command>' : '')
 }
 
-if (require.main === module) {
-  runHook('memory-guard', input => {
-    const cmd = input.tool_input && input.tool_input.command
-    if (typeof cmd !== 'string') return
-    const why = check(cmd, undefined, undefined, shell.modeFor(input))
-    if (!why) return
-    return blocked('memory-guard', touchesSlotFiles(cmd) ? 'slot-files' : 'low-memory', input, why)
-  })
+function handle(input) {
+  const cmd = input.tool_input && input.tool_input.command
+  if (typeof cmd !== 'string') return
+  const why = check(cmd, undefined, undefined, shell.modeFor(input))
+  if (!why) return
+  return blocked('memory-guard', touchesSlotFiles(cmd) ? 'slot-files' : 'low-memory', input, why)
 }
 
-module.exports = { check, isHeavy, touchesSlotFiles }
+if (require.main === module) runHook('memory-guard', handle)
+
+module.exports = { handle, check, isHeavy, touchesSlotFiles }
