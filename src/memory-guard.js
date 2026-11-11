@@ -231,7 +231,8 @@ function queueOutput(input, q) {
 function handle(input) {
   const cmd = input.tool_input && input.tool_input.command
   if (typeof cmd !== 'string') return
-  if (setting('memoryGuard.autoQueue', false) === true && !touchesSlotFiles(cmd)) {
+  // other agents' hooks cannot rewrite a command (bulkhead hook --agent), so they get the plain check
+  if (setting('memoryGuard.autoQueue', false) === true && !process.env.BULKHEAD_AGENT && !touchesSlotFiles(cmd)) {
     const q = autoQueue(input, { estimates: setting('memoryGuard.estimatesGb', null), wait: setting('memoryGuard.waitMinutes', 10) })
     // no permissionDecision: the user's permission settings still apply to the rewritten command
     if (q) return { output: queueOutput(input, q) }

@@ -6,7 +6,7 @@ The cross-session problems bulkhead guards against (one agent killing another's 
 
 Two pieces:
 
-- `bulkhead hook --agent <name>` is the guard entry for one agent. The agent calls it before each shell command; it maps that agent's payload to the shape the guards read, runs the same seven guards as the Claude Code hook ([kill-guard](guards/kill-guard.md), [wait-guard](guards/wait-guard.md), [memory-guard](guards/memory-guard.md), [port-guard](guards/port-guard.md), [checkout-guard](guards/checkout-guard.md), [disk-guard](guards/disk-guard.md), [basics](guards/basics.md)), and answers in that agent's block format. Any error lets the command through. One process runs all seven, about 40 ms in total.
+- `bulkhead hook --agent <name>` is the guard entry for one agent. The agent calls it before each shell command; it maps that agent's payload to the shape the guards read, runs the same guards as the Claude Code hook, in the same order ([kill-guard](guards/kill-guard.md), [wait-guard](guards/wait-guard.md), [memory-guard](guards/memory-guard.md), [port-guard](guards/port-guard.md), [checkout-guard](guards/checkout-guard.md), [disk-guard](guards/disk-guard.md), [basics](guards/basics.md), and [secrets-guard](guards/secrets-guard.md) when it is on), and answers in that agent's block format. Any error lets the command through. One process runs them all.
 - `bulkhead setup <agent>` prints, or with `--write` merges, the config that registers it.
 
 ```
@@ -76,7 +76,7 @@ The process patterns come from each package's published `bin` entry and the laun
 
 ## What bulkhead guards for these agents
 
-- The seven Bash guards, as for Claude Code. [kill-guard](guards/kill-guard.md) also treats `codex`, `gemini`, `copilot`, `opencode`, `cline`, `droid` and `cursor-agent` as shared programs, so killing one by name is blocked.
+- The Bash guards, as for Claude Code. [kill-guard](guards/kill-guard.md) also treats `codex`, `gemini`, `copilot`, `opencode`, `cline`, `droid` and `cursor-agent` as shared programs, so killing one by name is blocked.
 - [port-guard](guards/port-guard.md): a dev server another session's tree is listening on is protected whichever agent owns it, and your own agent's servers are not blocked. The message says which agent owns the port ("another Codex session").
 - [checkout-guard](guards/checkout-guard.md): `git checkout`, `stash`, `add -A` and `rm -rf` of a folder another agent works in are blocked. For other agents the folder is the process's working directory: `lsof` on macOS (one call for all agents), `/proc/<pid>/cwd` on Linux. On Windows there is no cheap way to read it, so checkout-guard cannot see other agents' folders there (port-guard and the process tree still work). The process table is read only when one of the agents' config folders (`~/.codex`, `~/.gemini`, ...) exists, so a machine without them pays nothing.
 - `bulkhead status` and `bulkhead top` list the sessions. `status` gets an `AGENT` column as soon as one session is not Claude Code:

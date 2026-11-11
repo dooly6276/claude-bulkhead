@@ -12,11 +12,9 @@ claude-bulkhead is a Claude Code plugin made of small Node scripts. There is no 
 | | `startup` | config-check: one notice when a config file is broken | 10 s |
 | `SessionStart` (all sources), `SessionEnd`, `UserPromptSubmit`, `Stop`, `Notification` (`permission_prompt`, `idle_prompt`, `elicitation_*`), `PostToolUse`, `PostToolUseFailure` | | session-state: one small file per session, read by `status` and `top` (the two `PostToolUse` ones run async) | 5 s |
 | `SessionEnd` | all reasons | orphan-reaper `--session-end`: starts a detached waiter and returns at once (it does nothing for `clear` and `resume`) | Claude Code's 1.5 s budget |
-| `PreToolUse` | `Bash\|PowerShell` | kill-guard, wait-guard, disk-guard, basics | 10 s |
-| | | memory-guard, checkout-guard | 15 s |
-| | | port-guard | 20 s |
+| `PreToolUse` | `Bash\|PowerShell` | bash-guards: secrets-guard (off unless `secretsGuard.enabled`), wait-guard, disk-guard, kill-guard, basics, checkout-guard, memory-guard, port-guard, in that order, in one process; the first block wins | 30 s |
 | `PreToolUse` | `Agent\|Task` | subagent-guard (does nothing unless `memoryGuard.subagents` is on) | 10 s |
-| | `Read\|Grep\|Bash\|PowerShell` | secrets-guard (off unless `secretsGuard.enabled`) | 10 s |
+| | `Read\|Grep` | secrets-guard (off unless `secretsGuard.enabled`) | 10 s |
 | | `Edit\|Write\|MultiEdit\|NotebookEdit` | edit-guard: warns when another live session edited the file lately | 10 s |
 | `PostToolUse` | `Edit\|Write\|MultiEdit\|NotebookEdit` | edit-guard: records the edit in `<state dir>/edits/` | 10 s |
 
@@ -110,7 +108,15 @@ A process belongs to the session whose `claude` process is its ancestor. On Linu
 
 ## Performance
 
-On a Windows 11 desktop with Node 24, `node scripts/bench-hooks.js 15` measured 40 to 49 ms per guard on an allowed command (median of 15 runs), and 33 ms for starting Node alone. Writing a block to the event log adds no measurable time. So almost all of the cost is starting Node. The expensive reads only happen after a text match:
+Every Bash and PowerShell call starts one Node process, `src/bash-guards.js`, which runs all the Bash guards in a row: the text-only ones first, the ones that may read git, memory, processes or ports last, and it stops at the first block. Up to 0.2 the guards were seven separate hooks, so every call started seven Node processes. On a MacBook Pro (M5 Pro, Node 24), `node scripts/bench-hooks.js 9 --sessions 10` measured:
+
+| | one process per guard (0.2) | bash-guards (0.3) |
+|---|---|---|
+| one tool call, allowed | 47 ms | 76 ms |
+| 10 sessions making a tool call at once | 318 ms | 89 ms |
+| 20 sessions at once | 611 ms | 109 ms |
+
+Starting Node alone takes 32 ms. A single call on an idle machine is a little slower, because the guards run one after another instead of side by side; with several sessions, the machine starts one process per call instead of seven, and every session waits far less. Writing a block to the event log adds no measurable time. The expensive reads only happen after a text match:
 
 - port-guard first tries a TCP connection to the port on `localhost`, which takes a few milliseconds. It reads the process list, which takes a second or two on Windows, only when something answers.
 - checkout-guard runs git only when the command matches and another session is alive.

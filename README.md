@@ -271,7 +271,7 @@ Turn off: `BULKHEAD_DISABLE=basics`, or one rule by name. Details: [docs/guards/
 
 ## Codex, Gemini and other agents
 
-If you run Codex CLI, Gemini CLI, Copilot CLI, Cursor, opencode, Amp, Cline, Factory Droid, Windsurf or Devin on the same machine as Claude Code, bulkhead guards their shell commands with the same seven guards and counts their sessions: an agent's dev server is protected from the others, and `bulkhead status` gets an `AGENT` column.
+If you run Codex CLI, Gemini CLI, Copilot CLI, Cursor, opencode, Amp, Cline, Factory Droid, Windsurf or Devin on the same machine as Claude Code, bulkhead guards their shell commands with the same guards and counts their sessions: an agent's dev server is protected from the others, and `bulkhead status` gets an `AGENT` column.
 
 ```
 bulkhead setup codex            # prints the config for ~/.codex/hooks.json
@@ -510,7 +510,7 @@ This needs `npm install -g claude-bulkhead`, which puts `bulkhead-statusline` on
 ## FAQ
 
 **Does it slow Claude Code down?**
-A little. Each guard is one short Node process. On a Windows 11 desktop with Node 24, `node scripts/bench-hooks.js 15` measured 40 to 49 ms per guard on an allowed command (median of 15 runs), and 33 ms for starting Node alone. Writing a block to the event log adds no measurable time. The guards only do slow work, such as reading the process list (a second or two on Windows), when the command matches: a dev server start on a port that already answers, a kill, a heavy command. The status line takes about 100 ms cold and is cached for 5 seconds.
+A little. All the Bash guards run in one short Node process with no dependencies, about 76 ms per tool call on a MacBook Pro (Node 24), of which 32 ms is starting Node. When 10 sessions make a tool call at the same moment, each waits about 89 ms (318 ms when every guard was its own process, as in 0.2). Writing a block to the event log adds no measurable time. The guards only do slow work, such as reading the process list (a second or two on Windows), when the command matches: a dev server start on a port that already answers, a kill, a heavy command. The status line takes about 100 ms cold and is cached for 5 seconds.
 
 **It blocked something it should not have. What do I do?**
 Run `bulkhead log` to see the exact command and reason. Let it through in the project config, `<repo>/.claude/bulkhead.json`: `killGuard.allowNames` for a program name, `portGuard.ignorePorts` for a shared port, `waitGuard.limitSeconds` for a longer wait, or `"enabled": false` for the whole guard in that project. See [docs/configuration.md](docs/configuration.md). Then please open a [false positive issue](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml) with the line from `bulkhead log`, so the pattern can be fixed for everyone.

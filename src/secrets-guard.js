@@ -285,17 +285,17 @@ function message(hit) {
     ASK_USER
 }
 
-if (require.main === module) {
-  runHook('secrets-guard', input => {
-    const home = os.homedir().replace(/\\/g, '/')
-    const opts = { home, extra: setting('secretsGuard.extraPatterns', []), allow: setting('secretsGuard.allow', []) }
-    const cmd = input.tool_input && input.tool_input.command
-    const hit = cmd
-      ? classifyCommand(cmd, { ...opts, cwd: input.cwd || process.cwd(), mode: shell.modeFor(input) })
-      : classifyTool(input, opts)
-    if (!hit) return
-    return blocked('secrets-guard', hit.rule, input, message(hit), cmd || hit.what)
-  })
+function handle(input) {
+  const home = os.homedir().replace(/\\/g, '/')
+  const opts = { home, extra: setting('secretsGuard.extraPatterns', []), allow: setting('secretsGuard.allow', []) }
+  const cmd = input.tool_input && input.tool_input.command
+  const hit = cmd
+    ? classifyCommand(cmd, { ...opts, cwd: input.cwd || process.cwd(), mode: shell.modeFor(input) })
+    : classifyTool(input, opts)
+  if (!hit) return
+  return blocked('secrets-guard', hit.rule, input, message(hit), cmd || hit.what)
 }
 
-module.exports = { classifyCommand, classifyTool, classifyPath, classifyArg, message, globRegex }
+if (require.main === module) runHook('secrets-guard', handle)
+
+module.exports = { handle, classifyCommand, classifyTool, classifyPath, classifyArg, message, globRegex }

@@ -92,7 +92,7 @@ function manualHooks(files) {
     for (const groups of Object.values(s.json.hooks || {})) {
       for (const g of Array.isArray(groups) ? groups : []) {
         for (const h of g.hooks || []) {
-          if (/bulkhead|(kill|wait|port|checkout|disk|memory)-guard\.js/.test([h.command, ...(h.args || [])].join(' '))) out.push(s)
+          if (/bulkhead|(kill|wait|port|checkout|disk|memory)-guard\.js|bash-guards\.js/.test([h.command, ...(h.args || [])].join(' '))) out.push(s)
         }
       }
     }
@@ -190,9 +190,13 @@ function runHook(h, vars, { env, platform, spawn, input, timeoutS }) {
   return bash ? spawn(bash, ['-c', cmd], opts) : spawn('powershell', ['-NoProfile', '-Command', cmd], opts)
 }
 
-function canaryOf(h) {
+// The canaries a hook entry must block: one for a single guard's script, all of them for
+// bash-guards.js, which runs every Bash guard in one process.
+function canariesOf(h) {
   const script = [h.command, ...(h.args || [])].map(String).find(a => /\.js$/.test(a))
-  return script ? CANARIES[path.basename(script)] || null : null
+  if (!script) return []
+  if (path.basename(script) === 'bash-guards.js') return Object.values(CANARIES)
+  return CANARIES[path.basename(script)] ? [CANARIES[path.basename(script)]] : []
 }
 
 function checkHooks(ctx) {
@@ -221,9 +225,7 @@ function checkHooks(ctx) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bulkhead-doctor-'))
   const vars = { CLAUDE_PLUGIN_ROOT: root, CLAUDE_PROJECT_DIR: tmp, CLAUDE_PLUGIN_DATA: path.join(tmp, 'data') }
   try {
-    for (const h of decl.list) {
-      const canary = canaryOf(h)
-      if (!canary) continue
+    for (const h of decl.list) for (const canary of canariesOf(h)) {
       const rule = canary.rule
       if (cfg && (cfg.values[`${config.GUARDS[canary.guard]}.enabled`] === false || (rule && cfg.values[rule] === false))) {
         out.push(ok(`hook ${canary.guard}`, 'off in your config, not run'))

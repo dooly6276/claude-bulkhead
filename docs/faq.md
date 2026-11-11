@@ -8,7 +8,7 @@ Run `bulkhead scan` once after installing. It replays the shell commands in your
 
 ## Does it slow Claude Code down?
 
-A little. Each guard is one short Node process with no dependencies. On a Windows 11 desktop with Node 24, `node scripts/bench-hooks.js 15` measured 40 to 49 ms per guard on an allowed command (median of 15 runs), and 33 ms for starting Node alone. Writing a block to the event log adds no measurable time. The guards only do slow work after the command text matches: port-guard reads the process list (a second or two on Windows) only when a dev server start or a kill-by-port hits a port that already answers, checkout-guard runs git only when another session is alive, and basics runs `git status` only for `reset --hard` and `clean`. The status line takes under 100 ms and is cached for 5 seconds. See [architecture](architecture.md#performance).
+A little. All the Bash guards run in one short Node process with no dependencies, about 76 ms per tool call on a MacBook Pro (Node 24), of which 32 ms is starting Node. When 10 sessions make a tool call at the same moment, each waits about 89 ms (318 ms when every guard was its own process, as in 0.2). Writing a block to the event log adds no measurable time. The guards only do slow work after the command text matches: port-guard reads the process list (a second or two on Windows) only when a dev server start or a kill-by-port hits a port that already answers, checkout-guard runs git only when another session is alive, and basics runs `git status` only for `reset --hard` and `clean`. The status line takes under 100 ms and is cached for 5 seconds. See [architecture](architecture.md#performance).
 
 ## It blocked something it should not have. What do I do?
 

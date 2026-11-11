@@ -1,6 +1,5 @@
 'use strict'
 const path = require('path')
-const { enabled } = require('./hook')
 const { option } = require('./cli-util')
 
 // `bulkhead hook --agent <name>`: the Bash guards for coding agents other than Claude Code. The
@@ -9,17 +8,6 @@ const { option } = require('./cli-util')
 // Code PreToolUse hook, and answers in the agent's own block format. Anything unexpected lets
 // the command through, and Copilot and Cursor treat a crash or bad output as a denial, so those
 // two always get an explicit allow.
-
-// The same order as hooks/hooks.json.
-const GUARDS = [
-  ['kill-guard', './kill-guard'],
-  ['wait-guard', './wait-guard'],
-  ['memory-guard', './memory-guard'],
-  ['port-guard', './port-guard'],
-  ['checkout-guard', './checkout-guard'],
-  ['disk-guard', './disk-guard'],
-  ['basics', './basics'],
-]
 
 const str = v => (typeof v === 'string' && v ? v : null)
 const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : null)
@@ -124,17 +112,10 @@ const ADAPTERS = {
 
 const AGENT_NAMES = Object.keys(ADAPTERS)
 
-// First guard that blocks wins, like the separate Claude Code hooks (which run together and any
-// block stops the call).
+// The same guards, in the same order, as the Claude Code hook (bash-guards.js): the first block wins.
 async function judge(input) {
-  for (const [name, file] of GUARDS) {
-    if (!enabled(name)) continue
-    let result = null
-    // each hook is its own process under Claude Code, so one broken guard never silences the rest
-    try { result = await require(file).handle(input) } catch {}
-    if (result && result.block) return result.block
-  }
-  return null
+  const r = await require('./bash-guards').judge(input, { rewrite: false })
+  return r && r.block ? r.block : null
 }
 
 // raw: the payload text. Returns { out, err, code } to write and exit with; never throws.
