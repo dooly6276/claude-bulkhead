@@ -33,6 +33,26 @@
           { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/disk-guard.js"], "timeout": 10 },
           { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/basics.js"], "timeout": 10 }
         ]
+      },
+      {
+        "matcher": "Read|Grep|Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/secrets-guard.js"], "timeout": 10 }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/edit-guard.js"], "timeout": 10 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/src/edit-guard.js"], "timeout": 10 }
+        ]
       }
     ]
   }

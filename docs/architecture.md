@@ -14,6 +14,9 @@ claude-bulkhead is a Claude Code plugin made of small Node scripts. There is no 
 | `PreToolUse` | `Bash\|PowerShell` | kill-guard, wait-guard, disk-guard, basics | 10 s |
 | | | memory-guard, checkout-guard | 15 s |
 | | | port-guard | 20 s |
+| | `Read\|Grep\|Bash\|PowerShell` | secrets-guard (off unless `secretsGuard.enabled`) | 10 s |
+| | `Edit\|Write\|MultiEdit\|NotebookEdit` | edit-guard: warns when another live session edited the file lately | 10 s |
+| `PostToolUse` | `Edit\|Write\|MultiEdit\|NotebookEdit` | edit-guard: records the edit in `<state dir>/edits/` | 10 s |
 
 The registration lives in [hooks/hooks.json](../hooks/hooks.json). The timeouts are upper bounds that Claude Code enforces; a normal run takes about 50 ms.
 

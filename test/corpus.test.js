@@ -21,6 +21,7 @@ const BLOCK_STATE = {
   'checkout-guard': 'shared-tree',
   'disk-guard': 'quiet',
   basics: 'dirty',
+  'secrets-guard': 'quiet',
 }
 
 const firstLine = s => (String(s).trim().split('\n')[0] || '').slice(0, 200)
@@ -57,8 +58,15 @@ function stateDirFor(config) {
   return c.configStates.get(config)
 }
 
+// Ordinary commands that do print a secret file or the whole environment: only secrets-guard objects.
+const PRINTS_SECRETS = new Set(['grep -v "^#" .env', 'env | sort'])
+
+// secrets-guard is off by default; the corpus runs it switched on, so every ordinary command is checked for false positives.
+const withSecrets = config => JSON.stringify({ ...JSON.parse(config || '{}'), secretsGuard: { enabled: true } })
+
 function run(guard, command, { state, tool, timeout, config }) {
   const { repos, configDir } = setup()
+  if (guard === 'secrets-guard') config = withSecrets(config)
   const s = H.stateFor(state, repos)
   const input = H.payload(command, { cwd: s.cwd, tool, timeout })
   return H.runHook(guard, input, { cwd: s.cwd, memory: s.memory, mock: s.mock, stateDir: stateDirFor(config), configDir })
@@ -83,6 +91,7 @@ test('allow corpus: every guard lets ordinary commands through', { timeout: 9000
   const jobs = []
   for (const e of entries) {
     for (const guard of H.GUARDS) {
+      if (guard === 'secrets-guard' && PRINTS_SECRETS.has(e.raw)) continue
       jobs.push(() => run(guard, H.decode(e.raw), { state: e.state || 'quiet', tool: e.tool, timeout: e.timeout || 120000, config: e.config }).then(r => ({ e, guard, r })))
     }
   }

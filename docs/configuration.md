@@ -97,6 +97,22 @@ The built-in shared list is: node, python, python3, py, pythonw, ruby, java, jav
 | `discardChanges` | boolean | `true` | `git reset --hard` or `git clean -fd` that would lose uncommitted work |
 | `agentAuthor` | boolean | `true` | Commits authored as Claude or Anthropic: `--author`, `git config user.name/user.email`, `GIT_AUTHOR_*` |
 
+### editGuard
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Turns edit-guard on or off |
+| `mode` | `"warn"`, `"ask"` or `"block"` | `"warn"` | What happens when another live session edited the file lately. `warn` lets the edit through and tells the agent, `ask` shows the note to you in the permission prompt, `block` stops the edit |
+| `windowMinutes` | number | `30` | How recent the other session's edit must be |
+
+### secretsGuard
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Turns secrets-guard on. It is off by default; the `strict` preset turns it on |
+| `extraPatterns` | list of patterns | `[]` | More files to keep out of the conversation: a file name (`*.token`) or a path pattern (`~/vault/**`, `config/prod/*`) |
+| `allow` | list of patterns | `[]` | Files to let through although they look secret, by the same patterns (`.env.test`, `fixtures/*.pem`) |
+
 ### orphanReaper
 
 | Key | Type | Default | Meaning |
@@ -151,7 +167,7 @@ An entry with a problem (a missing `host`, an unknown key, a value of the wrong 
 
 | Variable | Same as |
 |---|---|
-| `BULKHEAD_DISABLE` | Comma-separated names to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `basics`, `orphan-reaper`, the basics rules `rm-root`, `force-push-main`, `discard-changes`, or `all`. A name listed here is off whatever the files say |
+| `BULKHEAD_DISABLE` | Comma-separated names to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `basics`, `edit-guard`, `secrets-guard`, `orphan-reaper`, the basics rules `rm-root`, `force-push-main`, `discard-changes`, or `all`. A name listed here is off whatever the files say |
 | `BULKHEAD_WAIT_MAX_SEC` | `waitGuard.limitSeconds` |
 | `BULKHEAD_MIN_FREE_GB` | `memory.minFreeGb` |
 | `BULKHEAD_SLOT_FLOOR_GB` | `memory.slotFloorGb` |

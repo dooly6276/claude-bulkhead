@@ -19,7 +19,7 @@ test('node version', () => {
 test('plugin root and hooks.json', () => {
   const good = d.checkPlugin()
   assert.strictEqual(good.status, 'OK')
-  assert.match(good.summary, /7 PreToolUse/)
+  assert.match(good.summary, /9 PreToolUse, 1 PostToolUse/)
   const root = tempDir()
   fs.mkdirSync(path.join(root, 'hooks'))
   fs.writeFileSync(path.join(root, 'hooks', 'hooks.json'), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ args: ['${CLAUDE_PLUGIN_ROOT}/src/gone.js'] }] }] } }))

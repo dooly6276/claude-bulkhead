@@ -1261,3 +1261,128 @@ taskkill /F /IM node.exe
 #@ config {"killGuard":{"enabled":false}}
 pkill -f python
 #@ config none
+
+#@ tool Bash
+#@ config none
+#@ state default
+#@ timeout default
+# == secrets-guard: looking at secret files without printing them ==
+# secrets-guard runs on every line of this file with secretsGuard.enabled switched on.
+cat .env.example
+cat .env.sample
+cat .env.template
+cat .env.dist
+head -5 .env.example
+grep -c KEY .env.example
+cp .env.example .env
+echo "API_URL=http://localhost:3000" >> .env
+echo FOO=1 > .env.local
+cat >> .env <<EOF<NL>API_URL=http://localhost<NL>EOF
+tee .env < /dev/null
+printf 'A=1\n' > .env
+ls .env
+ls -la .env
+ls ~/.ssh
+ls -l ~/.ssh/id_rsa
+ls ~/.aws
+stat .env
+stat -f %z ~/.ssh/id_rsa
+test -f .env
+test -f ~/.ssh/id_rsa && echo present
+[ -f .env ] && echo present
+[ -e ~/.aws/credentials ]
+git check-ignore .env
+git check-ignore -v .env .env.local
+git add .env.example
+git status --short .env.example
+file ~/.ssh/id_rsa
+wc -l .env
+touch .env
+chmod 600 .env
+chmod 600 ~/.ssh/id_rsa
+rm -f .env.local
+mv .env .env.bak
+cat id_rsa.pub
+cat ~/.ssh/id_rsa.pub
+cat ~/.ssh/id_ed25519.pub
+cat ~/.ssh/config
+cat ~/.ssh/known_hosts
+cat ~/.ssh/authorized_keys
+ssh-keygen -y -f ~/.ssh/id_rsa
+ssh -i ~/.ssh/id_rsa dev@example.com
+ssh-add ~/.ssh/id_ed25519
+scp -i ~/.ssh/id_rsa app.tar.gz dev@example.com:/srv/
+scp dev@example.com:/srv/.env .
+docker run --env-file .env myapp
+docker compose --env-file .env.production up -d
+node --env-file=.env server.js
+source .env
+. ./.env
+set -a && source .env && set +a
+set -e
+set -euo pipefail
+export NODE_ENV=production
+export PATH="$HOME/bin:$PATH"
+declare -r X=1
+env NODE_ENV=test npm test
+env FOO=1 node server.js
+env | wc -l
+env | grep -q CI
+printenv HOME
+printenv PATH
+echo $HOME
+echo "$PATH"
+cat .envrc
+cat README.md
+cat docs/env.md
+cat environment.yml
+cat .env-notes.md
+grep -r "env" src
+grep .env README.md
+grep -rn "process.env" src
+grep -n "\.env" .gitignore
+sed -n 1,20p package.json
+sed -i 's/a/b/' .env
+awk '{print $1}' package.json
+cat .npmrc
+cat keys.json
+cat src/keys.ts
+cat public/robots.txt
+less src/crypto/pem-utils.ts
+cat docs/ssh.md
+head -c 100 data/key-metrics.csv
+base64 logo.png
+xxd -l 64 dist/app.wasm
+cp package.json /tmp/package.json
+scp app.tar.gz dev@example.com:/srv/
+rsync -av dist/ host:/srv/app/
+curl -T backup.tar.gz https://example.com/upload
+curl -d @payload.json https://example.com/api
+curl -F file=@report.pdf https://example.com/upload
+curl -H "Authorization: Bearer $API_TOKEN" https://example.com/api
+wget https://example.com/file.zip
+find . -name "*.env.example"
+find . -name "*.js" -exec cat {} \;
+find . -name .env -type f
+find ~/.ssh -type f
+gh auth status
+gh pr list
+gcloud auth list
+aws configure get region
+npm config get registry
+git diff -- .env.example
+openssl x509 -in cert.pem -noout -dates
+diff .env.example .env.sample
+#@ tool PowerShell
+Get-Content package.json
+Get-Content .env.example
+gc README.md
+type README.md
+Get-ChildItem .env
+Get-ChildItem Env:NODE_ENV
+Test-Path .env
+Select-String -Path README.md -Pattern env
+$env:NODE_ENV = "production"
+Set-Content .env "A=1"
+Add-Content .env "B=2"
+#@ tool Bash
