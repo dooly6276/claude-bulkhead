@@ -190,10 +190,12 @@ Claude Code deletes transcripts older than `cleanupPeriodDays` (30 by default), 
 ## bulkhead log
 
 ```
-bulkhead log [-n N] [--since SPAN] [--guard NAME] [--summary] [--json]
+bulkhead log [SPAN] [-n N] [--since SPAN] [--guard NAME] [--summary] [--json]
 ```
 
-Every block by kill-guard, wait-guard, memory-guard, port-guard, checkout-guard and basics, and every process orphan-reaper stops, is appended as one JSON line to `events.jsonl` in the state directory (`~/.claude/bulkhead` unless `BULKHEAD_STATE_DIR` is set). See [The event log](#the-event-log) below.
+`bulkhead log 24h` is short for `bulkhead log --since 24h`.
+
+Every block by a guard, and every process orphan-reaper stops, is appended as one JSON line to `events.jsonl` in the state directory (`~/.claude/bulkhead` unless `BULKHEAD_STATE_DIR` is set). See [The event log](#the-event-log) below.
 
 | Option | Meaning |
 |---|---|

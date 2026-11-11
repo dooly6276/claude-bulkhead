@@ -3,7 +3,7 @@ const { stateDir } = require('./hook')
 const { readEvents, eventsFile } = require('./events')
 const { useColor, paint, shortPath, option, numberOption, fit, table, rejectArgs } = require('./cli-util')
 
-const USAGE = `usage: bulkhead log [-n N] [--since 7d|24h|30m] [--guard NAME] [--summary] [--json]
+const USAGE = `usage: bulkhead log [SPAN] [-n N] [--since 7d|24h|30m] [--guard NAME] [--summary] [--json]
 
 Lists what the guards blocked and what orphan-reaper stopped, newest last.
   -n N           how many events to list (default 20; ignored with --summary)
@@ -110,6 +110,8 @@ function renderList(events, { color = false, home, width = 120, now = Date.now()
 
 function main(args, { env = process.env, stdout = process.stdout, stderr = process.stderr, now = Date.now(), dir = stateDir() } = {}) {
   if (args.includes('--help') || args.includes('-h')) return stdout.write(USAGE + '\n')
+  // `bulkhead log 24h` reads as `--since 24h`, the way /bulkhead:log takes its argument
+  if (args.length && /^(\d+[mhdw]|\d{4}-\d{2}-\d{2})$/.test(args[0])) args = ['--since', args[0], ...args.slice(1)]
   if (rejectArgs('log', args, { flags: ['json', 'summary'], valued: ['since', 'guard', 'limit'], shorts: ['n'] }, stderr, USAGE)) return
   const sinceArg = option(args, 'since')
   let since = null

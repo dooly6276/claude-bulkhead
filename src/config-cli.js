@@ -74,9 +74,11 @@ function writePreset(file, name) {
 }
 
 function setPreset(args, { env, stdout, stderr, cwd }) {
-  const name = String(option(args, 'preset'))
+  const value = option(args, 'preset')
+  const name = String(value)
   if (!PRESETS[name]) {
-    stderr.write(`bulkhead config: unknown preset ${name}; use ${Object.keys(PRESETS).join(', ')}\n`)
+    const list = Object.keys(PRESETS).join(', ')
+    stderr.write(value === true ? `bulkhead config: --preset needs a name: ${list}\n` : `bulkhead config: unknown preset ${name}; use ${list}\n`)
     process.exitCode = 1
     return
   }

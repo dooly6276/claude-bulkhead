@@ -91,3 +91,12 @@ test('bulkhead log --summary runs end to end', () => {
   assert.strictEqual(r.status, 0, r.stderr)
   assert.match(r.stdout, /^6 blocks since/)
 })
+
+test('a bare span is read as --since', () => {
+  const dir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'bulkhead-log-'))
+  let out = ''
+  let err = ''
+  main(['24h', '--summary'], { stdout: { write: s => { out += s } }, stderr: { write: s => { err += s } }, dir })
+  assert.equal(err, '')
+  assert.match(out, /no blocks recorded in the last 24 hours/)
+})
