@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.3.3
+## 0.3.3 - 2026-11-12
+
+### Changed
+
+- A guard that throws is still skipped so the other guards run, but the error is now written to the event log with rule `guard-error` and to `guards.log`, so `bulkhead log` and `bulkhead top` show it instead of it looking like a clean pass.
 
 ### Fixed
 

@@ -1,8 +1,15 @@
 'use strict'
 const test = require('node:test')
 const assert = require('node:assert')
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
 const { runScript } = require('./helpers')
+// a guard that throws writes to the event log; keep that out of the real ~/.claude/bulkhead
+const STATE = fs.mkdtempSync(path.join(os.tmpdir(), 'bulkhead-bg-'))
+process.env.BULKHEAD_STATE_DIR = STATE
 const { judge, ORDER } = require('../src/bash-guards')
+const { readEvents } = require('../src/events')
 
 const bash = command => ({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, cwd: process.cwd(), session_id: 't' })
 
@@ -65,4 +72,15 @@ test('turned-off guards are skipped; BULKHEAD_DISABLE=all passes everything; bad
   assert.strictEqual(runScript('bash-guards', bash('sleep 100000'), { BULKHEAD_DISABLE: 'all' }).status, 0)
   assert.strictEqual(runScript('bash-guards', 'not json').status, 0)
   assert.strictEqual(runScript('bash-guards', { tool_name: 'Bash', tool_input: {} }).status, 0)
+})
+
+test('a guard that throws leaves a guard-error event, so it does not look like a clean pass', async () => {
+  const before = readEvents(STATE).length
+  await judge(bash('npm run dev'), { order: fake({ broken: 'throw', b: undefined }, []) })
+  const events = readEvents(STATE).slice(before)
+  assert.strictEqual(events.length, 1)
+  assert.strictEqual(events[0].guard, 'broken')
+  assert.strictEqual(events[0].rule, 'guard-error')
+  assert.strictEqual(events[0].error, 'bug')
+  assert.strictEqual(events[0].command, 'npm run dev')
 })
