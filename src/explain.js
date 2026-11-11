@@ -86,13 +86,20 @@ function ownerLine(owner, what) {
 // One check per guard; each returns null (pass) or { rule, message, evidence: [text] }.
 const CHECKS = {
   'kill-guard': async (cmd, ctx) => {
-    const hit = require('./kill-guard').classify(cmd, {
+    const kill = require('./kill-guard')
+    // the same process-table context the hook uses, seen from the session explain speaks for;
+    // a new session (no pid) counts every running session as another one
+    const owners = require('./kill-owners').makeContext({
+      cwd: ctx.cwd, off: kill.RULES.filter(rule => !enabled(rule)),
+      snapshot: ctx.snapshot, files: ctx.files, self: () => (ctx.who && ctx.who.pid) || -1,
+    })
+    const hit = kill.classify(cmd, {
       allowNames: setting('killGuard.allowNames', []), extraSharedNames: setting('killGuard.extraSharedNames', []),
-    }, ctx.mode)
+    }, ctx.mode, owners)
     if (!hit) return null
     const evidence = killEvidence(cmd, ctx)
     return {
-      rule: hit.rule, message: `${require('./kill-guard').message(hit.why)}`,
+      rule: hit.rule, message: `${kill.message(hit.why, process.platform, hit.rule)}`,
       evidence: evidence.length ? evidence : [hit.why],
     }
   },

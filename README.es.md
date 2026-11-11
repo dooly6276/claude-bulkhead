@@ -350,6 +350,8 @@ La vía de una sola vez es siempre `bulkhead allow <code>`, ejecutada por ti. La
 | Guard | Regla | Permanente, en `.claude/bulkhead.json` |
 |---|---|---|
 | kill-guard | `pkill`, `taskkill-im`, `stop-process-name` y las demás formas de matar por nombre | `{"killGuard":{"allowNames":["ffmpeg"]}}` |
+| kill-guard | `other-session-pid`: un PID del árbol de otra sesión | `{"killGuard":{"ownerCheck":false}}` |
+| kill-guard | `mass-kill`, `docker-mass`, `device-kill`, `app-quit`, `service-stop`: las demás reglas (solo mientras corre otra sesión) | `{"killGuard":{"massKill":false}}`, y así con las demás (`dockerMass`, `deviceKill`, `appQuit`, `serviceStop`) |
 | wait-guard | `long-sleep`, `poll-loop`, `follow` | `{"waitGuard":{"limitSeconds":600}}` |
 | memory-guard | `low-memory` | `{"memory":{"minFreeGb":1}}` |
 | memory-guard | `slot-files` | `{"memoryGuard":{"enabled":false}}` |

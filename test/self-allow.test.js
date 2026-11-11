@@ -87,3 +87,13 @@ test('the rule is on by default and BULKHEAD_DISABLE=self-allow turns it off', (
   assert.ok(!/bulkhead allow [A-Z2-9]{5}`/.test(on.stderr.replace('<code>', '')), 'no allow code for this rule')
   assert.strictEqual(runScript('basics', input, { BULKHEAD_DISABLE: 'self-allow' }).status, 0)
 })
+
+test('kill-guard rules that only apply beside another session point at their own switch', () => {
+  const { allowHint } = require('../src/allow-hint')
+  assert.deepEqual(allowHint('kill-guard', 'other-session-pid'), { json: '{"killGuard":{"ownerCheck":false}}', disable: 'owner-check' })
+  for (const [rule, key] of [['mass-kill', 'massKill'], ['docker-mass', 'dockerMass'], ['device-kill', 'deviceKill'], ['app-quit', 'appQuit'], ['service-stop', 'serviceStop']]) {
+    assert.deepEqual(allowHint('kill-guard', rule), { json: JSON.stringify({ killGuard: { [key]: false } }), disable: rule })
+  }
+  const { RULES } = require('../src/config')
+  assert.equal(RULES['owner-check'], 'killGuard.ownerCheck')
+})

@@ -10,6 +10,12 @@ const RULE_KEYS = {
   'agent-author': ['basics', 'agentAuthor'],
   'stage-all': ['checkoutGuard', 'stageAll'],
   'remove-session-dir': ['checkoutGuard', 'removeSessionDir'],
+  'mass-kill': ['killGuard', 'massKill'],
+  'docker-mass': ['killGuard', 'dockerMass'],
+  'device-kill': ['killGuard', 'deviceKill'],
+  'app-quit': ['killGuard', 'appQuit'],
+  'service-stop': ['killGuard', 'serviceStop'],
+  'other-session-pid': ['killGuard', 'ownerCheck', 'owner-check'],
 }
 const SECTION = {
   'kill-guard': 'killGuard', 'wait-guard': 'waitGuard', 'memory-guard': 'memoryGuard', 'port-guard': 'portGuard',
@@ -34,7 +40,7 @@ function allowHint(guard, rule, { command = '', message = '' } = {}) {
   const j = o => JSON.stringify(o)
   if (rule === 'self-allow') return { json: null, disable: null }
   const key = RULE_KEYS[rule]
-  if (key) return { json: j({ [key[0]]: { [key[1]]: false } }), disable: rule }
+  if (key) return { json: j({ [key[0]]: { [key[1]]: false } }), disable: key[2] || rule }
   const section = SECTION[guard]
   if (!section) return { json: null, disable: guard }
   const off = { json: j({ [section]: { enabled: false } }), disable: guard }

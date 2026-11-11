@@ -350,6 +350,8 @@ bulkhead 解决的是另一个问题：同一台机器上的会话因为进程�
 | Guard | 规则 | 永久放行，写在 `.claude/bulkhead.json` |
 |---|---|---|
 | kill-guard | `pkill`、`taskkill-im`、`stop-process-name` 以及其他按名字结束进程的规则 | `{"killGuard":{"allowNames":["ffmpeg"]}}` |
+| kill-guard | `other-session-pid`: 属于其他会话进程树的 PID | `{"killGuard":{"ownerCheck":false}}` |
+| kill-guard | `mass-kill`, `docker-mass`, `device-kill`, `app-quit`, `service-stop`: 其他规则（仅当有其他会话在运行时） | `{"killGuard":{"massKill":false}}`, 其余同理 (`dockerMass`, `deviceKill`, `appQuit`, `serviceStop`) |
 | wait-guard | `long-sleep`、`poll-loop`、`follow` | `{"waitGuard":{"limitSeconds":600}}` |
 | memory-guard | `low-memory` | `{"memory":{"minFreeGb":1}}` |
 | memory-guard | `slot-files` | `{"memoryGuard":{"enabled":false}}` |

@@ -350,6 +350,8 @@ bulkhead が扱うのは別の問題です。1 台のマシン上のセッショ
 | ガード | ルール | 恒久設定（`.claude/bulkhead.json`） |
 |---|---|---|
 | kill-guard | `pkill`、`taskkill-im`、`stop-process-name` など、名前による kill | `{"killGuard":{"allowNames":["ffmpeg"]}}` |
+| kill-guard | `other-session-pid`: 別のセッションのツリーにある PID | `{"killGuard":{"ownerCheck":false}}` |
+| kill-guard | `mass-kill`, `docker-mass`, `device-kill`, `app-quit`, `service-stop`: その他のルール（別のセッションが動いているときだけ） | `{"killGuard":{"massKill":false}}`, 他も同じ形 (`dockerMass`, `deviceKill`, `appQuit`, `serviceStop`) |
 | wait-guard | `long-sleep`、`poll-loop`、`follow` | `{"waitGuard":{"limitSeconds":600}}` |
 | memory-guard | `low-memory` | `{"memory":{"minFreeGb":1}}` |
 | memory-guard | `slot-files` | `{"memoryGuard":{"enabled":false}}` |

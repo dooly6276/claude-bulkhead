@@ -350,6 +350,8 @@ A forma de liberar uma única vez é sempre `bulkhead allow <code>`, rodado por 
 | Guard | Regra | Permanente, em `.claude/bulkhead.json` |
 |---|---|---|
 | kill-guard | `pkill`, `taskkill-im`, `stop-process-name` e os outros kills por nome | `{"killGuard":{"allowNames":["ffmpeg"]}}` |
+| kill-guard | `other-session-pid`: um PID da árvore de outra sessão | `{"killGuard":{"ownerCheck":false}}` |
+| kill-guard | `mass-kill`, `docker-mass`, `device-kill`, `app-quit`, `service-stop`: as outras regras (só enquanto outra sessão roda) | `{"killGuard":{"massKill":false}}`, e assim por diante (`dockerMass`, `deviceKill`, `appQuit`, `serviceStop`) |
 | wait-guard | `long-sleep`, `poll-loop`, `follow` | `{"waitGuard":{"limitSeconds":600}}` |
 | memory-guard | `low-memory` | `{"memory":{"minFreeGb":1}}` |
 | memory-guard | `slot-files` | `{"memoryGuard":{"enabled":false}}` |
