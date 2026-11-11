@@ -148,4 +148,4 @@ function main(args, { env = process.env, stdout = process.stdout, stderr = proce
   stdout.write(renderList(recent, { color, width: stdout.columns || 160, now }) + '\n')
 }
 
-module.exports = { main, parseSince, filter, summarize, renderSummary, renderList }
+module.exports = { main, parseSince, filter, summarize, renderSummary, renderList, USAGE }

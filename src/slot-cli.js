@@ -218,4 +218,4 @@ function main(argv) {
 
 if (require.main === module) main(process.argv.slice(2))
 
-module.exports = { main, shellCommand, findGitBash }
+module.exports = { main, shellCommand, findGitBash, USAGE }

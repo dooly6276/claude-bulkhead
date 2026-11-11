@@ -13,7 +13,7 @@ const USAGE = `usage:
   bulkhead worktree list [--json]
       worktrees of this repo: branch, age, dirty, ahead/behind, live session, port
   bulkhead worktree prune [--merged-into REF] [--older-than 7d] [--yes] [--json]
-      worktrees that are safe to remove (merged, clean, no live session); a dry run without --yes`
+      worktrees that are safe to remove (merged, clean, no live session); a dry run without --yes (or with --dry-run)`
 
 // ---- small helpers -------------------------------------------------------------------------
 
@@ -376,7 +376,8 @@ function judge(c, t, ctx) {
 }
 
 function prune(args, c) {
-  const spec = { flags: ['yes', 'json'], valued: ['merged-into', 'older-than'] }
+  // --dry-run is accepted because it is what prune does without --yes
+  const spec = { flags: ['yes', 'json', 'dry-run'], valued: ['merged-into', 'older-than'] }
   if (rejectArgs('worktree prune', args, spec, c.stderr, USAGE)) return
   const info = repo(c)
   if (!info) return fail(c, 'not inside a git repository')
@@ -450,4 +451,4 @@ async function main(args, deps) {
   process.exitCode = 1
 }
 
-module.exports = { main, parseWorktrees, detectInstaller, norm, inside, parseDuration, sessionMap }
+module.exports = { main, parseWorktrees, detectInstaller, norm, inside, parseDuration, sessionMap, USAGE }

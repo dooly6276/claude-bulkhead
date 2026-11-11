@@ -131,4 +131,4 @@ async function main(args, { stdout = process.stdout, stderr = process.stderr } =
   }
 }
 
-module.exports = { main, findStable, stableKey, findFree, isFree, canBind, BROWSER_BLOCKED }
+module.exports = { main, findStable, stableKey, findFree, isFree, canBind, BROWSER_BLOCKED, USAGE }

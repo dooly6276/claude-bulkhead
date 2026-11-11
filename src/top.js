@@ -327,4 +327,4 @@ function main(args, { stdin = process.stdin, stdout = process.stdout, env = proc
   return live({ stdin, stdout, env, interval }).then(() => process.exit(0))
 }
 
-module.exports = { main, frame, layout, live, snapshot, workerScanner, defaultInterval, ALT_ON, ALT_OFF, SHOW }
+module.exports = { main, frame, layout, live, snapshot, workerScanner, defaultInterval, ALT_ON, ALT_OFF, SHOW, USAGE }
