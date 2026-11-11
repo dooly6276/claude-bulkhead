@@ -41,17 +41,21 @@ bulkhead-slot run --gb=4 -- npx playwright test
 
 ### On another machine
 
-If `bulkhead remote list` shows a remote, a heavy job can run there instead and use none of this machine's RAM. Prefer it when free RAM is low, when memory-guard blocked the command, or when bulkhead-slot would make you wait:
+If `bulkhead remote list` shows a remote, a heavy job can run there instead and use none of this machine's RAM. It sends this project's code to another machine, so it never runs on your own decision, even when free RAM is low or memory-guard blocked the command. Suggest it, and run it only after the user says yes to that run:
+
+1. Run `git log -1 --oneline` and `git status --short`, then tell the user in a few lines: the remote it goes to, that the current commit (only commits the remote lacks) and every uncommitted change listed, deletions included, are sent over SSH, any ignored file you would add with `--files`, and the command it runs there.
+2. Ask whether to go ahead and end your turn. If they say no, send nothing and run the job here through bulkhead-slot. A yes covers that one run, not later ones, and not files or commands you did not name.
+3. Once they agree:
 
 ```
 bulkhead remote run --tail=60 --gb=4 -- npx playwright test
 ```
 
 - Run it with `run_in_background: true` and end your turn. Its exit code is the command's, and `--tail=60` keeps the output to the last 60 lines plus the path of the full log.
-- It sends the current commit and the uncommitted changes. An ignored file the job needs (a `.env.test`) goes with `--files=.env.test`.
+- It sends the current commit and the uncommitted changes. An ignored file goes only with `--files=<path>`, and only one the user named or agreed to in step 1. Never add an env or secrets file on your own.
 - A server the command starts must listen on `$BULKHEAD_PORT`, not a fixed port: other runs use the same remote. Everything the command started is stopped when it ends.
 - Reports and screenshots stay on the remote. Bring them back with `--fetch=playwright-report` on the run, or `bulkhead remote fetch playwright-report` afterwards.
-- Exit 3 means no free copy or RAM there in time, 4 a transfer or setup problem, 5 an unreachable remote. Then run it here through bulkhead-slot instead.
+- Exit 3 means no free copy or RAM there in time, 4 a transfer or setup problem, 5 an unreachable remote. Then tell the user and run it here through bulkhead-slot instead.
 
 ## Waiting
 
@@ -71,4 +75,4 @@ The disk is shared too. Measure one folder at a time in the foreground (`du -sh 
 
 ## When a guard blocks you
 
-Read the message: it names the other session and what to do instead. Do not work around it by splitting, encoding or hiding the command. If the block is wrong for this project, tell the user which setting would allow it (`bulkhead config` lists them, for example `killGuard.allowNames` or `portGuard.ignorePorts` in the project's `.claude/bulkhead.json`). `bulkhead log` shows what was blocked.
+Read the message: it names the other session and what to do instead. Do not work around it by splitting, encoding or hiding the command. If the block is wrong for this project, tell the user which setting would allow it (`bulkhead config` lists them, for example `killGuard.allowNames` or `portGuard.ignorePorts`). Settings that loosen a guard are read from the user's global config file only; a project's `.claude/bulkhead.json` can only make the guards stricter. `bulkhead log` shows what was blocked.

@@ -299,22 +299,30 @@ bulkhead が扱うのは別の問題です。1 台のマシン上のセッショ
 
 ## 設定
 
-既定値のままで、設定は不要です。変えたいときは設定ファイルを使います。マシン全体には `~/.claude/bulkhead/config.json`、1 つのプロジェクトには `<repo>/.claude/bulkhead.json`（`.git` のあるフォルダまで親をたどって探します）です。プロジェクトの設定がグローバルの設定より優先されます。
+既定値のままで、設定は不要です。変えたいときは設定ファイルを使います。マシン全体には `~/.claude/bulkhead/config.json`、1 つのプロジェクトには `<repo>/.claude/bulkhead.json`（`.git` のあるフォルダまで親をたどって探します）です。
 
-プロジェクトの設定ファイルは、kill-guard のブロック対象から名前を外したり、ポートを無視したり、そのリポジトリでガードをオフにしたりできます。他人のリポジトリを clone したら、ほかの設定ファイルと同じように、作業前に `.claude/bulkhead.json` も確認してください。`bulkhead config` はすべての設定と、その値がどのファイルから来たかを表示します。リモートのホストと ssh オプションはグローバルのファイルからだけ読みます。
+プロジェクトの設定ファイルはリポジトリに含まれて届きます（clone したリポジトリも同じです）。そのため、bulkhead をより厳しくする設定だけが有効です。たとえば、kill-guard のブロック対象に名前を追加する、保護するブランチを増やす、待機の上限を下げる、RAM の下限を上げる、ガードをオンにする、といった設定です。`killGuard.allowNames`、`portGuard.ignorePorts`、より長い待機、`"enabled": false` のように、ガードを緩める設定はグローバルのファイルからだけ読みます。プロジェクトのファイルにあっても無視され、警告が出ます。この警告は `bulkhead config` とセッション開始時の通知で確認できます。リモートのホスト、ssh オプション、通知コマンドもグローバルのファイルからだけ読みます。
 
-たとえば、`ffmpeg` を意図的に実行し、時間のかかる結合テストがあるプロジェクトでは次のようにします。
+たとえば、`ffmpeg` を意図的に実行し、時間のかかる結合テストがあるマシンでは、`~/.claude/bulkhead/config.json` に次のように書きます。
 
 ```json
 {
   "killGuard": { "allowNames": ["ffmpeg"] },
   "waitGuard": { "limitSeconds": 300 },
-  "portGuard": { "ignorePorts": [9229] },
-  "basics": { "protectedBranches": ["main", "release"] }
+  "portGuard": { "ignorePorts": [9229] }
 }
 ```
 
-どのガードも `"<guard>": { "enabled": false }` でオフにできます。`bulkhead config` は、すべての設定項目、その値、どこから来た値かを表示します。壊れたファイルは無視され、ガードは既定値のまま動作し、セッション開始時に通知が 1 回表示されます。全キーは [docs/configuration.md](docs/configuration.md) にあり、[config.example.json](config.example.json) ではすべてのキーを設定しています。
+そして `release` からデプロイするプロジェクトでは、`.claude/bulkhead.json` に次のように書きます。
+
+```json
+{
+  "basics": { "protectedBranches": ["release"] },
+  "secretsGuard": { "enabled": true }
+}
+```
+
+どのガードも、グローバルのファイルで `"<guard>": { "enabled": false }` とすればオフにできます。`bulkhead config` は、すべての設定項目、その値、どこから来た値かを表示します。壊れたファイルは無視され、ガードは既定値のまま動作し、セッション開始時に通知が 1 回表示されます。全キーは [docs/configuration.md](docs/configuration.md) にあり、[config.example.json](config.example.json) ではすべてのキーを設定しています。
 
 環境変数も引き続き使え、2 つのファイルより優先されます。設定先としていちばん簡単なのは、`~/.claude/settings.json` の `env` ブロックです。
 
@@ -540,7 +548,7 @@ sessions は `~/.claude/sessions` にある生きたエントリ、heavy は bul
 わずかに遅くなります。Bash 用のガードはすべて、依存のない 1 つの短い Node プロセスの中で動き、MacBook Pro（Node 24）ではツール呼び出し 1 回あたり約 76 ms で、そのうち 32 ms は Node の起動です。10 個のセッションが同時にツールを呼び出すと、各セッションの待ち時間は約 89 ms です（0.2 のように各ガードが別プロセスだった場合は 318 ms）。ブロックをイベントログに書き込む分は、測定できるほどの時間がかかりません。プロセス一覧の読み取り（Windows では 1〜2 秒）のような重い処理は、コマンドが一致したときだけ実行します。すでに応答のあるポートでの dev server 起動、kill、重いコマンドなどです。ステータスラインはコールドで約 100 ms で、5 秒間キャッシュされます。
 
 **ブロックすべきでないものをブロックされました。どうすればいいですか？**
-`bulkhead log` を実行して、正確なコマンドと理由を確認してください。プロジェクトの設定 `<repo>/.claude/bulkhead.json` で通すようにできます。プログラム名なら `killGuard.allowNames`、共有ポートなら `portGuard.ignorePorts`、長い待機なら `waitGuard.limitSeconds`、そのプロジェクトでガード全体をオフにするなら `"enabled": false` です。[docs/configuration.md](docs/configuration.md) を参照してください。そのうえで、`bulkhead log` の該当行を添えて [false positive issue](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml) を作成していただければ、パターンを全員のために修正できます。
+`bulkhead log` を実行して、正確なコマンドと理由を確認してください。一度だけ通すには、ブロックのメッセージに表示されたコードを使って `bulkhead allow <code>` を実行します。恒久的に通すには、グローバルの設定 `~/.claude/bulkhead/config.json` に設定します。プログラム名なら `killGuard.allowNames`、共有ポートなら `portGuard.ignorePorts`、長い待機なら `waitGuard.limitSeconds`、ガード全体をオフにするなら `"enabled": false` です。プロジェクトの `.claude/bulkhead.json` ではガードを緩められません。[docs/configuration.md](docs/configuration.md) を参照してください。そのうえで、`bulkhead log` の該当行を添えて [false positive issue](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml) を作成していただければ、パターンを全員のために修正できます。
 
 **セッションが 1 つだけでも役に立ちますか？**
 はい。kill-guard、wait-guard、memory-guard、basics は、1 つのセッションとそのサブエージェントも同じように守ります。port-guard と checkout-guard は別のセッションが生きているときだけ働き、orphan-reaper は終了したセッションの後始末をします。

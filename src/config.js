@@ -7,7 +7,8 @@ const { pathKey } = require('./paths')
 // Settings come from three places, later ones winning:
 //   1. defaults below, then the preset ("preset" in a config file or BULKHEAD_PRESET) over them
 //   2. <state dir>/config.json                      (global, usually ~/.claude/bulkhead/config.json)
-//   3. <project>/.claude/bulkhead.json              (project, merged over global)
+//   3. <project>/.claude/bulkhead.json              (project, merged over global; it can only make
+//                                                    the guards stricter, see PROJECT below)
 //   4. environment variables                        (always win)
 // A file that is not valid JSON is ignored as a whole, so the guards keep their defaults.
 
@@ -130,6 +131,57 @@ function presetValues(name, totalGb = os.totalmem() / 2 ** 30) {
   return out
 }
 
+// How a project's .claude/bulkhead.json may change a key. A repository file comes with whatever
+// you clone, so it can only make bulkhead stricter; anything that loosens a guard is read from
+// the global file only. 'on': may turn a switch on, not off. 'off': may turn it off (switches that
+// make bulkhead do things to the machine). 'max'/'min': may raise/lower a number. 'add': the list
+// is added to the global one. 'mode': editGuard.mode, toward block. 'any': no effect on safety.
+// Keys missing here are global-only.
+const PROJECT = {
+  'killGuard.enabled': 'on', 'killGuard.extraSharedNames': 'add', 'killGuard.massKill': 'on',
+  'killGuard.dockerMass': 'on', 'killGuard.deviceKill': 'on', 'killGuard.appQuit': 'on',
+  'killGuard.serviceStop': 'on', 'killGuard.ownerCheck': 'on',
+  'waitGuard.enabled': 'on', 'waitGuard.limitSeconds': 'min',
+  'memoryGuard.enabled': 'on', 'memoryGuard.autoQueue': 'off', 'memoryGuard.estimatesGb': 'any',
+  'memoryGuard.waitMinutes': 'any', 'memoryGuard.subagents': 'on',
+  'memory.minFreeGb': 'max', 'memory.slotFloorGb': 'max', 'memory.maxCommitPct': 'min',
+  'portGuard.enabled': 'on',
+  'checkoutGuard.enabled': 'on', 'checkoutGuard.stageAll': 'on', 'checkoutGuard.removeSessionDir': 'on',
+  'diskGuard.enabled': 'on',
+  'basics.enabled': 'on', 'basics.protectedBranches': 'add', 'basics.rmRoot': 'on', 'basics.forcePushMain': 'on',
+  'basics.protectedDelete': 'on', 'basics.discardChanges': 'on', 'basics.agentAuthor': 'on', 'basics.selfAllow': 'on',
+  'allowOnce.ttlMinutes': 'min',
+  'editGuard.enabled': 'on', 'editGuard.mode': 'mode', 'editGuard.windowMinutes': 'max',
+  'secretsGuard.enabled': 'on', 'secretsGuard.extraPatterns': 'add',
+  'orphanReaper.enabled': 'off', 'orphanReaper.onSessionEnd': 'off', 'orphanReaper.keepNames': 'add',
+  'orphanReaper.keepPatterns': 'add',
+  'sessionState.enabled': 'on', 'notify.minIntervalSeconds': 'any', 'log.enabled': 'on',
+}
+const EDIT_MODES = ['warn', 'ask', 'block']
+
+// The value a key has before the project file, with the RAM limits' auto defaults filled in.
+function effective(key, value, totalGb) {
+  if (value !== null && value !== undefined) return value
+  if (key === 'memory.minFreeGb') return Math.min(3, round1(totalGb * 0.15))
+  if (key === 'memory.slotFloorGb') return Math.min(5, round1(totalGb * 0.25))
+  return value
+}
+
+// The value the project file may set over `current`, or undefined when it would loosen a guard.
+function tighten(key, current, wanted, totalGb) {
+  const how = PROJECT[key]
+  if (!how) return undefined
+  const cur = effective(key, current, totalGb)
+  if (how === 'any') return wanted
+  if (how === 'on') return wanted === true || wanted === cur ? wanted : undefined
+  if (how === 'off') return wanted === false || wanted === cur ? wanted : undefined
+  if (how === 'max') return typeof cur !== 'number' || wanted >= cur ? wanted : undefined
+  if (how === 'min') return typeof cur !== 'number' || wanted <= cur ? wanted : undefined
+  if (how === 'mode') return EDIT_MODES.indexOf(wanted) >= Math.max(0, EDIT_MODES.indexOf(cur)) ? wanted : undefined
+  if (how === 'add') return [...new Set([...(cur || []), ...wanted])]
+  return undefined
+}
+
 function stateDir(env = process.env) {
   return env.BULKHEAD_STATE_DIR || path.join(os.homedir(), '.claude', 'bulkhead')
 }
@@ -245,20 +297,49 @@ function fileLayer({ env = process.env, cwd = env.CLAUDE_PROJECT_DIR || process.
     const got = readFile(file, warnings, read, scope)
     if (got) parsed.push({ file, got })
   }
-  // the project file's preset wins over the global one; BULKHEAD_PRESET wins over both
+  // The global file's preset (or BULKHEAD_PRESET) and keys first. Then the project file, which may
+  // only make things stricter: its preset and keys are applied key by key, and a value that
+  // would loosen a guard is ignored with a warning.
+  const global = parsed.find(p => p.file === files.global)
+  const project = parsed.find(p => p.file === files.project)
   let preset = 'normal'
   let presetFrom = 'default'
-  for (const { file, got } of parsed) if (got.preset) [preset, presetFrom] = [got.preset, file]
-  if (PRESETS[String(env.BULKHEAD_PRESET || '').trim()]) [preset, presetFrom] = [env.BULKHEAD_PRESET.trim(), 'env BULKHEAD_PRESET']
+  if (global && global.got.preset) [preset, presetFrom] = [global.got.preset, global.file]
+  const envPreset = PRESETS[String(env.BULKHEAD_PRESET || '').trim()] ? env.BULKHEAD_PRESET.trim() : null
+  if (envPreset) [preset, presetFrom] = [envPreset, 'env BULKHEAD_PRESET']
   for (const [k, v] of Object.entries(presetValues(preset, totalGb))) {
     values[k] = v
     sources[k] = `preset ${preset}`
   }
-  for (const { file, got } of parsed) {
-    for (const [k, v] of Object.entries(got)) {
+  if (global) {
+    for (const [k, v] of Object.entries(global.got)) {
       if (k === 'preset') continue
       values[k] = v
-      sources[k] = file
+      sources[k] = global.file
+    }
+  }
+  if (project) {
+    const ram = totalGb || os.totalmem() / 2 ** 30
+    const looser = []
+    const want = {}
+    if (project.got.preset && !envPreset) {
+      for (const [k, v] of Object.entries(presetValues(project.got.preset, ram))) want[k] = { v, from: `preset ${project.got.preset} (${project.file})` }
+      presetFrom = project.file
+      preset = project.got.preset
+    }
+    for (const [k, v] of Object.entries(project.got)) if (k !== 'preset') want[k] = { v, from: project.file }
+    for (const [k, { v, from }] of Object.entries(want)) {
+      const next = tighten(k, values[k], v, ram)
+      if (next === undefined) {
+        looser.push(from === project.file ? `"${k}"` : `"preset": "${project.got.preset}" (${k})`)
+        continue
+      }
+      if (JSON.stringify(next) === JSON.stringify(values[k])) continue
+      values[k] = next
+      sources[k] = from
+    }
+    if (looser.length) {
+      warnings.push(`${project.file}: ${looser.join(', ')} would loosen a guard. A project file can only make bulkhead stricter, so ${looser.length > 1 ? 'they are' : 'it is'} ignored here; set ${looser.length > 1 ? 'them' : 'it'} in the global config file (${files.global}) instead.`)
     }
   }
   return { values, sources, files, warnings, preset, presetFrom }
@@ -330,4 +411,4 @@ function isEnabled(name, cfg = current()) {
   return key ? cfg.values[key] !== false : true
 }
 
-module.exports = { load, current, reset, get, isEnabled, projectFile, globalFile, KEYS, GUARDS, RULES, PRESETS, presetValues, flatten }
+module.exports = { PROJECT, tighten, load, current, reset, get, isEnabled, projectFile, globalFile, KEYS, GUARDS, RULES, PRESETS, presetValues, flatten }

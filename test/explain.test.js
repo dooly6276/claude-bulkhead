@@ -54,7 +54,7 @@ test('kill by name: block with the rule, the sessions that run that program, and
   assert.strictEqual(r.blocked, true)
   const text = render(r)
   assert.match(text, /BLOCKED by kill-guard pkill/)
-  assert.match(text, /allow always \{"killGuard":\{"allowNames":\["node"\]\}\} in \.claude\/bulkhead\.json/)
+  assert.match(text, /allow always \{"killGuard":\{"allowNames":\["node"\]\}\} in (their|the) global config file \(~\/\.claude\/bulkhead\/config\.json/)
   assert.match(text, /BULKHEAD_DISABLE=kill-guard/)
 })
 

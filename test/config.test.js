@@ -43,7 +43,8 @@ test('project merges over global, environment wins over both', () => {
   assert.strictEqual(cfg.values['waitGuard.limitSeconds'], 240)
   assert.strictEqual(cfg.sources['waitGuard.limitSeconds'], path.join(repo, '.claude', 'bulkhead.json'))
   assert.deepStrictEqual(cfg.values['killGuard.allowNames'], ['ffmpeg'])
-  assert.deepStrictEqual(cfg.values['basics.protectedBranches'], ['main', 'release'])
+  // a project list adds to the global one instead of replacing it
+  assert.deepStrictEqual(cfg.values['basics.protectedBranches'], ['main', 'master', 'release'])
   assert.ok(!isEnabled('port-guard', cfg))
   const env = load({ env: { BULKHEAD_STATE_DIR: state, BULKHEAD_WAIT_MAX_SEC: '90', BULKHEAD_DISABLE: 'rm-root', BULKHEAD_NO_LOG: '1' }, cwd: repo })
   assert.strictEqual(env.values['waitGuard.limitSeconds'], 90)
@@ -58,9 +59,11 @@ test('invalid JSON is ignored with one warning; bad keys and types are dropped',
   const { state, repo } = setup('{ "waitGuard": { "limitSeconds": 30, } }', { waitGuard: { limitSecs: 1, limitSeconds: 'x' }, portGuard: { ignorePorts: [3000, 70000] }, killGuard: { enabled: false } })
   const cfg = load({ env: { BULKHEAD_STATE_DIR: state }, cwd: repo })
   assert.strictEqual(cfg.values['waitGuard.limitSeconds'], 180)
-  assert.strictEqual(cfg.values['killGuard.enabled'], false)
+  // a project file cannot turn a guard off
+  assert.strictEqual(cfg.values['killGuard.enabled'], true)
   assert.deepStrictEqual(cfg.values['portGuard.ignorePorts'], [])
-  assert.strictEqual(cfg.warnings.length, 4)
+  assert.strictEqual(cfg.warnings.length, 5)
+  assert.ok(cfg.warnings.some(w => /"killGuard.enabled" would loosen a guard/.test(w)))
   assert.match(cfg.warnings[0], /config\.json is not valid JSON .*ignored until fixed/)
   assert.ok(cfg.warnings.some(w => /unknown key "waitGuard.limitSecs"/.test(w)))
   assert.ok(cfg.warnings.some(w => /"waitGuard.limitSeconds" should be number/.test(w)))
@@ -105,14 +108,86 @@ test('hooks follow the config files', () => {
   assert.strictEqual(runScript('wait-guard', { tool_input: { command: 'sleep 500', timeout: 600000 } }, env).status, 0)
   const push = runScript('basics', { cwd: repo, tool_input: { command: 'git push --force origin release' } }, env)
   assert.strictEqual(push.status, 2)
-  assert.match(push.stderr, /force-pushing to release/)
-  assert.strictEqual(runScript('basics', { cwd: repo, tool_input: { command: 'git push --force origin main' } }, env).status, 0)
-  // a guard turned off in the project file
+  assert.match(push.stderr, /force-pushing to main or master or release/)
+  // the project's branch is added to main and master, not put in their place
+  assert.strictEqual(runScript('basics', { cwd: repo, tool_input: { command: 'git push --force origin main' } }, env).status, 2)
+  // a guard turned off in the project file stays on; in the global file it goes off
   const off = setup(undefined, { killGuard: { enabled: false } })
-  assert.strictEqual(runScript('kill-guard', { tool_input: { command: 'pkill node' } }, { BULKHEAD_STATE_DIR: off.state, CLAUDE_PROJECT_DIR: off.repo }).status, 0)
+  assert.strictEqual(runScript('kill-guard', { tool_input: { command: 'pkill node' } }, { BULKHEAD_STATE_DIR: off.state, CLAUDE_PROJECT_DIR: off.repo }).status, 2)
+  const offGlobal = setup({ killGuard: { enabled: false } }, undefined)
+  assert.strictEqual(runScript('kill-guard', { tool_input: { command: 'pkill node' } }, { BULKHEAD_STATE_DIR: offGlobal.state, CLAUDE_PROJECT_DIR: offGlobal.repo }).status, 0)
   // a broken file leaves the defaults in place
   const broken = setup('{nope', undefined)
   assert.strictEqual(runScript('kill-guard', { tool_input: { command: 'pkill node' } }, { BULKHEAD_STATE_DIR: broken.state }).status, 2)
+})
+
+test('a project file can only make bulkhead stricter', () => {
+  const file = repo => path.join(repo, '.claude', 'bulkhead.json')
+  const { state, repo } = setup(
+    { waitGuard: { limitSeconds: 300 }, editGuard: { mode: 'ask' }, killGuard: { extraSharedNames: ['redis-server'] }, diskGuard: { enabled: false } },
+    {
+      killGuard: { allowNames: ['node'], extraSharedNames: ['postgres'], massKill: false },
+      portGuard: { enabled: false, ignorePorts: [3000] },
+      waitGuard: { limitSeconds: 600 },
+      memory: { minFreeGb: 0.5, maxCommitPct: 60 },
+      editGuard: { mode: 'warn', windowMinutes: 60 },
+      secretsGuard: { enabled: true, allow: ['.env'] },
+      orphanReaper: { extraNames: ['ssh'], keepNames: ['caddy'], enabled: false },
+      memoryGuard: { autoQueue: true, waitMinutes: 3 },
+      diskGuard: { enabled: true },
+      log: { enabled: false },
+    },
+  )
+  const cfg = load({ env: { BULKHEAD_STATE_DIR: state }, cwd: repo, totalGb: 32 })
+  const v = cfg.values
+  // ignored: everything that loosens a guard or makes bulkhead do more to the machine
+  assert.deepStrictEqual(v['killGuard.allowNames'], [])
+  assert.strictEqual(v['killGuard.massKill'], true)
+  assert.strictEqual(v['portGuard.enabled'], true)
+  assert.deepStrictEqual(v['portGuard.ignorePorts'], [])
+  assert.strictEqual(v['waitGuard.limitSeconds'], 300)
+  assert.strictEqual(v['memory.minFreeGb'], null)
+  assert.strictEqual(v['editGuard.mode'], 'ask')
+  assert.deepStrictEqual(v['secretsGuard.allow'], [])
+  assert.deepStrictEqual(v['orphanReaper.extraNames'], [])
+  assert.strictEqual(v['memoryGuard.autoQueue'], false)
+  assert.strictEqual(v['log.enabled'], true)
+  // applied: everything that tightens
+  assert.deepStrictEqual(v['killGuard.extraSharedNames'], ['redis-server', 'postgres'])
+  assert.strictEqual(v['memory.maxCommitPct'], 60)
+  assert.strictEqual(v['editGuard.windowMinutes'], 60)
+  assert.strictEqual(v['secretsGuard.enabled'], true)
+  assert.deepStrictEqual(v['orphanReaper.keepNames'], ['caddy'])
+  assert.strictEqual(v['orphanReaper.enabled'], false)
+  assert.strictEqual(v['memoryGuard.waitMinutes'], 3)
+  assert.strictEqual(v['diskGuard.enabled'], true)
+  assert.strictEqual(cfg.sources['diskGuard.enabled'], file(repo))
+  // one warning that names each ignored key and where to set it instead
+  const w = cfg.warnings.find(x => /would loosen a guard/.test(x))
+  assert.ok(w, cfg.warnings.join('\n'))
+  for (const k of ['killGuard.allowNames', 'killGuard.massKill', 'portGuard.enabled', 'portGuard.ignorePorts', 'waitGuard.limitSeconds', 'memory.minFreeGb', 'editGuard.mode', 'secretsGuard.allow', 'orphanReaper.extraNames', 'memoryGuard.autoQueue', 'log.enabled']) assert.ok(w.includes(`"${k}"`), k)
+  assert.ok(w.includes(path.join(state, 'config.json')))
+  // the RAM floor can be raised over its auto default, and the mode moved toward block
+  const up = setup(undefined, { memory: { minFreeGb: 6 }, editGuard: { mode: 'block' }, waitGuard: { limitSeconds: 60 } })
+  const upCfg = load({ env: { BULKHEAD_STATE_DIR: up.state }, cwd: up.repo, totalGb: 32 })
+  assert.strictEqual(upCfg.values['memory.minFreeGb'], 6)
+  assert.strictEqual(upCfg.values['editGuard.mode'], 'block')
+  assert.strictEqual(upCfg.values['waitGuard.limitSeconds'], 60)
+  assert.deepStrictEqual(upCfg.warnings, [])
+  // a project preset: strict tightens, quiet's looser values are ignored with a warning
+  const strict = setup(undefined, { preset: 'strict' })
+  const s = load({ env: { BULKHEAD_STATE_DIR: strict.state }, cwd: strict.repo, totalGb: 32 })
+  assert.strictEqual(s.values['waitGuard.limitSeconds'], 60)
+  assert.strictEqual(s.values['secretsGuard.enabled'], true)
+  assert.ok(s.values['basics.protectedBranches'].includes('release'))
+  const quiet = setup(undefined, { preset: 'quiet' })
+  const q = load({ env: { BULKHEAD_STATE_DIR: quiet.state }, cwd: quiet.repo, totalGb: 32 })
+  assert.strictEqual(q.values['waitGuard.enabled'], true)
+  assert.strictEqual(q.values['basics.agentAuthor'], true)
+  assert.ok(q.warnings.some(x => /"preset": "quiet" \(waitGuard.enabled\)/.test(x)))
+  // the user's own environment still wins over both files
+  const env = load({ env: { BULKHEAD_STATE_DIR: state, BULKHEAD_DISABLE: 'port-guard' }, cwd: repo })
+  assert.strictEqual(env.values['portGuard.enabled'], false)
 })
 
 test('extra shared names are protected', () => {

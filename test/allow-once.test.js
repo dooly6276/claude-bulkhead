@@ -101,7 +101,7 @@ test('a corrupt state file is skipped and removed; nothing throws and nothing is
 
 test('withWayOut: one line with the code and the config snippet', () => {
   const msg = withWayOut(`body\n${ASK_USER}`, { code: '7F3K', json: '{"killGuard":{"allowNames":["node"]}}' })
-  assert.strictEqual(msg, 'body\nIf the user wants this on purpose, ask them to run `bulkhead allow 7F3K` in their own terminal (allows it once), or set {"killGuard":{"allowNames":["node"]}} in .claude/bulkhead.json.')
+  assert.strictEqual(msg, 'body\nIf the user wants this on purpose, ask them to run `bulkhead allow 7F3K` in their own terminal (allows it once), or set {"killGuard":{"allowNames":["node"]}} in their global config file (~/.claude/bulkhead/config.json; a project file cannot loosen a guard).')
   assert.strictEqual(withWayOut('body', { code: 'ABCDE', json: null }), 'body\nIf the user wants this on purpose, ask them to run `bulkhead allow ABCDE` in their own terminal (allows it once).')
   assert.strictEqual(withWayOut(`body\n${ASK_USER}`, {}), 'body')
 })
@@ -120,7 +120,7 @@ test('through the real hook and CLI: block, allow, pass once, block again', () =
   const first = hook('kill-guard.js', KILL, state)
   assert.strictEqual(first.status, 2)
   const code = /`bulkhead allow ([A-Z2-9]{5})`/.exec(first.stderr)[1]
-  assert.match(first.stderr, /\{"killGuard":\{"allowNames":\["node"\]\}\} in \.claude\/bulkhead\.json/)
+  assert.match(first.stderr, /\{"killGuard":\{"allowNames":\["node"\]\}\} in (their|the) global config file \(~\/\.claude\/bulkhead\/config\.json/)
   assert.strictEqual(hook('kill-guard.js', KILL, state).status, 2, 'still blocked before the user approves')
   const out = cli(state, 'allow', code)
   assert.strictEqual(out.status, 0)

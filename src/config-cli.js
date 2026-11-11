@@ -18,7 +18,8 @@ Without options, prints every setting, its value and where the value came from.
 --preset writes "preset" into the global config file, or with --project into this project's
 .claude/bulkhead.json, keeping every other key. quiet: only the cross-session guards and the
 rules that cannot be undone. normal: the defaults. strict: everything on, with tighter limits.
-Keys you set yourself and environment variables still win over a preset.`
+Keys you set yourself and environment variables still win over a preset. A project file can
+only make bulkhead stricter, so quiet goes in the global file.`
 
 // The two RAM limits left on auto, as the number they work out to on this machine.
 function autoValue(key, totalGb) {
@@ -33,7 +34,7 @@ const show = (v, key, totalGb) => (v === null ? autoValue(key, totalGb) : key ==
 
 function render(cfg, { color = false, home, totalGb = os.totalmem() / 2 ** 30 } = {}) {
   const out = []
-  out.push(paint(color, 'bold', 'Files (project wins over global, environment wins over both)'))
+  out.push(paint(color, 'bold', 'Files (project can only tighten global, environment wins over both)'))
   out.push(`  global   ${shortPath(cfg.files.global, home)}  ${fileState(cfg.files.global, cfg.warnings)}`)
   out.push(`  project  ${cfg.files.project ? shortPath(cfg.files.project, home) : '<repo>/.claude/bulkhead.json'}  ${fileState(cfg.files.project, cfg.warnings)}`)
   out.push(`  preset   ${cfg.preset || 'normal'}  ${cfg.presetFrom && cfg.presetFrom !== 'default' ? `(from ${cfg.presetFrom.startsWith('env ') ? cfg.presetFrom : shortPath(cfg.presetFrom, home)})` : '(default)'}`)
@@ -83,6 +84,11 @@ function setPreset(args, { env, stdout, stderr, cwd }) {
     return
   }
   const project = args.includes('--project')
+  if (project && name === 'quiet') {
+    stderr.write('bulkhead config: a project file can only make bulkhead stricter, so quiet would have no effect there. Set it for this machine with: bulkhead config --preset quiet\n')
+    process.exitCode = 1
+    return
+  }
   const file = project ? projectFile(cwd) || path.join(path.resolve(cwd), '.claude', 'bulkhead.json') : globalFile(env)
   let res
   try { res = writePreset(file, name) } catch (e) { res = { error: `could not write ${file}: ${e.message}` } }
@@ -91,7 +97,7 @@ function setPreset(args, { env, stdout, stderr, cwd }) {
     process.exitCode = 1
     return
   }
-  stdout.write(`preset ${name} written to ${shortPath(file)}${project ? '' : ' (every project; a project file or BULKHEAD_PRESET can still override it)'}\n`)
+  stdout.write(`preset ${name} written to ${shortPath(file)}${project ? '' : ' (every project; a project file can make it stricter, BULKHEAD_PRESET overrides it)'}\n`)
 }
 
 function main(args, { env = process.env, stdout = process.stdout, stderr = process.stderr, cwd = env.CLAUDE_PROJECT_DIR || process.cwd() } = {}) {

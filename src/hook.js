@@ -52,12 +52,12 @@ function log(name, line) {
 // One line for the agent and the person reading it: a block can be intentional, and the answer
 // to that is a question to the user, not a way around the guard. <code> is the allow-once code
 // of this block; blocked() fills it in, and adds the config snippet of the rule that fired.
-const ASK_USER = 'If the user wants this on purpose, ask them to run `bulkhead allow <code>` in their own terminal (allows it once), or allow it in .claude/bulkhead.json.'
+const ASK_USER = 'If the user wants this on purpose, ask them to run `bulkhead allow <code>` in their own terminal (allows it once), or allow it in their global config file (~/.claude/bulkhead/config.json).'
 
 // The block text with the one-line way out: the allow-once command and the exact config snippet.
 function withWayOut(message, { code = null, json = null } = {}) {
   const once = code ? `run \`bulkhead allow ${code}\` in their own terminal (allows it once)` : null
-  const perm = json ? `set ${json} in .claude/bulkhead.json` : null
+  const perm = json ? `set ${json} in their global config file (~/.claude/bulkhead/config.json; a project file cannot loosen a guard)` : null
   const how = [once, perm].filter(Boolean).join(', or ')
   const line = how ? `If the user wants this on purpose, ask them to ${how}.` : ''
   const body = message.includes(ASK_USER) ? message.split(ASK_USER).join(line).replace(/\n+$/, '') : message

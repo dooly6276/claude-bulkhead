@@ -299,22 +299,30 @@ O bulkhead cobre um problema diferente: sessões na mesma máquina atrapalhando 
 
 ## Configuração
 
-Os padrões não exigem nenhuma configuração. Para alterá-los, use um arquivo de configuração: `~/.claude/bulkhead/config.json` para a máquina e `<repo>/.claude/bulkhead.json` para um projeto (encontrado subindo até a pasta com `.git`). As configurações do projeto vencem o arquivo global.
+Os padrões não exigem nenhuma configuração. Para alterá-los, use um arquivo de configuração: `~/.claude/bulkhead/config.json` para a máquina e `<repo>/.claude/bulkhead.json` para um projeto (encontrado subindo até a pasta com `.git`).
 
-Um arquivo de projeto pode tirar nomes da lista de bloqueio do kill-guard, ignorar portas ou desligar um guard naquele repositório. Leia o `.claude/bulkhead.json` de um repositório que você clonar antes de trabalhar nele, como faria com o resto da configuração; `bulkhead config` mostra cada ajuste e o arquivo de onde ele veio. Hosts remotos e opções de ssh só são lidos do arquivo global.
+Um arquivo de projeto vem com o repositório, inclusive um que você clonar, então ele só pode deixar o bulkhead mais rígido: adicionar nomes à lista de bloqueio do kill-guard, proteger mais branches, reduzir o limite de espera, aumentar o mínimo de RAM, ligar um guard. Tudo que afrouxa um guard, como `killGuard.allowNames`, `portGuard.ignorePorts`, uma espera maior ou `"enabled": false`, é lido apenas do arquivo global; em um arquivo de projeto é ignorado, com um aviso que o `bulkhead config` e o aviso de inicialização da sessão mostram. Hosts remotos, opções de ssh e o comando de notificação também são somente globais.
 
-Por exemplo, um projeto que roda `ffmpeg` de propósito e tem uma suíte de integração lenta:
+Por exemplo, uma máquina em que você roda `ffmpeg` de propósito e tem uma suíte de integração lenta, em `~/.claude/bulkhead/config.json`:
 
 ```json
 {
   "killGuard": { "allowNames": ["ffmpeg"] },
   "waitGuard": { "limitSeconds": 300 },
-  "portGuard": { "ignorePorts": [9229] },
-  "basics": { "protectedBranches": ["main", "release"] }
+  "portGuard": { "ignorePorts": [9229] }
 }
 ```
 
-Todo guard pode ser desativado com `"<guard>": { "enabled": false }`. O `bulkhead config` imprime cada configuração, seu valor e de onde ele veio. Um arquivo quebrado é ignorado, os guards mantêm seus padrões e a sessão mostra um aviso na inicialização. Todas as chaves estão em [docs/configuration.md](docs/configuration.md), e o [config.example.json](config.example.json) define cada uma delas.
+E um projeto que faz deploy a partir de `release`, no seu `.claude/bulkhead.json`:
+
+```json
+{
+  "basics": { "protectedBranches": ["release"] },
+  "secretsGuard": { "enabled": true }
+}
+```
+
+Todo guard pode ser desativado com `"<guard>": { "enabled": false }` no arquivo global. O `bulkhead config` imprime cada configuração, seu valor e de onde ele veio. Um arquivo quebrado é ignorado, os guards mantêm seus padrões e a sessão mostra um aviso na inicialização. Todas as chaves estão em [docs/configuration.md](docs/configuration.md), e o [config.example.json](config.example.json) define cada uma delas.
 
 As variáveis de ambiente continuam funcionando e vencem os dois arquivos. O lugar mais simples para colocá-las é o bloco `env` do `~/.claude/settings.json`.
 
@@ -540,7 +548,7 @@ Isso exige `npm install -g claude-bulkhead`, que coloca o `bulkhead-statusline` 
 Um pouco. Todos os guards do Bash rodam em um único processo Node curto e sem dependências, cerca de 76 ms por chamada de ferramenta em um MacBook Pro (Node 24), dos quais 32 ms são só para iniciar o Node. Quando 10 sessões fazem uma chamada de ferramenta no mesmo instante, cada uma espera cerca de 89 ms (318 ms quando cada guard era um processo separado, como na 0.2). Gravar um bloqueio no log de eventos não acrescenta tempo mensurável. Os guards só fazem trabalho lento, como ler a lista de processos (um ou dois segundos no Windows), quando o comando casa: a inicialização de um dev server em uma porta que já responde, um kill, um comando pesado. A status line leva cerca de 100 ms a frio e fica em cache por 5 segundos.
 
 **Ele bloqueou algo que não devia. O que eu faço?**
-Rode `bulkhead log` para ver o comando exato e o motivo. Libere-o na configuração do projeto, `<repo>/.claude/bulkhead.json`: `killGuard.allowNames` para um nome de programa, `portGuard.ignorePorts` para uma porta compartilhada, `waitGuard.limitSeconds` para uma espera mais longa, ou `"enabled": false` para o guard inteiro nesse projeto. Veja [docs/configuration.md](docs/configuration.md). Depois, por favor, abra uma [issue de falso positivo](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml) com a linha do `bulkhead log`, para que o padrão seja corrigido para todo mundo.
+Rode `bulkhead log` para ver o comando exato e o motivo. Libere-o uma vez com `bulkhead allow <code>`, o código da mensagem de bloqueio. Para liberar de forma permanente, defina na configuração global, `~/.claude/bulkhead/config.json`: `killGuard.allowNames` para um nome de programa, `portGuard.ignorePorts` para uma porta compartilhada, `waitGuard.limitSeconds` para uma espera mais longa, ou `"enabled": false` para o guard inteiro. O `.claude/bulkhead.json` de um projeto não pode afrouxar um guard. Veja [docs/configuration.md](docs/configuration.md). Depois, por favor, abra uma [issue de falso positivo](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml) com a linha do `bulkhead log`, para que o padrão seja corrigido para todo mundo.
 
 **Ele é útil com uma única sessão?**
 Sim. O kill-guard, o wait-guard, o memory-guard e o basics protegem uma única sessão e seus subagents da mesma forma. O port-guard e o checkout-guard só agem quando há outra sessão ativa, e o orphan-reaper limpa o que ficou de sessões que já terminaram.

@@ -1,6 +1,6 @@
 # Configuration
 
-Every guard works without configuration. When one gets in the way of a project, change that one setting for that project instead of turning the guard off everywhere.
+Every guard works without configuration. When one gets in the way, change that one setting instead of turning the guard off.
 
 ## Where settings come from
 
@@ -8,7 +8,7 @@ From lowest to highest priority:
 
 1. Built-in defaults, with the [preset](#presets) layered over them (`"preset"` in a file, or `BULKHEAD_PRESET`).
 2. The global file, `~/.claude/bulkhead/config.json` (`$BULKHEAD_STATE_DIR/config.json` when that variable is set).
-3. The project file, `.claude/bulkhead.json` in the project. It is looked up from the project directory (`CLAUDE_PROJECT_DIR`, else the working directory) upward, and the search stops at the first folder that contains `.git` or at the home directory. A key set here replaces the same key from the global file; lists are replaced, not merged.
+3. The project file, `.claude/bulkhead.json` in the project. It is looked up from the project directory (`CLAUDE_PROJECT_DIR`, else the working directory) upward, and the search stops at the first folder that contains `.git` or at the home directory. It can only make bulkhead stricter; see [What a project file can change](#what-a-project-file-can-change).
 4. Environment variables. They always win. Set them in the `env` block of `~/.claude/settings.json` to apply them to every session.
 
 `bulkhead config` prints the value of every key and which of these it came from.
@@ -23,6 +23,23 @@ Both files are plain JSON (no comments) with one object per section. [`config.ex
 }
 ```
 
+## What a project file can change
+
+A project's `.claude/bulkhead.json` comes with the repository, including one you clone from someone else, so it can only add restrictions. Each key it sets is applied only in the stricter direction, compared with the value from the defaults, the preset and the global file:
+
+| Key kind | In a project file |
+|---|---|
+| A guard or rule switch (`killGuard.enabled`, `basics.forcePushMain`, `checkoutGuard.stageAll`, `log.enabled`, ...) | Can turn it on, not off |
+| `memoryGuard.autoQueue`, `orphanReaper.enabled`, `orphanReaper.onSessionEnd` | Can turn it off, not on, since on means bulkhead runs or stops things |
+| `waitGuard.limitSeconds`, `memory.maxCommitPct`, `allowOnce.ttlMinutes` | Can lower it |
+| `memory.minFreeGb`, `memory.slotFloorGb`, `editGuard.windowMinutes` | Can raise it |
+| `editGuard.mode` | Can move it toward `block` (`warn`, then `ask`, then `block`) |
+| `killGuard.extraSharedNames`, `basics.protectedBranches`, `secretsGuard.extraPatterns`, `orphanReaper.keepNames`, `orphanReaper.keepPatterns` | Adds to the global list |
+| `memoryGuard.estimatesGb`, `memoryGuard.waitMinutes`, `notify.minIntervalSeconds` | Any value |
+| `killGuard.allowNames`, `portGuard.ignorePorts`, `secretsGuard.allow`, `orphanReaper.extraNames`, `notify.command`, `remote.default`, `remotes` | Global file only |
+
+A value that would loosen a guard is ignored, and `bulkhead config`, `bulkhead doctor` and the session's startup notice name it. A project `"preset"` works the same way: `strict` tightens, and the looser values of `quiet` are ignored. Environment variables are yours, not the repository's, so they still win over both files.
+
 ## Presets
 
 A preset changes the defaults of many keys at once. It sits between the built-in defaults and the files, so any key you set yourself, in either file or in an environment variable, still wins.
@@ -32,7 +49,7 @@ bulkhead config --preset quiet            # for every project
 bulkhead config --preset strict --project # for this project only
 ```
 
-This writes `"preset": "quiet"` (or `"normal"`, `"strict"`) at the top level of the global file, or with `--project` of `.claude/bulkhead.json`, and keeps every other key. A project preset wins over the global one, and `BULKHEAD_PRESET` wins over both. `bulkhead config` and `bulkhead doctor` show the active preset, and `bulkhead config` marks every value that comes from it as `preset NAME`.
+This writes `"preset": "quiet"` (or `"normal"`, `"strict"`) at the top level of the global file, or with `--project` of `.claude/bulkhead.json`, and keeps every other key. A project preset is applied over the global one only where it is stricter, and `BULKHEAD_PRESET` wins over both. `bulkhead config` and `bulkhead doctor` show the active preset, and `bulkhead config` marks every value that comes from it as `preset NAME`.
 
 | Preset | What it sets |
 |---|---|
@@ -236,12 +253,19 @@ An entry with a problem (a missing `host`, an unknown key, a value of the wrong 
 
 ## Examples
 
-A project that encodes video and kills its own stuck ffmpeg runs by name, and deploys from a `release` branch:
+A machine that encodes video and kills its own stuck ffmpeg runs by name, in the global file:
 
 ```json
 {
-  "killGuard": { "allowNames": ["ffmpeg"] },
-  "basics": { "protectedBranches": ["main", "release"] }
+  "killGuard": { "allowNames": ["ffmpeg"] }
+}
+```
+
+A project that deploys from a `release` branch, in its `.claude/bulkhead.json` (added to `main` and `master`):
+
+```json
+{
+  "basics": { "protectedBranches": ["release"] }
 }
 ```
 
@@ -253,7 +277,7 @@ A machine with 64 GB that should keep more headroom before a second heavy job:
 }
 ```
 
-A project whose integration tests legitimately wait up to five minutes in the foreground:
+A machine whose integration tests legitimately wait up to five minutes in the foreground, in the global file:
 
 ```json
 {

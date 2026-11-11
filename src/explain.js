@@ -206,7 +206,7 @@ function render(r, { color = false, home = os.homedir() } = {}) {
       out.push('  the agent sees:')
       for (const line of g.message.split('\n')) out.push(`    ${line}`)
       if (g.allowOnce) out.push('  allow once   the user runs `bulkhead allow <code>` in their terminal; the code is in the real block message')
-      if (g.config) out.push(`  allow always ${g.config} in .claude/bulkhead.json`)
+      if (g.config) out.push(`  allow always ${g.config} in the global config file (~/.claude/bulkhead/config.json)`)
       if (g.disable) out.push(`  or           BULKHEAD_DISABLE=${g.disable}`)
       if (!g.allowOnce) out.push('  not allowable: only the user can approve, and not through the agent')
     }

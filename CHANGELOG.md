@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 - 2026-11-12
+
+### Changed
+
+- **A project file can only make bulkhead stricter.** A repository's `.claude/bulkhead.json` comes with whatever you clone, so it can no longer take names off kill-guard's list, ignore ports, lengthen the wait limit, lower the RAM floor, turn a guard or rule off, turn on auto-queue or add programs for orphan-reaper to stop. Those settings are read from the global file only; in a project file they are ignored with a warning in `bulkhead config`, `bulkhead doctor` and the startup notice. A project can still add shared names, protected branches and secret patterns (added to the global lists, no longer replacing them), tighten limits and turn guards on. A project preset applies only where it is stricter. Block messages now point to the global file.
+- **The skill no longer runs `bulkhead remote run` on its own.** It shows the user the remote, the commit and every uncommitted change it would send, any `--files` it would add, and the command, and runs it only after the user says yes to that run, as `/bulkhead:remote` already did. memory-guard's block message says the same.
 
 ### Fixed
 

@@ -15,6 +15,6 @@ Latest events:
 Summarize for the user:
 
 - Which guards and rules fired most, and in which projects.
-- Any pattern worth acting on, for example the same command blocked again and again in one project. When a block looks like a false positive, name the config key that would allow it (see `bulkhead config`), such as `killGuard.allowNames` or `portGuard.ignorePorts`, and suggest putting it in that project's `.claude/bulkhead.json` rather than turning the guard off.
+- Any pattern worth acting on, for example the same command blocked again and again in one project. When a block looks like a false positive, name the config key that would allow it (see `bulkhead config`), such as `killGuard.allowNames` or `portGuard.ignorePorts`, and suggest the user puts it in their global config, `~/.claude/bulkhead/config.json`, rather than turning the guard off. A project's `.claude/bulkhead.json` cannot loosen a guard.
 
 If nothing was recorded, say so in one line.

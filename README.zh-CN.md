@@ -299,22 +299,30 @@ bulkhead 解决的是另一个问题：同一台机器上的会话因为进程�
 
 ## 配置
 
-默认值不需要任何设置。要修改时使用配置文件：机器级 `~/.claude/bulkhead/config.json`，项目级 `<repo>/.claude/bulkhead.json`（从当前目录向上查找到含 `.git` 的目录）。项目设置优先于全局文件。
+默认值不需要任何设置。要修改时使用配置文件：机器级 `~/.claude/bulkhead/config.json`，项目级 `<repo>/.claude/bulkhead.json`（从当前目录向上查找到含 `.git` 的目录）。
 
-项目配置文件可以把名字从 kill-guard 的拦截列表中去掉、忽略端口，或在该仓库关闭某个 guard。clone 别人的仓库后，开始工作前请像查看其他配置一样看一下 `.claude/bulkhead.json`。`bulkhead config` 会列出每项设置及其来源文件。远程主机和 ssh 选项只从全局文件读取。
+项目配置文件随仓库一起而来，clone 下来的仓库也一样，所以它只能让 bulkhead 更严格：向 kill-guard 的拦截列表添加名字、保护更多分支、降低等待上限、提高 RAM 下限、开启某个 guard。任何会放宽 guard 的设置，例如 `killGuard.allowNames`、`portGuard.ignorePorts`、更长的等待或 `"enabled": false`，都只从全局文件读取；写在项目文件里会被忽略并给出警告，`bulkhead config` 和会话启动时的提示都会显示这条警告。远程主机、ssh 选项和通知命令也只从全局文件读取。
 
-比如一个有意使用 `ffmpeg`、集成测试又很慢的项目：
+比如一台有意使用 `ffmpeg`、集成测试又很慢的机器，在 `~/.claude/bulkhead/config.json` 中这样写：
 
 ```json
 {
   "killGuard": { "allowNames": ["ffmpeg"] },
   "waitGuard": { "limitSeconds": 300 },
-  "portGuard": { "ignorePorts": [9229] },
-  "basics": { "protectedBranches": ["main", "release"] }
+  "portGuard": { "ignorePorts": [9229] }
 }
 ```
 
-每个 guard 都可以用 `"<guard>": { "enabled": false }` 关闭。`bulkhead config` 列出每项设置的实际值及其来源。文件损坏时会被忽略，guard 使用默认值，并在会话启动时提示一次。全部键见 [docs/configuration.md](docs/configuration.md)，[config.example.json](config.example.json) 里列出了每一个键。
+再比如一个从 `release` 部署的项目，在它的 `.claude/bulkhead.json` 中这样写：
+
+```json
+{
+  "basics": { "protectedBranches": ["release"] },
+  "secretsGuard": { "enabled": true }
+}
+```
+
+每个 guard 都可以在全局文件中用 `"<guard>": { "enabled": false }` 关闭。`bulkhead config` 列出每项设置的实际值及其来源。文件损坏时会被忽略，guard 使用默认值，并在会话启动时提示一次。全部键见 [docs/configuration.md](docs/configuration.md)，[config.example.json](config.example.json) 里列出了每一个键。
 
 环境变量仍然有效，并且优先于两个文件。最简单的位置是 `~/.claude/settings.json` 的 `env` 块。
 
@@ -540,7 +548,7 @@ sessions 是 `~/.claude/sessions` 里活着的会话数，heavy 是持有 bulkhe
 会慢一点。所有 Bash guard 在同一个没有依赖的短命 Node 进程里运行，在 MacBook Pro（Node 24）上每次工具调用约 76 ms，其中 32 ms 是启动 Node 的时间。10 个会话在同一时刻发起工具调用时，每个约等待 89 ms（每个 guard 各占一个进程时是 318 ms，0.2 版就是这样）。把拦截写入事件日志的开销测不出来。读取进程列表（Windows 上需要一两秒）这类慢操作只在命令匹配时才做：在已有响应的端口上启动开发服务器、结束进程、运行重命令。状态栏冷启动约 100 ms，并缓存 5 秒。
 
 **它拦了不该拦的命令，怎么办？**
-用 `bulkhead log` 查看具体命令和原因。在项目配置 `<repo>/.claude/bulkhead.json` 里放行：程序名用 `killGuard.allowNames`，共用端口用 `portGuard.ignorePorts`，更长的等待用 `waitGuard.limitSeconds`，要在该项目关闭整个 guard 就写 `"enabled": false`。见 [docs/configuration.md](docs/configuration.md)。然后请附上 `bulkhead log` 里的那一行提交一个 [误报 issue](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml)，方便修正规则。
+用 `bulkhead log` 查看具体命令和原因。只放行这一次，用拦截提示里的代码运行 `bulkhead allow <code>`。要长期放行，在全局配置 `~/.claude/bulkhead/config.json` 里设置：程序名用 `killGuard.allowNames`，共用端口用 `portGuard.ignorePorts`，更长的等待用 `waitGuard.limitSeconds`，要关闭整个 guard 就写 `"enabled": false`。项目里的 `.claude/bulkhead.json` 不能放宽 guard。见 [docs/configuration.md](docs/configuration.md)。然后请附上 `bulkhead log` 里的那一行提交一个 [误报 issue](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml)，方便修正规则。
 
 **只开一个会话有用吗？**
 有用。kill-guard、wait-guard、memory-guard、basics 对单个会话及其子代理同样有效。port-guard 和 checkout-guard 只在有其他会话存活时才起作用。orphan-reaper 会清理已退出会话留下的进程。

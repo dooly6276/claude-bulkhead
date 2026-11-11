@@ -355,7 +355,7 @@ Prints which config files were found, the active preset, every setting with its 
 
 ```
 $ bulkhead config
-Files (project wins over global, environment wins over both)
+Files (project can only tighten global, environment wins over both)
   global   ~/.claude/bulkhead/config.json  loaded
   project  ~/src/acme-web/.claude/bulkhead.json  loaded
   preset   quiet  (from ~/.claude/bulkhead/config.json)
@@ -364,16 +364,16 @@ KEY                            VALUE                        FROM
 killGuard.enabled              true                         default
 killGuard.allowNames           ["ffmpeg"]                   ~/.claude/bulkhead/config.json
 waitGuard.enabled              false                        preset quiet
-waitGuard.limitSeconds         300                          ~/src/acme-web/.claude/bulkhead.json
+waitGuard.limitSeconds         120                          ~/src/acme-web/.claude/bulkhead.json
 memory.minFreeGb               auto (3 GB on this machine)  default
 ...
 ```
 
-`--preset` writes `"preset"` into the global config file (`~/.claude/bulkhead/config.json`), or with `--project` into the project's `.claude/bulkhead.json` (created when missing), and keeps every other key in the file. A file that is not valid JSON is never overwritten. `quiet` keeps only the guards that protect one session from another and the two rules that cannot be undone; `normal` is the defaults; `strict` has everything on with tighter limits. Keys you set yourself and environment variables still win over a preset. The exact contents of each preset are in [configuration.md](configuration.md#presets).
+`--preset` writes `"preset"` into the global config file (`~/.claude/bulkhead/config.json`), or with `--project` into the project's `.claude/bulkhead.json` (created when missing), and keeps every other key in the file. A file that is not valid JSON is never overwritten. `quiet` keeps only the guards that protect one session from another and the two rules that cannot be undone; `normal` is the defaults; `strict` has everything on with tighter limits. Keys you set yourself and environment variables still win over a preset. A project file can only make bulkhead stricter, so `--preset quiet --project` is refused and a project preset applies only where it tightens. The exact contents of each preset are in [configuration.md](configuration.md#presets).
 
 ```
 $ bulkhead config --preset quiet
-preset quiet written to ~/.claude/bulkhead/config.json (every project; a project file or BULKHEAD_PRESET can still override it)
+preset quiet written to ~/.claude/bulkhead/config.json (every project; a project file can make it stricter, BULKHEAD_PRESET overrides it)
 ```
 
 ## bulkhead explain

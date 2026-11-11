@@ -299,22 +299,30 @@ bulkhead 는 다른 문제를 다룹니다. 한 컴퓨터의 세션들이 프로
 
 ## 설정
 
-기본값 그대로 쓰면 따로 정할 것이 없습니다. 바꾸려면 설정 파일을 씁니다. 컴퓨터 단위는 `~/.claude/bulkhead/config.json`, 프로젝트 단위는 `<repo>/.claude/bulkhead.json` 입니다(`.git` 이 있는 폴더까지 위로 올라가며 찾습니다). 프로젝트 설정이 전역 설정보다 우선합니다.
+기본값 그대로 쓰면 따로 정할 것이 없습니다. 바꾸려면 설정 파일을 씁니다. 컴퓨터 단위는 `~/.claude/bulkhead/config.json`, 프로젝트 단위는 `<repo>/.claude/bulkhead.json` 입니다(`.git` 이 있는 폴더까지 위로 올라가며 찾습니다).
 
-프로젝트 설정 파일은 kill-guard 의 막는 목록에서 이름을 빼거나, 포트를 무시하거나, 그 저장소에서 가드를 끌 수 있습니다. 남의 저장소를 받았다면 작업하기 전에 다른 설정 파일처럼 `.claude/bulkhead.json` 도 읽어 보세요. `bulkhead config` 는 모든 설정과 그 값이 온 파일을 보여 줍니다. 원격 호스트와 ssh 옵션은 전역 파일에서만 읽습니다.
+프로젝트 설정 파일은 저장소와 함께 오고, 직접 받은(clone) 저장소의 파일도 마찬가지이므로 bulkhead 를 더 엄격하게 만드는 설정만 적용됩니다. kill-guard 의 막는 목록에 이름 추가, 보호할 브랜치 추가, 대기 한도 낮추기, 최소 RAM 높이기, 가드 켜기가 해당합니다. `killGuard.allowNames`, `portGuard.ignorePorts`, 더 긴 대기, `"enabled": false` 처럼 가드를 느슨하게 만드는 설정은 전역 파일에서만 읽습니다. 프로젝트 파일에 있으면 무시되고 경고가 나오며, 이 경고는 `bulkhead config` 와 세션 시작 알림에서 볼 수 있습니다. 원격 호스트, ssh 옵션, 알림 명령도 전역 파일에서만 읽습니다.
 
-예를 들어 일부러 `ffmpeg` 를 쓰고 통합 테스트가 오래 걸리는 프로젝트라면 이렇게 둡니다.
+예를 들어 일부러 `ffmpeg` 를 쓰고 통합 테스트가 오래 걸리는 컴퓨터라면 `~/.claude/bulkhead/config.json` 에 이렇게 둡니다.
 
 ```json
 {
   "killGuard": { "allowNames": ["ffmpeg"] },
   "waitGuard": { "limitSeconds": 300 },
-  "portGuard": { "ignorePorts": [9229] },
-  "basics": { "protectedBranches": ["main", "release"] }
+  "portGuard": { "ignorePorts": [9229] }
 }
 ```
 
-가드는 모두 `"<가드>": { "enabled": false }` 로 끌 수 있습니다. `bulkhead config` 는 설정마다 실제 값과 그 값이 어디서 왔는지 보여 줍니다. 파일이 깨져 있으면 그 파일은 무시하고 기본값으로 돌며, 세션을 시작할 때 알림을 한 번 띄웁니다. 키 전체는 [docs/configuration.md](docs/configuration.md) 에 있고, [config.example.json](config.example.json) 에 모든 키가 들어 있습니다.
+그리고 `release` 에서 배포하는 프로젝트라면 `.claude/bulkhead.json` 에 이렇게 둡니다.
+
+```json
+{
+  "basics": { "protectedBranches": ["release"] },
+  "secretsGuard": { "enabled": true }
+}
+```
+
+가드는 전역 파일에서 `"<가드>": { "enabled": false }` 로 끌 수 있습니다. `bulkhead config` 는 설정마다 실제 값과 그 값이 어디서 왔는지 보여 줍니다. 파일이 깨져 있으면 그 파일은 무시하고 기본값으로 돌며, 세션을 시작할 때 알림을 한 번 띄웁니다. 키 전체는 [docs/configuration.md](docs/configuration.md) 에 있고, [config.example.json](config.example.json) 에 모든 키가 들어 있습니다.
 
 환경 변수도 그대로 되고, 두 파일보다 우선합니다. `~/.claude/settings.json` 의 `env` 칸에 넣는 게 가장 쉽습니다.
 
@@ -540,7 +548,7 @@ sessions 는 `~/.claude/sessions` 에서 살아 있는 세션 수, heavy 는 bul
 조금 느려집니다. Bash 가드는 모두 의존성 없는 짧은 Node 프로세스 하나에서 돌고, MacBook Pro(Node 24)에서 도구 호출당 약 76 ms 가 걸립니다. 그중 32 ms 는 Node 를 띄우는 시간입니다. 세션 10개가 같은 순간에 도구를 호출하면 각각 약 89 ms 를 기다립니다(가드마다 프로세스를 따로 띄우던 0.2 에서는 318 ms). 막은 기록을 이벤트 로그에 쓰는 시간은 재지 못할 만큼 작습니다. 프로세스 목록 읽기(Windows 에서 1, 2초)처럼 느린 일은 명령이 맞는 모양일 때만 합니다. 이미 응답하는 포트에 개발 서버를 띄울 때, 무언가를 끌 때, 무거운 명령일 때입니다. 상태 줄은 캐시 없이 약 100 ms 가 걸리고 5초 동안 캐시합니다.
 
 **막지 말아야 할 걸 막았어요.**
-`bulkhead log` 로 정확한 명령과 이유를 봅니다. 프로젝트 설정 `<repo>/.claude/bulkhead.json` 에서 통과시킵니다. 프로그램 이름은 `killGuard.allowNames`, 같이 쓰는 포트는 `portGuard.ignorePorts`, 더 긴 대기는 `waitGuard.limitSeconds`, 그 프로젝트에서 가드 전체를 끄려면 `"enabled": false` 입니다. [docs/configuration.md](docs/configuration.md) 를 보세요. 그리고 `bulkhead log` 의 그 줄을 붙여 [오탐 이슈](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml)를 남겨 주세요. 패턴을 고쳐 모두에게 반영하겠습니다.
+`bulkhead log` 로 정확한 명령과 이유를 봅니다. 한 번만 통과시키려면 차단 메시지에 나온 코드로 `bulkhead allow <code>` 를 실행합니다. 계속 통과시키려면 전역 설정 `~/.claude/bulkhead/config.json` 에 정합니다. 프로그램 이름은 `killGuard.allowNames`, 같이 쓰는 포트는 `portGuard.ignorePorts`, 더 긴 대기는 `waitGuard.limitSeconds`, 가드 전체를 끄려면 `"enabled": false` 입니다. 프로젝트의 `.claude/bulkhead.json` 으로는 가드를 느슨하게 할 수 없습니다. [docs/configuration.md](docs/configuration.md) 를 보세요. 그리고 `bulkhead log` 의 그 줄을 붙여 [오탐 이슈](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml)를 남겨 주세요. 패턴을 고쳐 모두에게 반영하겠습니다.
 
 **세션을 하나만 써도 쓸모가 있나요?**
 있습니다. kill-guard, wait-guard, memory-guard, basics 는 세션 하나와 그 서브에이전트도 똑같이 지킵니다. port-guard 와 checkout-guard 는 다른 세션이 살아 있을 때만 움직입니다. orphan-reaper 는 끝난 세션이 남긴 것을 치웁니다.

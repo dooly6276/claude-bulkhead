@@ -299,22 +299,30 @@ bulkhead covers a different problem: sessions on one machine getting in each oth
 
 ## Configuration
 
-The defaults need no setup. To change them, use a config file: `~/.claude/bulkhead/config.json` for the machine, and `<repo>/.claude/bulkhead.json` for one project (found by walking up to the folder with `.git`). Project settings win over the global file.
+The defaults need no setup. To change them, use a config file: `~/.claude/bulkhead/config.json` for the machine, and `<repo>/.claude/bulkhead.json` for one project (found by walking up to the folder with `.git`).
 
-A project file can take names off kill-guard's block list, ignore ports or turn a guard off for that repository. Read `.claude/bulkhead.json` in a repository you clone before you work in it, as you would its other config; `bulkhead config` shows every setting and the file it came from. Remote hosts and ssh options are read from the global file only.
+A project file comes with the repository, including one you clone, so it can only make bulkhead stricter: add names to kill-guard's block list, protect more branches, lower the wait limit, raise the RAM floor, turn a guard on. Anything that loosens a guard, such as `killGuard.allowNames`, `portGuard.ignorePorts`, a longer wait or `"enabled": false`, is read from the global file only; in a project file it is ignored with a warning that `bulkhead config` and the session's startup notice show. Remote hosts, ssh options and the notify command are global-only too.
 
-For example, a project that runs `ffmpeg` on purpose and has a slow integration suite:
+For example, a machine where you run `ffmpeg` on purpose and have a slow integration suite, in `~/.claude/bulkhead/config.json`:
 
 ```json
 {
   "killGuard": { "allowNames": ["ffmpeg"] },
   "waitGuard": { "limitSeconds": 300 },
-  "portGuard": { "ignorePorts": [9229] },
-  "basics": { "protectedBranches": ["main", "release"] }
+  "portGuard": { "ignorePorts": [9229] }
 }
 ```
 
-Every guard can be turned off with `"<guard>": { "enabled": false }`. `bulkhead config` prints every setting, its value and where it came from. A broken file is ignored, the guards keep their defaults, and the session shows one notice at startup. All keys are in [docs/configuration.md](docs/configuration.md), and [config.example.json](config.example.json) sets each of them.
+And a project that deploys from `release`, in its `.claude/bulkhead.json`:
+
+```json
+{
+  "basics": { "protectedBranches": ["release"] },
+  "secretsGuard": { "enabled": true }
+}
+```
+
+Every guard can be turned off with `"<guard>": { "enabled": false }` in the global file. `bulkhead config` prints every setting, its value and where it came from. A broken file is ignored, the guards keep their defaults, and the session shows one notice at startup. All keys are in [docs/configuration.md](docs/configuration.md), and [config.example.json](config.example.json) sets each of them.
 
 Environment variables still work and win over both files. The simplest place for them is the `env` block of `~/.claude/settings.json`.
 
@@ -540,7 +548,7 @@ This needs `npm install -g claude-bulkhead`, which puts `bulkhead-statusline` on
 A little. All the Bash guards run in one short Node process with no dependencies, about 76 ms per tool call on a MacBook Pro (Node 24), of which 32 ms is starting Node. When 10 sessions make a tool call at the same moment, each waits about 89 ms (318 ms when every guard was its own process, as in 0.2). Writing a block to the event log adds no measurable time. The guards only do slow work, such as reading the process list (a second or two on Windows), when the command matches: a dev server start on a port that already answers, a kill, a heavy command. The status line takes about 100 ms cold and is cached for 5 seconds.
 
 **It blocked something it should not have. What do I do?**
-Run `bulkhead log` to see the exact command and reason. Let it through in the project config, `<repo>/.claude/bulkhead.json`: `killGuard.allowNames` for a program name, `portGuard.ignorePorts` for a shared port, `waitGuard.limitSeconds` for a longer wait, or `"enabled": false` for the whole guard in that project. See [docs/configuration.md](docs/configuration.md). Then please open a [false positive issue](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml) with the line from `bulkhead log`, so the pattern can be fixed for everyone.
+Run `bulkhead log` to see the exact command and reason. Let it through once with `bulkhead allow <code>`, the code in the block message. To let it through for good, set it in the global config, `~/.claude/bulkhead/config.json`: `killGuard.allowNames` for a program name, `portGuard.ignorePorts` for a shared port, `waitGuard.limitSeconds` for a longer wait, or `"enabled": false` for the whole guard. A project's `.claude/bulkhead.json` cannot loosen a guard. See [docs/configuration.md](docs/configuration.md). Then please open a [false positive issue](https://github.com/dooly6276/claude-bulkhead/issues/new?template=false-positive.yml) with the line from `bulkhead log`, so the pattern can be fixed for everyone.
 
 **Is it useful with a single session?**
 Yes. kill-guard, wait-guard, memory-guard and basics protect one session and its subagents just as well. port-guard and checkout-guard only act when another session is alive, and orphan-reaper cleans up after sessions that have exited.

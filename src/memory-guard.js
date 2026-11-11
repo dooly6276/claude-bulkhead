@@ -189,7 +189,7 @@ function check(cmd, memory = () => readMemory(), minFreeGb, mode = 'sh', remote 
     'Starting more work at this point is how machines freeze. Wait a minute, use fewer workers (for example --maxWorkers=2), or queue it:\n' +
     `  ${slotLine(cmd, mode, setting('memoryGuard.estimatesGb', null))}\n` +
     'bulkhead-slot waits until there is room, runs the command, and frees the slot when it exits.' +
-    (remote() ? '\nOr run it on another machine, so it uses that machine\'s RAM:\n  bulkhead remote run -- <command>' : '')
+    (remote() ? '\nA remote is configured: you can offer the user to run it there (bulkhead remote run -- <command>). That sends this project\'s code over SSH, so ask first and run it only after they say yes.' : '')
 }
 
 // { rule, message } with the rule name the hook logs, or null.
