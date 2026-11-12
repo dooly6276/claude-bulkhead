@@ -186,9 +186,11 @@ test('checkout-guard sees another agent working in the same tree', () => {
   }
   const hit = classify('git checkout main', { cwd: repo, sessionId: 'mine', files: () => files, isAlive: () => true, run })
   assert.ok(hit)
-  assert.match(hit.why, /another Codex session works in the same tree \(session 10 in \/work\/shop\)/)
+  // guards name the other session's folder with forward slashes on every platform
+  const shown = repo.replace(/\\/g, '/')
+  assert.ok(hit.why.includes(`another Codex session works in the same tree (session 10 in ${shown})`), hit.why)
   const rm = classify(`rm -rf ${repo}`, { cwd: '/tmp', sessionId: 'mine', files: () => files, isAlive: () => true, run, home: '/home/dev' })
-  assert.match(rm.why, /another Codex session works in it \(session 10 in \/work\/shop\)/)
+  assert.ok(rm.why.includes(`another Codex session works in it (session 10 in ${shown})`), rm.why)
 })
 
 test('readLiveSessionFiles adds other agents with their folder, skips the caller, and stays cheap without them', () => {

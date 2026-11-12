@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Windows: `bulkhead worktree prune` and `list` now match a session or the current folder to its worktree when one of the two paths uses an 8.3 short name (`C:\Users\RUNNER~1\...`) and git prints the long one. Before, prune could remove a worktree a live session was working in, or the one it was run from. The Windows CI jobs pass again: the other failures were tests that assumed `/bin/sh`, paths without a drive letter, or the Linux time limit for the 1 MB fuzz case.
+
 ## 0.3.3 - 2026-11-12
 
 ### Changed

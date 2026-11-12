@@ -6,7 +6,7 @@ const path = require('path')
 const { spawnSync } = require('child_process')
 const { admit, take, release, readSlots, limits } = require('../src/slots')
 const { shellCommand, findGitBash } = require('../src/slot-cli')
-const { tempDir } = require('./helpers')
+const { tempDir, posixShell } = require('./helpers')
 
 const limit = { minFreeGb: 3, floorGb: 5, maxCommitPct: 75 }
 const now = 1_000_000_000
@@ -190,7 +190,7 @@ test('twelve short jobs on eight slots finish in a few seconds, not in 15 second
   const env = { ...process.env, BULKHEAD_STATE_DIR: state, BULKHEAD_TEST_MEMORY: JSON.stringify({ freeGb: 60, totalGb: 64, commitPct: null }) }
   const started = Date.now()
   const script = Array.from({ length: 12 }, (_, i) => `"${process.execPath}" "${bin}" run --gb=1 --label=j${i} -- node -e "setTimeout(()=>{},1200)" >/dev/null 2>&1 &`).join('\n') + '\nwait'
-  const r = spawnSync('/bin/sh', ['-c', script], { env, encoding: 'utf8' })
+  const r = spawnSync(posixShell(), ['-c', script], { env, encoding: 'utf8' })
   assert.strictEqual(r.status, 0, r.stderr)
   const took = Date.now() - started
   assert.ok(took < 8000, `took ${took} ms`)

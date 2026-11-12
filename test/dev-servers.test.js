@@ -186,7 +186,7 @@ test('package runners, wrappers and groups reach the tool underneath', () => {
     ['stdbuf -oL npm run dev', 3000], ['sudo -u me npm run dev', 3000], ['dotenv -e .env -- npm run dev', 3000], ['dotenv -- next dev -p 3042', 3042], ['env-cmd -f .env npm run dev', 3000],
     ['cross-env NODE_ENV=development next dev', 3000], ['cross-env PORT=3043 node server.js', 3043], ['uv run uvicorn app:app --port 3044', 3044], ['poetry run flask run', 5000],
     ['(npm run dev &)', 3000], ['(cd web && npm run dev)', 5200], ['cd web && npm run dev', 5200], ['{ npm run dev; }', 3000], ['if true; then npm run dev; fi', 3000],
-    ['for i in 1 2; do npm run dev & done', 3000], ['nohup npm run dev > dev.log 2>&1 &', 3000], ['cd /w/app/web && npm run dev', 5200],
+    ['for i in 1 2; do npm run dev & done', 3000], ['nohup npm run dev > dev.log 2>&1 &', 3000], [`cd ${path.resolve('/w/app/web').replace(/\\/g, '/')} && npm run dev`, 5200],
     ['pnpm --filter api dev', 8100], ['yarn workspace api dev', 8100], ['npm run dev -w api', 8100], ['npm run dev --workspace=api', 8100],
   ]
   for (const [cmd, want] of runnerCases) assert.strictEqual(portOf(cmd), want, cmd)

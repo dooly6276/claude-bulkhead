@@ -199,5 +199,6 @@ test('git global options do not hide force-pushes, resets or the repository', ()
   const seen = []
   const run = args => { seen.push(args.join(' ')); return args.includes('status') ? ' M a.js\n' : '' }
   check('git --git-dir=/srv/repo.git --work-tree=/srv/site reset --hard', { ...linux(), run })
-  assert.ok(seen.some(a => a === '--git-dir=/srv/repo.git --work-tree=/srv/site status --porcelain'), seen.join(' | '))
+  const want = `--git-dir=${path.resolve('/srv/repo.git')} --work-tree=${path.resolve('/srv/site')} status --porcelain`
+  assert.ok(seen.some(a => a === want), seen.join(' | '))
 })
