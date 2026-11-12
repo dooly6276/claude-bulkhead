@@ -60,7 +60,7 @@ Use the plugin or `bulkhead setup`, not both: with both, every command is checke
 
 ## Which agents, and where
 
-Every agent in this table has a pre-tool hook that can block a shell command; each row was checked against the agent's own documentation or source (links below the table). "Sessions" says how `bulkhead status` and the guards recognize its live CLI process.
+Each row was checked against the agent's own documentation or source (links below the table). "Sessions" says how `bulkhead status` and the guards recognize its live CLI process.
 
 | Agent | Config bulkhead writes | Hook event, shell tool | Blocks with | Sessions (process) |
 |---|---|---|---|---|
@@ -74,13 +74,15 @@ Every agent in this table has a pre-tool hook that can block a shell command; ea
 | Factory Droid | `~/.factory/hooks.json` (or the `hooks` key of `settings.json` when that is where yours live) | `PreToolUse`, `Execute` | `permissionDecision: "deny"` | `droid` |
 | Windsurf | `~/.codeium/windsurf/hooks.json` | `pre_run_command` | exit code 2 | none (the editor process is not tracked) |
 | Devin CLI | `~/.config/devin/config.json` (`%APPDATA%\devin\config.json`) | `PreToolUse`, `exec` | exit code 2 | none (not matched) |
+| Aider | — | — | Session discovery only | `aider`, `aider.exe`, the Python console script, or `python -m aider` |
 
 The opencode and Amp rows install a small plugin, because both agents extend through code, not through a command. The plugin pipes `{ command, cwd, session_id }` to `bulkhead hook --agent opencode|amp` and turns exit code 2 into the agent's own rejection.
 
-Agents without a verified blocking hook would be listed here as "status view only" (sessions detected, nothing guarded). None of the agents checked falls in that group: all ten above have one. Cursor's editor and Windsurf's editor are not matched as sessions (one editor process serves every chat and cannot be told apart by its process), only the `cursor-agent` CLI is; their hooks still guard every command either editor runs.
+Aider sessions appear in status and can own servers or folders. Cursor's editor and Windsurf's editor are not matched as sessions (one editor process serves every chat and cannot be told apart by its process), only the `cursor-agent` CLI is; their hooks still guard every command either editor runs.
 
 ### Verified sources
 
+- Aider: [console script](https://github.com/Aider-AI/aider/blob/main/pyproject.toml), [module entry point](https://github.com/Aider-AI/aider/blob/main/aider/__main__.py), [installation](https://aider.chat/docs/install.html), [home configuration](https://aider.chat/docs/config/aider_conf.html), and [`~/.aider` installation record](https://github.com/Aider-AI/aider/blob/main/aider/main.py).
 - Codex: <https://developers.openai.com/codex/hooks> (locations `~/.codex/hooks.json` and `config.toml`; `PreToolUse` input `session_id`, `cwd`, `tool_name: "Bash"`, `tool_input.command`; deny shape and exit 2). A new or changed hook is skipped until you trust it in `/hooks`.
 - Gemini CLI: <https://github.com/google-gemini/gemini-cli/blob/main/docs/hooks/reference.md> and `docs/hooks/index.md` (`settings.json` layers `.gemini/settings.json`, `~/.gemini/settings.json`; `BeforeTool` input; `decision: "deny"`; exit 2), tool arguments in `docs/reference/tools.md` (`run_shell_command`: `command`, `dir_path`, `is_background`).
 - Copilot CLI: <https://docs.github.com/en/copilot/reference/hooks-configuration> (`~/.copilot/hooks/*.json`, `.github/hooks/*.json`; camelCase payload `sessionId`, `cwd`, `toolName`, `toolArgs`; `permissionDecision`). Copilot treats a hook that crashes or exits non-zero as a denial, so `bulkhead hook --agent copilot` always exits 0.
