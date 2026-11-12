@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.6 - 2026-11-12
+
+### Changed
+
+- Releases are published to npm by GitHub Actions with npm trusted publishing (`.github/workflows/publish.yml`), so each version on npm carries a provenance statement linking it to this repository and the commit it was built from. The same workflow attaches the Gemini CLI extension archive to the release. The guards are unchanged from 0.3.5.
+
 ## 0.3.5 - 2026-11-12
 
 ### Added
