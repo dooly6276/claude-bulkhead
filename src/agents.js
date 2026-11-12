@@ -25,6 +25,7 @@ const AGENTS = {
     // the npm package starts a native codex binary from node; the outer node process is the root
     match: p => nameIs(p, /^codex(?:\.exe)?$/i) || (RUNTIME.test(p.name) && /@openai[\\/]codex[\\/]bin[\\/]codex\.js/.test(p.cmd)),
     dirs: ['.codex'],
+    homeEnv: 'CODEX_HOME',
   },
   gemini: {
     label: 'Gemini',
@@ -36,6 +37,7 @@ const AGENTS = {
     label: 'Copilot',
     match: p => nameIs(p, /^copilot(?:\.exe)?$/i) || (RUNTIME.test(p.name) && (/@github[\\/]copilot[\\/]/.test(p.cmd) || script('copilot').test(p.cmd))),
     dirs: ['.copilot'],
+    homeEnv: 'COPILOT_HOME',
   },
   cursor: {
     label: 'Cursor',
@@ -83,7 +85,12 @@ function agentLabel(agent) {
 // looks for other agents can be skipped without reading the process table.
 function installedAgents(home = os.homedir(), exists = fs.existsSync, env = process.env) {
   const xdg = env.XDG_CONFIG_HOME
-  return NAMES.filter(name => AGENTS[name].dirs.some(d => exists(path.join(home, d)) || (xdg && d.startsWith('.config/') && exists(path.join(xdg, d.slice(8))))))
+  return NAMES.filter(name => {
+    const a = AGENTS[name]
+    // CODEX_HOME and COPILOT_HOME move the whole config folder somewhere else
+    if (a.homeEnv && env[a.homeEnv] && exists(env[a.homeEnv])) return true
+    return a.dirs.some(d => exists(path.join(home, d)) || (xdg && d.startsWith('.config/') && exists(path.join(xdg, d.slice(8)))))
+  })
 }
 
 module.exports = { AGENTS, NAMES, agentOf, agentLabel, installedAgents }

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.7 - 2026-11-12
+
+### Changed
+
+- The bulkhead skill now fits every agent that loads it, not only Claude Code. It says that orphan-reaper's cleanup at session end is Claude Code only and that in Copilot CLI and the other agents you stop your own servers before you finish, and it explains how to run `bulkhead` and `bulkhead-slot` with `node` from the plugin folder when a plugin-only install (Copilot CLI) does not put them on `PATH`.
+
+### Fixed
+
+- Codex and Copilot CLI sessions are found when `CODEX_HOME` or `COPILOT_HOME` moves their config folder. Before, a machine with only a moved folder skipped the process scan for that agent, so its servers and folders were not protected from other sessions.
+
 ## 0.3.6 - 2026-11-12
 
 ### Changed

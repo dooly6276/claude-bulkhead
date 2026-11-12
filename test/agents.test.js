@@ -90,6 +90,9 @@ test('an agent is installed when its folder exists, also under XDG_CONFIG_HOME',
   assert.deepStrictEqual(installedAgents(home, has(['/home/dev/.codex', '/home/dev/.gemini']), {}), ['codex', 'gemini'])
   assert.deepStrictEqual(installedAgents(home, has(['/home/dev/.config/opencode']), {}), ['opencode'])
   assert.deepStrictEqual(installedAgents(home, has(['/xdg/amp']), { XDG_CONFIG_HOME: '/xdg' }), ['amp'])
+  assert.deepStrictEqual(installedAgents(home, has(['/work/copilot-home']), { COPILOT_HOME: '/work/copilot-home' }), ['copilot'])
+  assert.deepStrictEqual(installedAgents(home, has(['/work/codex-b']), { CODEX_HOME: '/work/codex-b' }), ['codex'])
+  assert.deepStrictEqual(installedAgents(home, has([]), { COPILOT_HOME: '/work/missing' }), [])
 })
 
 test('a launcher and the program it starts are one session, at the outer process', () => {

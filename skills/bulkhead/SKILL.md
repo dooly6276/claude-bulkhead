@@ -1,22 +1,33 @@
 ---
 name: bulkhead
-description: How to work on a machine where other Claude Code sessions and subagents run at the same time. Use before starting a dev server, stopping or killing a process, freeing a port, running a build, test suite, browser run or other heavy command, switching branches, stashing, staging or committing, deleting a folder or worktree, measuring disk usage, or waiting on a long job.
+description: How to work on a machine where other coding agent sessions (Claude Code, Copilot CLI, Codex and others) and their subagents run at the same time. Use before starting a dev server, stopping or killing a process, freeing a port, running a build, test suite, browser run or other heavy command, switching branches, stashing, staging or committing, deleting a folder or worktree, measuring disk usage, or waiting on a long job.
 ---
 
 # Working on a shared machine
 
-Other Claude Code sessions, their subagents and the user run on this machine too. Their dev servers, test runs and git trees look like yours from a shell. The bulkhead hooks block the most damaging mistakes; this is how to avoid hitting them at all.
+Other agent sessions (Claude Code, Copilot CLI, Codex and others), their subagents and the user run on this machine too. Their dev servers, test runs and git trees look like yours from a shell. The bulkhead hooks block the most damaging mistakes; this is how to avoid hitting them at all.
+
+## Running the bulkhead commands
+
+The commands below (`bulkhead`, `bulkhead-slot`) are on `PATH` with the Claude Code plugin or after `npm install -g claude-bulkhead`. A Copilot CLI plugin install does not put them on `PATH`. If `bulkhead` is not found, run the same command with `node` from the plugin folder, which is two levels above this skill's folder (`<plugin>/skills/bulkhead/`):
+
+```
+node "<plugin>/bin/bulkhead" status
+node "<plugin>/bin/bulkhead-slot" run --gb=4 -- npm test
+```
+
+Copilot CLI keeps plugins under `~/.copilot/installed-plugins/<marketplace>/bulkhead` (`$COPILOT_HOME` instead of `~/.copilot` when it is set). Do not install anything to get the command; the hooks work without it.
 
 ## Look before you act
 
-Run `bulkhead status` before you start a server, stop a process or start heavy work. It lists every Claude session with its project, memory, listening ports, the heavy jobs queued in bulkhead-slot, and free RAM.
+Run `bulkhead status` before you start a server, stop a process or start heavy work. It lists every agent session with its project, memory, listening ports, the heavy jobs queued in bulkhead-slot, and free RAM.
 
 ## Dev servers and ports
 
 - A port listed under another session belongs to that session. Do not stop its server and do not start yours on the same port.
 - Get a free port with `bulkhead port --near 3000` and pass it explicitly, for example `npm run dev -- --port $(bulkhead port --near 3000)`.
 - Next.js and Vite move to the next port on their own when theirs is taken. Read the port the server prints instead of assuming the default.
-- Start long-running servers with `run_in_background: true`, and stop them when you are done.
+- Start long-running servers in the background (`run_in_background: true` in Claude Code, an async or detached shell in Copilot CLI), and stop them when you are done.
 
 ## Stopping processes
 
@@ -27,7 +38,11 @@ Run `bulkhead status` before you start a server, stop a process or start heavy w
 
 ## When the session ends
 
-Servers, test runners and their workers, watchers, builds and headless browsers you start from the Bash tool are stopped by orphan-reaper a few seconds after this session exits. Do not promise the user that a server will keep running after the session; if they want that, they should start it in their own terminal. `bulkhead reap --dry-run` lists what sessions that already exited left running.
+In Claude Code, servers, test runners and their workers, watchers, builds and headless browsers you start from the Bash tool are stopped by orphan-reaper a few seconds after the session exits. `bulkhead reap --dry-run` lists what sessions that already exited left running.
+
+In Copilot CLI and the other agents nothing is stopped for you when the session ends. Before you finish, stop every server, watcher and browser you started, by PID, unless the user asked to keep it running; tell them which ones are still running and on which port.
+
+In either case, do not promise the user that a server will keep running after the session; if they want that, they should start it in their own terminal.
 
 ## Heavy commands
 
@@ -59,7 +74,7 @@ bulkhead remote run --tail=60 --gb=4 -- npx playwright test
 
 ## Waiting
 
-Do not sit in a foreground loop waiting for a long job: the session cannot do anything else meanwhile, and after about five minutes without a request the prompt cache expires. Run the wait with `run_in_background: true` and end your turn; you are notified when it exits. A command ending in `&` also returns at once.
+Do not sit in a foreground loop waiting for a long job: the session cannot do anything else meanwhile, and long foreground sleeps are blocked. In Claude Code, run the wait with `run_in_background: true` and end your turn; you are notified when it exits. In other agents, start the job in the background and check its output or exit status later. A command ending in `&` also returns at once.
 
 ## Git trees
 
