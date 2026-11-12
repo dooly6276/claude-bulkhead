@@ -8,7 +8,8 @@ const { tempDir } = require('./helpers')
 
 // a fake file system: { path: text } for files, a trailing-slash key for directories
 function fakeIo(entries) {
-  const norm = p => p.replace(/\\/g, '/')
+  // keys are written without a drive letter; path.resolve adds one on Windows
+  const norm = p => p.replace(/\\/g, '/').replace(/^[A-Za-z]:(?=\/)/, '')
   return {
     read: p => (norm(p) in entries ? entries[norm(p)] : null),
     isDir: p => `${norm(p)}/` in entries,

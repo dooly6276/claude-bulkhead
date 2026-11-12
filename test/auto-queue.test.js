@@ -6,7 +6,7 @@ const path = require('path')
 const { spawnSync } = require('child_process')
 const { autoQueue, queueOutput } = require('../src/memory-guard')
 const { wrap, quoters, backgrounded, wrapped, estimateGb, labelFor, slotScript, which } = require('../src/auto-queue')
-const { runScript, tempDir } = require('./helpers')
+const { runScript, tempDir, posixShell } = require('./helpers')
 
 const SCRIPT = '/opt/bulkhead/bin/bulkhead-slot'
 const opts = { script: SCRIPT, node: '/usr/bin/node', wait: 10 }
@@ -64,7 +64,7 @@ const HOSTILE = [`echo "it's $HOME"`, 'echo `date`', 'a\nb', "it's", 'say "hi" &
 
 test('bash quoting round-trips through a real shell', () => {
   for (const text of HOSTILE) {
-    const out = spawnSync('/bin/sh', ['-c', `printf %s ${quoters.sh(text)}`], { encoding: 'utf8' })
+    const out = spawnSync(posixShell(), ['-c', `printf %s ${quoters.sh(text)}`], { encoding: 'utf8' })
     assert.strictEqual(out.stdout, text, JSON.stringify(text))
   }
   assert.strictEqual(quoters.sh('plain-word_1.2/x'), 'plain-word_1.2/x')
@@ -75,7 +75,7 @@ test('the whole bash wrapper hands the original command to bash -c unchanged', (
     const line = wrap(text, { shell: 'sh', script: SCRIPT, node: '/usr/bin/node', gb: 3, label: 'npm test', wait: 10 })
     assert.ok(line.startsWith("/usr/bin/node /opt/bulkhead/bin/bulkhead-slot run --gb=3 '--label=npm test' --wait=10 -- bash -c "), line)
     // let a shell parse the tail and print the argv it would pass on
-    const argv = spawnSync('/bin/sh', ['-c', `set -- ${line.slice(line.indexOf('-- ') + 3)}; printf '%s\\0' "$@"`], { encoding: 'utf8' }).stdout.split('\0').slice(0, -1)
+    const argv = spawnSync(posixShell(), ['-c', `set -- ${line.slice(line.indexOf('-- ') + 3)}; printf '%s\\0' "$@"`], { encoding: 'utf8' }).stdout.split('\0').slice(0, -1)
     assert.deepStrictEqual(argv, ['bash', '-c', text])
   }
 })

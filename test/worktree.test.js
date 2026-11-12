@@ -18,7 +18,9 @@ function sh(cwd, ...args) {
 
 // <tmp>/shop is the main checkout, one commit on branch main.
 function makeRepo(files = {}) {
-  const base = fs.realpathSync(tempDir())
+  // .native also expands Windows 8.3 names (RUNNER~1), as git does in the paths it prints
+  const raw = tempDir()
+  const base = fs.realpathSync.native(raw)
   const root = path.join(base, 'shop')
   fs.mkdirSync(root)
   sh(root, 'init', '-q', '-b', 'main')
@@ -30,7 +32,8 @@ function makeRepo(files = {}) {
   }
   sh(root, 'add', '-A')
   sh(root, 'commit', '-q', '-m', 'init')
-  return { base, root }
+  // raw: the same folder as the temp dir spells it (macOS /var/..., Windows C:\\Users\\RUNNER~1\\...)
+  return { base, root, raw }
 }
 
 function stream() {
@@ -437,6 +440,20 @@ test('prune: sessions with a Windows-style cwd protect the worktree', async () =
   const winCwd = a.replace(/\//g, '\\').toUpperCase()
   const r = await run(['prune', '--json'], { cwd: root, platform: 'win32', getSessions: () => [{ pid: 3, cwd: winCwd }] })
   assert.match(JSON.parse(r.out).kept[0].why, /live session/)
+})
+
+test('prune: a session or a caller in the worktree under another spelling of the path still protects it', async () => {
+  // the temp dir as the OS names it: through /var on macOS, as an 8.3 short name on Windows runners
+  const { base, root, raw } = makeRepo()
+  const a = mergedBranch(root, 'a')
+  const b = mergedBranch(root, 'b')
+  const other = p => path.join(raw, path.relative(base, p))
+  const r = await run(['prune', '--yes', '--json'], { cwd: other(b), getSessions: () => [{ pid: 3, cwd: other(a) }] })
+  const j = JSON.parse(r.out)
+  assert.strictEqual(j.removed.length, 0, r.out)
+  assert.match(j.kept.find(k => k.branch === 'a').why, /live session/)
+  assert.match(j.kept.find(k => k.branch === 'b').why, /you are inside it/)
+  assert.ok(fs.existsSync(a) && fs.existsSync(b))
 })
 
 test('prune --merged-into and --older-than', async () => {

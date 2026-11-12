@@ -30,7 +30,8 @@ function inside(dir, root, platform) {
 }
 
 function real(p) {
-  try { return fs.realpathSync(p) } catch { return p }
+  // .native: on Windows it also turns 8.3 short names (C:\Users\RUNNER~1) into the long ones git prints
+  try { return fs.realpathSync.native(p) } catch { return p }
 }
 
 function age(elapsed) {

@@ -34,4 +34,12 @@ function runScript(name, input, env = {}) {
   }
 }
 
-module.exports = { runScript, tempDir }
+// A POSIX sh for tests that let a real shell parse a line. Windows has no /bin/sh; Git for Windows
+// ships one (the CI runners and Claude Code's own Bash tool use it).
+function posixShell() {
+  if (process.platform !== 'win32') return '/bin/sh'
+  const git = path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git', 'bin', 'sh.exe')
+  return fs.existsSync(git) ? git : 'sh'
+}
+
+module.exports = { runScript, tempDir, posixShell }

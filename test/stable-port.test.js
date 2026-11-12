@@ -9,7 +9,7 @@ const { findStable, stableKey, main } = require('../src/port-cli')
 const sink = () => ({ text: '', write(s) { this.text += s } })
 
 test('the start port is the sha1 of the resolved root, as a uint32, inside the range', () => {
-  const root = path.resolve('/work/shop')
+  const root = process.platform === 'win32' ? path.resolve('/work/shop').toLowerCase() : path.resolve('/work/shop')
   const want = 3000 + (crypto.createHash('sha1').update(root).digest().readUInt32BE(0) % 1000)
   assert.strictEqual(startPort(keyFor('/work/shop')), want)
   assert.strictEqual(startPort(keyFor('/work/shop')), startPort(keyFor('/work/shop/')))
