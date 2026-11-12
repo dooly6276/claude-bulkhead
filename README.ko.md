@@ -48,8 +48,10 @@ Claude Code 안에서 입력합니다.
 | Copilot CLI | `copilot plugin marketplace add dooly6276/claude-bulkhead` 다음 `copilot plugin install bulkhead@bulkhead` |
 | Cursor | `git clone https://github.com/dooly6276/claude-bulkhead ~/.cursor/plugins/local/bulkhead` 다음 **Developer: Reload Window** |
 | opencode | `opencode.json` 에 `"plugin": ["claude-bulkhead"]` 추가 |
+| Gemini CLI | `gemini extensions install https://github.com/dooly6276/claude-bulkhead` |
+| Codex | `codex plugin marketplace add dooly6276/claude-bulkhead` 다음 `codex plugin add bulkhead@bulkhead`, 마지막으로 `/hooks` 에서 훅 승인 |
 
-그 밖의 에이전트(Codex, Gemini CLI, Windsurf, Droid, Devin, Cline, Amp)는 [Codex, Gemini 와 다른 에이전트](#codex-gemini-와-다른-에이전트)를 보세요.
+그 밖의 에이전트(Windsurf, Droid, Devin, Cline, Amp)는 [Codex, Gemini 와 다른 에이전트](#codex-gemini-와-다른-에이전트)를 보세요.
 
 `PATH` 에 Node 18 이상이 있어야 합니다(Claude Code 네이티브 설치 프로그램은 Node 를 깔지 않으니 `node --version` 으로 확인하세요).
 

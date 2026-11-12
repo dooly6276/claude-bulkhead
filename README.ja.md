@@ -48,8 +48,10 @@ Claude Code 内で実行します。
 | Copilot CLI | `copilot plugin marketplace add dooly6276/claude-bulkhead` のあと `copilot plugin install bulkhead@bulkhead` |
 | Cursor | `git clone https://github.com/dooly6276/claude-bulkhead ~/.cursor/plugins/local/bulkhead` のあと **Developer: Reload Window** |
 | opencode | `opencode.json` に `"plugin": ["claude-bulkhead"]` を追加 |
+| Gemini CLI | `gemini extensions install https://github.com/dooly6276/claude-bulkhead` |
+| Codex | `codex plugin marketplace add dooly6276/claude-bulkhead` のあと `codex plugin add bulkhead@bulkhead`、最後に `/hooks` でフックを承認 |
 
-それ以外のエージェント（Codex、Gemini CLI、Windsurf、Droid、Devin、Cline、Amp）は [Codex や Gemini などの他のエージェント](#codex-や-gemini-などの他のエージェント) を参照してください。
+それ以外のエージェント（Windsurf、Droid、Devin、Cline、Amp）は [Codex や Gemini などの他のエージェント](#codex-や-gemini-などの他のエージェント) を参照してください。
 
 Node 18 以降が `PATH` に通っている必要があります（Claude Code のネイティブインストーラーは Node をインストールしないので、`node --version` で確認してください）。
 

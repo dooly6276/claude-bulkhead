@@ -48,8 +48,10 @@ Outros agentes carregam os mesmos guards como plugin:
 | Copilot CLI | `copilot plugin marketplace add dooly6276/claude-bulkhead` e depois `copilot plugin install bulkhead@bulkhead` |
 | Cursor | `git clone https://github.com/dooly6276/claude-bulkhead ~/.cursor/plugins/local/bulkhead` e depois **Developer: Reload Window** |
 | opencode | adicione `"plugin": ["claude-bulkhead"]` ao `opencode.json` |
+| Gemini CLI | `gemini extensions install https://github.com/dooly6276/claude-bulkhead` |
+| Codex | `codex plugin marketplace add dooly6276/claude-bulkhead`, depois `codex plugin add bulkhead@bulkhead` e aprove o hook com `/hooks` |
 
-Para os outros (Codex, Gemini CLI, Windsurf, Droid, Devin, Cline, Amp), veja [Codex, Gemini e outros agentes](#codex-gemini-e-outros-agentes).
+Para os outros (Windsurf, Droid, Devin, Cline, Amp), veja [Codex, Gemini e outros agentes](#codex-gemini-e-outros-agentes).
 
 O Node 18 ou mais recente precisa estar no `PATH` (o instalador nativo do Claude Code não o instala; confira com `node --version`).
 

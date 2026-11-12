@@ -48,8 +48,10 @@
 | Copilot CLI | `copilot plugin marketplace add dooly6276/claude-bulkhead`，然后 `copilot plugin install bulkhead@bulkhead` |
 | Cursor | `git clone https://github.com/dooly6276/claude-bulkhead ~/.cursor/plugins/local/bulkhead`，然后执行 **Developer: Reload Window** |
 | opencode | 在 `opencode.json` 中加入 `"plugin": ["claude-bulkhead"]` |
+| Gemini CLI | `gemini extensions install https://github.com/dooly6276/claude-bulkhead` |
+| Codex | `codex plugin marketplace add dooly6276/claude-bulkhead`，然后 `codex plugin add bulkhead@bulkhead`，最后用 `/hooks` 批准钩子 |
 
-其他代理（Codex、Gemini CLI、Windsurf、Droid、Devin、Cline、Amp）见 [Codex、Gemini 和其他代理](#codexgemini-和其他代理)。
+其他代理（Windsurf、Droid、Devin、Cline、Amp）见 [Codex、Gemini 和其他代理](#codexgemini-和其他代理)。
 
 `PATH` 里需要有 Node 18 或更高版本（Claude Code 的原生安装程序不会装 Node，请用 `node --version` 确认）。
 
