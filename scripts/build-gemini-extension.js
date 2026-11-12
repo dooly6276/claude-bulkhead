@@ -8,7 +8,7 @@
 // Gemini hook file (gemini/hooks.json) at hooks/hooks.json instead.
 //
 // Usage: node scripts/build-gemini-extension.js [output-dir]   (default: the current directory)
-// Then attach it to the release: gh release upload vX.Y.Z bulkhead-gemini-extension.tar.gz
+// The publish workflow (.github/workflows/publish.yml) builds it and attaches it to each release.
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
