@@ -290,9 +290,10 @@ test('fuzz: check functions never throw and stay fast on random and mutated comm
 // clearly even on a slow CI runner (the coverage job, which instruments every line, sets more).
 // Each check also runs at 1/8 of the size: when the time grows much faster than the input, that
 // is reported too, before it gets anywhere near the limit.
-// GitHub's Windows runners run every check 3 to 5 times slower than the Linux and macOS ones
-// (port-guard 2075 ms there, 582 ms on a laptop, for the same linear shape), so they get twice the limit.
-const LONG_LIMIT_MS = Number(process.env.FUZZ_LONG_LIMIT_MS) || (process.platform === 'win32' ? 4000 : 2000)
+// Shared CI runners are 3 to 5 times slower than a laptop and vary from run to run (port-guard
+// 582 ms on a laptop, 2075 ms on a Windows runner, 2734 ms once on a macOS node 18 runner, for the
+// same linear shape), so CI and Windows get a wider limit. Quadratic code still takes minutes.
+const LONG_LIMIT_MS = Number(process.env.FUZZ_LONG_LIMIT_MS) || (process.env.CI ? 5000 : process.platform === 'win32' ? 4000 : 2000)
 // Under this, 1 MB is fast whatever the ratio. Quadratic code takes minutes at 1 MB, so a busy
 // runner that reads 3x per doubling at 4, 16, 49, 166 ms is noise, not a super-linear pattern.
 const FAST_MS = 500
