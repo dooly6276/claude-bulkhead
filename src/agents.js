@@ -8,10 +8,13 @@ const path = require('path')
 // packages and the agents' install scripts (see docs/other-agents.md); an entry is only used for
 // matching, so a pattern that misses just leaves that agent out of the session list.
 const RUNTIME = /^(?:node|bun)(?:\.exe)?$/i
+const PYTHON = /^python(?:\d+(?:\.\d+)?)?(?:\.exe)?$/i
+const AIDER = /^aider(?:\.exe)?$/i
+const COMMAND_WORD = /^\s*(?:"([^"]+)"|'([^']+)'|(\S+))/
 const nameIs = (p, re) => re.test(p.name || '') || re.test(basename(p.cmd))
 
 function basename(cmd) {
-  const first = /^\s*(?:"([^"]+)"|'([^']+)'|(\S+))/.exec(cmd || '')
+  const first = COMMAND_WORD.exec(cmd || '')
   const prog = first ? first[1] || first[2] || first[3] : ''
   return prog.split(/[\\/]/).pop()
 }
@@ -65,6 +68,17 @@ const AGENTS = {
     match: p => nameIs(p, /^droid(?:\.exe)?$/i) || (RUNTIME.test(p.name) && script('droid').test(p.cmd)),
     dirs: ['.factory'],
   },
+  aider: {
+    label: 'Aider',
+    // Python console scripts show the interpreter first on some platforms.
+    match(p) {
+      if (nameIs(p, AIDER)) return true
+      if (!PYTHON.test(p.name || '')) return false
+      const args = (p.cmd || '').replace(COMMAND_WORD, '')
+      return AIDER.test(basename(args)) || /^\s*-m\s+(?:aider|"aider"|'aider')(?=\s|$)/.test(args)
+    },
+    dirs: ['.aider', '.aider.conf.yml', '.local/bin/aider', '.local/bin/aider.exe'],
+  },
 }
 
 // Names of the agents other than Claude Code (and of the ones that only have a hook, no CLI).
@@ -81,8 +95,7 @@ function agentLabel(agent) {
   return !agent || agent === 'claude' ? 'Claude' : (AGENTS[agent] && AGENTS[agent].label) || agent
 }
 
-// A user who never installed another agent has none of its folders, so a process scan that only
-// looks for other agents can be skipped without reading the process table.
+// Installation markers let the guard skip the process scan when no other agents are installed.
 function installedAgents(home = os.homedir(), exists = fs.existsSync, env = process.env) {
   const xdg = env.XDG_CONFIG_HOME
   return NAMES.filter(name => {

@@ -52,6 +52,14 @@ const SHAPES = {
     proc(1, 0, 'droid', '/home/dev/.local/bin/droid'),
     proc(1, 0, 'node', 'node /usr/lib/node_modules/@factory/cli/bin/droid'),
   ],
+  aider: [
+    proc(1, 0, 'aider', '/home/dev/.local/bin/aider --model example'),
+    proc(1, 0, 'python3.12', '/home/dev/.local/share/uv/tools/aider-chat/bin/python3.12 /home/dev/.local/bin/aider'),
+    proc(1, 0, 'Python', '/opt/python/bin/python3 /home/dev/.local/share/pipx/venvs/aider-chat/bin/aider'),
+    proc(1, 0, 'python3', '/usr/local/bin/python3 /usr/local/bin/aider'),
+    proc(1, 0, 'python3', 'python3 -m aider --model example'),
+    proc(1, 0, 'aider.exe', '"C:\\Users\\dev\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\aider.exe"'),
+  ],
 }
 
 test('recognizes each agent CLI as the process the platform shows', () => {
@@ -72,6 +80,11 @@ test('leaves look-alikes alone', () => {
     proc(1, 0, 'Cursor Helper', '/Applications/Cursor.app/Contents/Frameworks/Cursor Helper.app/Contents/MacOS/Cursor Helper --type=renderer'),
     proc(1, 0, 'ampd', 'ampd'),
     proc(1, 0, 'python3', 'python3 -m droid_tools'),
+    proc(1, 0, 'python3', 'python3 /home/dev/app.py /home/dev/.local/bin/aider'),
+    proc(1, 0, 'python3', 'python3 /home/dev/aider-tools.py'),
+    proc(1, 0, 'python3', 'python3 -m pytest tests/test_aider_utils.py'),
+    proc(1, 0, 'python3', 'python3 -m aider_tools'),
+    proc(1, 0, 'node', 'node /home/dev/aider'),
   ]) assert.strictEqual(agentOf(p), null, p.cmd)
   assert.strictEqual(agentOf(null), null)
 })
@@ -89,6 +102,9 @@ test('an agent is installed when its folder exists, also under XDG_CONFIG_HOME',
   assert.deepStrictEqual(installedAgents(home, has([]), {}), [])
   assert.deepStrictEqual(installedAgents(home, has(['/home/dev/.codex', '/home/dev/.gemini']), {}), ['codex', 'gemini'])
   assert.deepStrictEqual(installedAgents(home, has(['/home/dev/.config/opencode']), {}), ['opencode'])
+  assert.deepStrictEqual(installedAgents(home, has(['/home/dev/.aider.conf.yml']), {}), ['aider'])
+  assert.deepStrictEqual(installedAgents(home, has(['/home/dev/.aider']), {}), ['aider'])
+  assert.deepStrictEqual(installedAgents(home, has(['/home/dev/.local/bin/aider']), {}), ['aider'])
   assert.deepStrictEqual(installedAgents(home, has(['/xdg/amp']), { XDG_CONFIG_HOME: '/xdg' }), ['amp'])
   assert.deepStrictEqual(installedAgents(home, has(['/work/copilot-home']), { COPILOT_HOME: '/work/copilot-home' }), ['copilot'])
   assert.deepStrictEqual(installedAgents(home, has(['/work/codex-b']), { CODEX_HOME: '/work/codex-b' }), ['codex'])

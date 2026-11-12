@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Bulkhead recognizes Aider CLI sessions in status and session ownership checks.
+
 ## 0.3.7 - 2026-11-12
 
 ### Changed
