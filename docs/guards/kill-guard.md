@@ -86,6 +86,8 @@ These are blocked only when another Claude Code session is running on the machin
 
 This one applies even when you work with a single session. `pkill -f` matches the pattern against the whole command line, so a short pattern reaches far: `pkill -f cat`, meant for one stuck `cat`, also matches every app under `/Applications` and quits Safari, Chrome and the Claude app itself. On macOS it is worse than it looks, because BSD `pkill` reads options written after the pattern (`-n`, `-u`, `-P`) as more patterns, so `pkill -f 'cat' -n -u 501` narrows nothing.
 
+Linux differs: procps `pkill` permutes its arguments, so options such as `-n` and `-u 501` after the pattern still narrow the match. For portable commands, put options before the pattern and check with `pgrep -fl '<pattern>'` first.
+
 `broad-pattern` blocks `pkill -f <pattern>` when the pattern matches a desktop app (a process inside an `.app` bundle) or 8 or more processes outside your session's own tree. Processes your session started do not count, so `pkill -f cat` with only your own `cat` running passes. The answer asks for the PID instead and points to `pgrep -fl '<pattern>'` to see what the pattern reaches.
 
 The process table is read once per call, only for these commands, and never for `ls`, `npm test` or `kill $PID`. If it cannot be read, the command passes.
