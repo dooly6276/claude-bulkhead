@@ -16,6 +16,7 @@ const RULE_KEYS = {
   'app-quit': ['killGuard', 'appQuit'],
   'service-stop': ['killGuard', 'serviceStop'],
   'other-session-pid': ['killGuard', 'ownerCheck', 'owner-check'],
+  'broad-pattern': ['killGuard', 'broadPattern'],
 }
 const SECTION = {
   'kill-guard': 'killGuard', 'wait-guard': 'waitGuard', 'memory-guard': 'memoryGuard', 'port-guard': 'portGuard',

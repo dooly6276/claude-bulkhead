@@ -86,8 +86,9 @@ An unknown key, or a value of the wrong type, is dropped on its own with a warni
 | `appQuit` | boolean | `true` | Quitting shared apps (`osascript` quit, `pkill Slack`, `killall Finder`), while another session is alive |
 | `serviceStop` | boolean | `true` | `brew services stop`, `launchctl bootout`, `systemctl stop` and `pkill redis-server` for shared services, while another session is alive |
 | `ownerCheck` | boolean | `true` | `kill <pid>` and `pkill -f <pattern>` that reach another Claude session's processes |
+| `broadPattern` | boolean | `true` | `pkill -f <pattern>` that matches a desktop app or 8 or more processes outside this session, such as `pkill -f cat`. Applies with one session too |
 
-The five rules that say "while another session is alive" never stop anything when you work with one session. `ownerCheck` reads the process table once, and only for a command with a literal PID or a pkill pattern.
+The five rules that say "while another session is alive" never stop anything when you work with one session. `ownerCheck` and `broadPattern` read the process table once, and only for a command with a literal PID or a pkill pattern.
 
 The built-in shared list is: node, python, python3, py, pythonw, ruby, java, javaw, dotnet, chrome, chromium, chrome-headless-shell, msedge, firefox, bash, sh, zsh, powershell, pwsh, cmd, conhost, git, ssh, sshd, code, claude, npm, npx, pnpm, yarn, deno, bun, tsx, ts-node, gradle, adb, ffmpeg, docker, vitest, jest, next, vite, esbuild, webpack, and the dev servers and browsers behind them: next-server, next-router-worker, uvicorn, gunicorn, rails, puma, flask, expo, metro, storybook, turbo, tsc, nodemon, qemu, emulator, playwright, puppeteer, php, Google Chrome (and its Helper processes), headless_shell, chromedriver. A version suffix counts as the same name: node22, nodejs and python3.11.
 

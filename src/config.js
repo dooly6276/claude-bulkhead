@@ -39,6 +39,7 @@ const RULES = {
   'app-quit': 'killGuard.appQuit',
   'service-stop': 'killGuard.serviceStop',
   'owner-check': 'killGuard.ownerCheck',
+  'broad-pattern': 'killGuard.broadPattern',
   'stage-all': 'checkoutGuard.stageAll',
   'remove-session-dir': 'checkoutGuard.removeSessionDir',
 }
@@ -56,6 +57,7 @@ const KEYS = {
   'killGuard.appQuit': bool(true, 'Block quitting shared apps (osascript quit, pkill Slack, killall Finder) while another Claude session is alive.'),
   'killGuard.serviceStop': bool(true, 'Block stopping shared services (brew services stop, launchctl bootout, pkill redis-server) while another Claude session is alive.'),
   'killGuard.ownerCheck': bool(true, 'Block kill <pid> and pkill -f <pattern> when they reach another Claude session\'s processes.'),
+  'killGuard.broadPattern': bool(true, 'Block pkill -f <pattern> when it matches a desktop app or 8 or more processes outside this session, even with no other session.'),
   'waitGuard.enabled': on('wait-guard'),
   'waitGuard.limitSeconds': { type: 'number', default: 180, env: 'BULKHEAD_WAIT_MAX_SEC', doc: 'Longest foreground wait allowed, in seconds.' },
   'memoryGuard.enabled': on('memory-guard'),
@@ -140,7 +142,7 @@ function presetValues(name, totalGb = os.totalmem() / 2 ** 30) {
 const PROJECT = {
   'killGuard.enabled': 'on', 'killGuard.extraSharedNames': 'add', 'killGuard.massKill': 'on',
   'killGuard.dockerMass': 'on', 'killGuard.deviceKill': 'on', 'killGuard.appQuit': 'on',
-  'killGuard.serviceStop': 'on', 'killGuard.ownerCheck': 'on',
+  'killGuard.serviceStop': 'on', 'killGuard.ownerCheck': 'on', 'killGuard.broadPattern': 'on',
   'waitGuard.enabled': 'on', 'waitGuard.limitSeconds': 'min',
   'memoryGuard.enabled': 'on', 'memoryGuard.autoQueue': 'off', 'memoryGuard.estimatesGb': 'any',
   'memoryGuard.waitMinutes': 'any', 'memoryGuard.subagents': 'on',

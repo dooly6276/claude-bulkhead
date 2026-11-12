@@ -376,6 +376,7 @@ The one-time way is always `bulkhead allow <code>`, run by you. The permanent wa
 |---|---|---|
 | kill-guard | `pkill`, `taskkill-im`, `stop-process-name` and the other kills by name | `{"killGuard":{"allowNames":["ffmpeg"]}}` |
 | kill-guard | `other-session-pid`: a PID in another session's tree | `{"killGuard":{"ownerCheck":false}}` |
+| kill-guard | `broad-pattern`: a `pkill -f` pattern that reaches a desktop app or many processes | `{"killGuard":{"broadPattern":false}}` |
 | kill-guard | `mass-kill`, `docker-mass`, `device-kill`, `app-quit`, `service-stop`: the other rules (only while another session runs) | `{"killGuard":{"massKill":false}}`, and likewise (`dockerMass`, `deviceKill`, `appQuit`, `serviceStop`) |
 | wait-guard | `long-sleep`, `poll-loop`, `follow` | `{"waitGuard":{"limitSeconds":600}}` |
 | memory-guard | `low-memory` | `{"memory":{"minFreeGb":1}}` |

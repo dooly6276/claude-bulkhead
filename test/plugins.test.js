@@ -148,8 +148,8 @@ test('the Gemini extension archive has its own hooks/hooks.json and runs from wh
     const unpacked = path.join(dir, 'ext')
     fs.mkdirSync(unpacked)
     assert.strictEqual(spawnSync('tar', ['-xzf', out, '-C', unpacked]).status, 0)
-    assert.deepStrictEqual(json(path.relative(root, path.join(unpacked, 'gemini-extension.json'))), json('gemini-extension.json'))
-    assert.deepStrictEqual(json(path.relative(root, path.join(unpacked, 'hooks', 'hooks.json'))), json('gemini/hooks.json'))
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(unpacked, 'gemini-extension.json'), 'utf8')), json('gemini-extension.json'))
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(unpacked, 'hooks', 'hooks.json'), 'utf8')), json('gemini/hooks.json'))
     assert.ok(fs.existsSync(path.join(unpacked, 'bin', 'bulkhead')))
     assert.ok(fs.existsSync(path.join(unpacked, 'skills')))
     const r = spawnSync('node', [path.join(unpacked, 'bin', 'bulkhead'), 'hook', '--agent', 'gemini'], {

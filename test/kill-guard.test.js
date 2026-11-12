@@ -313,3 +313,38 @@ test('without knowing which session is this one, no session counts as another', 
   assert.strictEqual(rule('docker system prune -af', ctx), null)
   assert.strictEqual(rule('kill 900111', ctx), null)
 })
+
+// One session alone, its own `cat`, and the desktop apps every path under /Applications carries.
+function lone(extra, off = []) {
+  return makeContext({
+    cwd: '/work/mine',
+    off,
+    snapshot: () => ({ procs: [proc(900200, 1, 'claude', 'claude', T0), proc(900210, 900200, 'cat', 'cat', T0 + 1), ...extra], ports: [] }),
+    files: () => new Map([[900200, { cwd: '/work/mine', startedAt: 0 }]]),
+    self: () => 900200,
+  })
+}
+const apps = [
+  proc(500, 1, 'Safari', '/Applications/Safari.app/Contents/MacOS/Safari', T0),
+  proc(501, 1, 'Shottr', '/Applications/Shottr.app/Contents/MacOS/Shottr', T0),
+]
+
+test('a pkill -f pattern that reaches a desktop app is blocked even with one session', () => {
+  for (const cmd of ['pkill -f "cat" -n 2>/dev/null; git diff --stat', "pkill -f 'cat' -P $$", "pkill -f 'cat' -n -u 501 2>/dev/null", 'pkill -f cat']) {
+    assert.strictEqual(rule(cmd, lone(apps)), 'broad-pattern', cmd)
+  }
+  const hit = classify('pkill -f cat', {}, 'sh', lone(apps))
+  assert.match(hit.why, /PID 500 \(Safari\), a desktop app and 1 more process outside this session/)
+  assert.match(message(hit.why, 'darwin', hit.rule), /pgrep -fl '<pattern>'.*narrow nothing/s)
+  assert.strictEqual(rule('pkill -f cat', lone([])), null, 'only its own cat')
+  assert.strictEqual(rule('pkill -n -f cat', lone(apps)), 'broad-pattern', 'the newest match can be an app')
+  assert.strictEqual(rule('pkill cat', lone(apps)), null, 'the name alone')
+  assert.strictEqual(rule('pkill -f cat', lone(apps, ['broad-pattern'])), null, 'switched off')
+})
+
+test('a pkill -f pattern that reaches many processes outside the session is blocked', () => {
+  const many = Array.from({ length: 8 }, (_, i) => proc(600 + i, 1, 'python3', `python3 worker.py --id ${i}`, T0))
+  assert.strictEqual(rule('pkill -f worker.py', lone(many)), 'broad-pattern')
+  assert.match(classify('pkill -f worker.py', {}, 'sh', lone(many)).why, /matches 8 processes outside this session, such as PID 600 \(python3\)/)
+  assert.strictEqual(rule('pkill -f worker.py', lone(many.slice(0, 7))), null)
+})

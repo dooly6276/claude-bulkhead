@@ -376,6 +376,7 @@ La vía de una sola vez es siempre `bulkhead allow <code>`, ejecutada por ti. La
 |---|---|---|
 | kill-guard | `pkill`, `taskkill-im`, `stop-process-name` y las demás formas de matar por nombre | `{"killGuard":{"allowNames":["ffmpeg"]}}` |
 | kill-guard | `other-session-pid`: un PID del árbol de otra sesión | `{"killGuard":{"ownerCheck":false}}` |
+| kill-guard | `broad-pattern`: un patrón de `pkill -f` que alcanza una app de escritorio o muchos procesos | `{"killGuard":{"broadPattern":false}}` |
 | kill-guard | `mass-kill`, `docker-mass`, `device-kill`, `app-quit`, `service-stop`: las demás reglas (solo mientras corre otra sesión) | `{"killGuard":{"massKill":false}}`, y así con las demás (`dockerMass`, `deviceKill`, `appQuit`, `serviceStop`) |
 | wait-guard | `long-sleep`, `poll-loop`, `follow` | `{"waitGuard":{"limitSeconds":600}}` |
 | memory-guard | `low-memory` | `{"memory":{"minFreeGb":1}}` |

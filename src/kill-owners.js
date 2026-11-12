@@ -101,6 +101,28 @@ function patternCheck(t, pattern, { full = false, exact = false } = {}) {
   return null
 }
 
+// A pkill -f pattern that reaches past this session, even when it is the only one: a desktop app,
+// or many processes at once. pkill -f "cat" matches every app under /Applications, and BSD pkill
+// reads -n or -u after the pattern as more patterns, so they narrow nothing.
+const APP = /\.app\/Contents\//
+const MANY = 8
+function broadCheck(t, pattern, { full = false, exact = false } = {}) {
+  if (!t || !pattern || String(pattern).length > 500) return null
+  let re
+  try {
+    re = new RegExp(exact ? `^(?:${pattern})$` : pattern)
+  } catch {
+    return null
+  }
+  const mine = p => p.pid === process.pid || (t.me && (p.pid === t.me || t.owner.get(p.pid) === t.me))
+  const hits = t.procs.filter(p => !mine(p) && re.test(full ? p.cmd || '' : p.name || ''))
+  const more = n => n > 0 ? ` and ${n} more process${n > 1 ? 'es' : ''} outside this session` : ''
+  const app = hits.find(p => APP.test(p.cmd || ''))
+  if (app) return { rule: 'broad-pattern', text: `That pattern matches PID ${app.pid} (${app.name}), a desktop app${more(hits.length - 1)}.` }
+  if (hits.length >= MANY) return { rule: 'broad-pattern', text: `That pattern matches ${hits.length} processes outside this session, such as PID ${hits[0].pid} (${hits[0].name}).` }
+  return null
+}
+
 // docker compose down in a folder another live session works in.
 function sameProjectCheck(t, dir) {
   if (!t || !t.others.length) return null
@@ -113,4 +135,4 @@ function sameProjectCheck(t, dir) {
   return hit ? `Claude session ${label(t, hit.pid)} works in the same project.` : null
 }
 
-module.exports = { makeContext, loadTable, label, otherOwner, othersCheck, pidsCheck, patternCheck, sameProjectCheck, shortPath }
+module.exports = { broadCheck, makeContext, loadTable, label, otherOwner, othersCheck, pidsCheck, patternCheck, sameProjectCheck, shortPath }

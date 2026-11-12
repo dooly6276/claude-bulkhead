@@ -9,7 +9,8 @@
     "deviceKill": true,
     "appQuit": true,
     "serviceStop": true,
-    "ownerCheck": true
+    "ownerCheck": true,
+    "broadPattern": true
   },
   "waitGuard": {
     "enabled": true,

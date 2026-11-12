@@ -195,8 +195,10 @@ function byName(pattern, names, { full, exact }, off, plain) {
   if (patternHits(pattern, names, { full, exact })) return ['pkill', NAME_WHY]
   const soft = softName(plain || pattern, full)
   if (soft && !off.has(soft.rule)) return [soft.rule, soft.why, t => owners.othersCheck(t)]
-  if (off.has('owner-check')) return null
-  return ['other-session-match', '', t => owners.patternCheck(t, pattern, { full, exact })]
+  const owner = !off.has('owner-check')
+  const broad = full && !off.has('broad-pattern')
+  if (!owner && !broad) return null
+  return ['other-session-match', '', t => (owner && owners.patternCheck(t, pattern, { full, exact })) || (broad && owners.broadCheck(t, pattern, { full, exact })) || null]
 }
 
 // A comma list after a flag: -Name node,python or -Name node, python. Real lists are short; the
@@ -453,6 +455,7 @@ function resolve(hit, ctx) {
   if (!t) return null
   for (const d of hit.deferred) {
     const detail = d.check(t, ctx)
+    if (detail && typeof detail === 'object') return { rule: detail.rule, why: [d.why, detail.text].filter(Boolean).join(' ') }
     if (detail) return { rule: d.rule, why: [d.why, detail].filter(Boolean).join(' ') }
   }
   return null
@@ -552,6 +555,8 @@ const FIX = {
   'device-kill': 'Target your own device: adb -s <your device> emu kill, xcrun simctl shutdown <your device UDID>.',
   'app-quit': 'Close only what you opened: kill <your own pid>.',
   'service-stop': 'Stop only a service you started yourself, by its PID: kill <your own pid>.',
+  'broad-pattern': "Stop only the process you started, by its PID: pgrep -fl '<pattern>' shows everything a pattern reaches. " +
+    'On macOS, BSD pkill reads options written after the pattern (-n, -u, -P) as more patterns, so they narrow nothing.',
 }
 
 function howToFix(platform, rule) {
@@ -569,7 +574,7 @@ function message(why, platform = process.platform, rule) {
 }
 
 // Rules with their own switch (config keys killGuard.<name>), on inside a guard that is on.
-const RULES = ['mass-kill', 'docker-mass', 'device-kill', 'app-quit', 'service-stop', 'owner-check']
+const RULES = ['mass-kill', 'docker-mass', 'device-kill', 'app-quit', 'service-stop', 'owner-check', 'broad-pattern']
 
 function handle(input) {
   const cmd = input.tool_input && input.tool_input.command

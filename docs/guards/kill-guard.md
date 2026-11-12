@@ -82,6 +82,12 @@ These are blocked only when another Claude Code session is running on the machin
 
 `pkill -f <pattern>` with a specific pattern (a name followed by a flag, a number, a path or a host, such as `pkill -f "ssh -N -L 9333"` or `pkill -f server.js`) passes the name check, then is matched against the command lines of other sessions' processes. It is blocked only if it would reach one. `pkill -fx "node /srv/app/server.js"` is matched whole.
 
+## A pattern that reaches past your session
+
+This one applies even when you work with a single session. `pkill -f` matches the pattern against the whole command line, so a short pattern reaches far: `pkill -f cat`, meant for one stuck `cat`, also matches every app under `/Applications` and quits Safari, Chrome and the Claude app itself. On macOS it is worse than it looks, because BSD `pkill` reads options written after the pattern (`-n`, `-u`, `-P`) as more patterns, so `pkill -f 'cat' -n -u 501` narrows nothing.
+
+`broad-pattern` blocks `pkill -f <pattern>` when the pattern matches a desktop app (a process inside an `.app` bundle) or 8 or more processes outside your session's own tree. Processes your session started do not count, so `pkill -f cat` with only your own `cat` running passes. The answer asks for the PID instead and points to `pgrep -fl '<pattern>'` to see what the pattern reaches.
+
 The process table is read once per call, only for these commands, and never for `ls`, `npm test` or `kill $PID`. If it cannot be read, the command passes.
 
 ## Allowed
@@ -125,7 +131,7 @@ On Windows the second line is `taskkill /PID <your own pid> /T /F`, with `netsta
 - `BULKHEAD_DISABLE=kill-guard`, or `"killGuard": { "enabled": false }` in a config file, turns it off.
 - `killGuard.allowNames` takes names off the shared list, so killing them by name passes, for example `["ffmpeg"]`.
 - `killGuard.extraSharedNames` adds names that must not be killed by name, for example `["redis-server", "mysqld"]`.
-- `killGuard.massKill`, `dockerMass`, `deviceKill`, `appQuit`, `serviceStop` and `ownerCheck` turn the rules of the two sections above off one by one. `BULKHEAD_DISABLE=mass-kill,docker-mass` works too.
+- `killGuard.massKill`, `dockerMass`, `deviceKill`, `appQuit`, `serviceStop`, `ownerCheck` and `broadPattern` turn the rules of the sections above off one by one. `BULKHEAD_DISABLE=mass-kill,docker-mass` works too.
 
 See [configuration](../configuration.md).
 

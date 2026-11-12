@@ -376,6 +376,7 @@ bulkhead 는 다른 문제를 다룹니다. 한 컴퓨터의 세션들이 프로
 |---|---|---|
 | kill-guard | `pkill`, `taskkill-im`, `stop-process-name` 과 이름으로 끄는 다른 명령 | `{"killGuard":{"allowNames":["ffmpeg"]}}` |
 | kill-guard | `other-session-pid`: 다른 세션 트리의 PID | `{"killGuard":{"ownerCheck":false}}` |
+| kill-guard | `broad-pattern`: 데스크톱 앱이나 많은 프로세스에 닿는 `pkill -f` 패턴 | `{"killGuard":{"broadPattern":false}}` |
 | kill-guard | `mass-kill`, `docker-mass`, `device-kill`, `app-quit`, `service-stop`: 다른 세션이 떠 있을 때만 걸리는 규칙 | `{"killGuard":{"massKill":false}}`, 나머지도 같은 방식 (`dockerMass`, `deviceKill`, `appQuit`, `serviceStop`) |
 | wait-guard | `long-sleep`, `poll-loop`, `follow` | `{"waitGuard":{"limitSeconds":600}}` |
 | memory-guard | `low-memory` | `{"memory":{"minFreeGb":1}}` |

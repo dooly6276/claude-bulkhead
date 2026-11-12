@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.5 - 2026-11-12
+
+### Added
+
+- kill-guard `broad-pattern`: `pkill -f <pattern>` is blocked when the pattern matches a desktop app (a process inside an `.app` bundle) or 8 or more processes outside the session's own tree, also when only one session runs. `pkill -f cat`, meant for one stuck `cat`, matches every app under `/Applications`; on macOS, BSD `pkill` reads `-n`, `-u` and `-P` written after the pattern as more patterns, so they narrow nothing (anthropics/claude-code#100684, #107867). Processes the session started do not count. Turn it off with `killGuard.broadPattern`.
+
 ## 0.3.4 - 2026-11-12
 
 ### Added
