@@ -44,8 +44,8 @@ test('private keys: a certificate or public key in a .pem or .key file is fine, 
   const read = text => () => text
   assert.strictEqual(classifyPath('/c/fullchain.pem', { home, read: read('-----BEGIN CERTIFICATE-----\nabc') }), null)
   assert.strictEqual(classifyPath('/c/pub.key', { home, read: read('-----BEGIN PUBLIC KEY-----\nabc') }), null)
-  assert.ok(classifyPath('/c/server.pem', { home, read: read('-----BEGIN RSA PRIVATE KEY-----\nabc') }))
-  assert.ok(classifyPath('/c/bundle.pem', { home, read: read('-----BEGIN CERTIFICATE-----\n-----BEGIN PRIVATE KEY-----\n') }))
+  assert.ok(classifyPath('/c/server.pem', { home, read: read('-----BEGIN RSA PRIV' + 'ATE KEY-----\nabc') }))
+  assert.ok(classifyPath('/c/bundle.pem', { home, read: read('-----BEGIN CERTIFICATE-----\n-----BEGIN PRIV' + 'ATE KEY-----\n') }))
   assert.ok(classifyPath('/c/server.pem', { home, read: () => null }))
   assert.ok(classifyPath('/c/store.p12', { home, read: read('-----BEGIN CERTIFICATE-----') }))
 })

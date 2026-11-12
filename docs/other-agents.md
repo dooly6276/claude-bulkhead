@@ -38,17 +38,21 @@ backup of the original: /home/me/.codex/hooks.json.bulkhead-backup
 
 `--write` copies the original to `<file>.bulkhead-backup` first, keeps everything else in the file, and does nothing when bulkhead is already there, so it is safe to run again (run it again after you change your Node install, because the command holds the absolute path of the `node` that ran the setup). A config file that is not plain JSON (for example with comments) is never rewritten: setup prints the snippet and tells you to add it by hand. A file bulkhead does not own, such as an existing Cline `PreToolUse.sh`, is never replaced.
 
-## As a plugin: Copilot CLI, Cursor, opencode
+## As a plugin: Copilot CLI, Cursor, opencode, Gemini CLI, Codex
 
-These three can load bulkhead as a plugin instead. The plugin calls the same `bulkhead hook --agent <name>` from its own copy of the package, so nothing is written to your config files and `npm install -g` is not needed. Node 18 or later must be on the agent's `PATH`; if `node` cannot be found the hook does not run (Copilot CLI turns a hook that fails to start into a denial, so it would refuse shell commands until `node` is found).
+These five can load bulkhead as a plugin instead. The plugin calls the same `bulkhead hook --agent <name>` from its own copy of the package, so nothing is written to your config files and `npm install -g` is not needed. Node 18 or later must be on the agent's `PATH`; if `node` cannot be found the hook does not run (Copilot CLI turns a hook that fails to start into a denial, so it would refuse shell commands until `node` is found).
 
 | Agent | Install | Files in this repository |
 |---|---|---|
 | Copilot CLI | `copilot plugin marketplace add dooly6276/claude-bulkhead`, then `copilot plugin install bulkhead@bulkhead` | `plugin.json` (Agent Plugins 1.0.0 manifest), `com.github.copilot/hooks/hooks.json` (`preToolUse`, `bash` and `powershell`, root from `${PLUGIN_ROOT}`) |
 | Cursor | `git clone https://github.com/dooly6276/claude-bulkhead ~/.cursor/plugins/local/bulkhead`, then **Developer: Reload Window** | `.cursor-plugin/plugin.json`, whose `hooks` field points to `.cursor-plugin/hooks.json` (`beforeShellExecution`; Cursor runs plugin hooks from the plugin folder) |
 | opencode | add `"plugin": ["claude-bulkhead"]` to `opencode.json` | `opencode/plugin.mjs`, the package's `main` and `./server` export: the same plugin `bulkhead setup opencode` writes, with the path to `bin/bulkhead` taken from the package |
+| Gemini CLI | `gemini extensions install https://github.com/dooly6276/claude-bulkhead` | `gemini-extension.json` and `gemini/hooks.json` (`BeforeTool`, matcher `run_shell_command`, root from `${extensionPath}`). The install takes the release asset `bulkhead-gemini-extension.tar.gz`, built by `node scripts/build-gemini-extension.js`, which holds `gemini/hooks.json` as `hooks/hooks.json`; the skill in `skills/` loads too |
+| Codex | `codex plugin marketplace add dooly6276/claude-bulkhead`, then `codex plugin add bulkhead@bulkhead`, then approve the hook in `/hooks` | `.agents/plugins/marketplace.json` (installs the npm package), `.codex-plugin/plugin.json`, whose `hooks` field points to `codex/hooks.json` (`PreToolUse`, matcher `^Bash$`, root from `$PLUGIN_ROOT`) |
 
 `hooks/hooks.json` is the Claude Code file. Copilot CLI reads a plugin with a root `plugin.json` as an Agent Plugins plugin and takes its hooks only from `com.github.copilot/`, and Cursor reads only the file its manifest names, so neither picks up the Claude Code file. Copilot CLI ignores the `/bulkhead:` slash commands in `commands/` for the same reason; the skill in `skills/` loads in Copilot CLI and Cursor.
+
+Gemini CLI loads `hooks/hooks.json` from every extension, so a plain checkout of this repository would load the Claude Code file there (the hook entries would run `node` with no script and fail at session start). That is why the Gemini extension is a release archive with its own `hooks/hooks.json`. Codex ignores hooks in a plugin whose root has an Agent Plugins `plugin.json`, which this repository has for Copilot CLI, so the Codex marketplace entry points to the npm package, which carries `.codex-plugin/plugin.json` and no root `plugin.json`. Codex asks you to approve a plugin hook once (`/hooks`) before it runs; a changed plugin needs a new approval.
 
 Use the plugin or `bulkhead setup`, not both: with both, every command is checked twice.
 

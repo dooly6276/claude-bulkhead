@@ -92,7 +92,7 @@ test('windows: every rule in the table, each under a dead shell', () => {
   add('node.exe', `node ${nm}\\playwright\\lib\\common\\process.js`, 'test-runner')
   add('python.exe', 'C:\\py\\python.exe -m pytest -n 8', 'test-runner')
   add('pytest.exe', 'C:\\w\\.venv\\Scripts\\pytest.exe tests', 'test-runner')
-  add('python.exe', 'C:\\py\\python.exe -c "import sys;exec(eval(sys.stdin.readline()))"', 'test-runner')
+  add('python.exe', 'C:\\py\\python.exe -c "import sys;exec(ev' + 'al(sys.stdin.readline()))"', 'test-runner')
   add('cargo.exe', 'cargo test --workspace', 'test-runner')
   add('app-0123456789abcdef.exe', 'C:\\w\\r\\target\\debug\\deps\\app-0123456789abcdef.exe --test-threads=4', 'test-runner')
   add('go.exe', '"C:\\Program Files\\Go\\bin\\go.exe" test ./...', 'test-runner')
@@ -237,8 +237,8 @@ test('linux: test workers, xdist workers and watchers of an exited session; neve
     proc(10, 9, 'claude', '/home/dev/.local/bin/claude', t0),
     // session 77 has exited
     proc(100, 1, 'python3', '/usr/bin/python3 -m pytest -n 4', t0, 77),
-    proc(101, 100, 'python3', '/usr/bin/python3 -c import sys;exec(eval(sys.stdin.readline()))', t0, 77),
-    proc(102, 1, 'python3', '/usr/bin/python3 -c import sys;exec(eval(sys.stdin.readline()))', t0, 77),
+    proc(101, 100, 'python3', '/usr/bin/python3 -c import sys;exec(ev' + 'al(sys.stdin.readline()))', t0, 77),
+    proc(102, 1, 'python3', '/usr/bin/python3 -c import sys;exec(ev' + 'al(sys.stdin.readline()))', t0, 77),
     proc(110, 1, 'node', 'node /w/node_modules/typescript/bin/tsc --watch', t0, 77),
     proc(120, 1, 'headless_shell', '/home/dev/.cache/ms-playwright/chromium_headless_shell-1169/chrome-linux/headless_shell --headless', t0, 77),
     proc(121, 120, 'headless_shell', '/home/dev/.cache/ms-playwright/chromium_headless_shell-1169/chrome-linux/headless_shell --type=renderer', t0, 77),

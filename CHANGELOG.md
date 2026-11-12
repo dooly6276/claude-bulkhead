@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Gemini CLI extension: `gemini extensions install https://github.com/dooly6276/claude-bulkhead` installs the guards as an extension (`gemini-extension.json`, a `BeforeTool` hook on `run_shell_command`). The extension is the release asset `bulkhead-gemini-extension.tar.gz`, built by `scripts/build-gemini-extension.js`.
+- Codex plugin: `codex plugin marketplace add dooly6276/claude-bulkhead`, then `codex plugin add bulkhead@bulkhead` installs the guards as a Codex plugin (`.codex-plugin/plugin.json`, a `PreToolUse` hook on `Bash`). The marketplace entry installs the npm package, which now ships `.codex-plugin/` and `codex/`.
+
 ### Fixed
 
 - Windows: `bulkhead worktree prune` and `list` now match a session or the current folder to its worktree when one of the two paths uses an 8.3 short name (`C:\Users\RUNNER~1\...`) and git prints the long one. Before, prune could remove a worktree a live session was working in, or the one it was run from. The Windows CI jobs pass again: the other failures were tests that assumed `/bin/sh`, paths without a drive letter, or the Linux time limit for the 1 MB fuzz case.
