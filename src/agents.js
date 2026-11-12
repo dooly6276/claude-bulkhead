@@ -75,7 +75,8 @@ const AGENTS = {
       if (nameIs(p, AIDER)) return true
       if (!PYTHON.test(p.name || '')) return false
       const args = (p.cmd || '').replace(COMMAND_WORD, '')
-      return AIDER.test(basename(args)) || /^\s*-m\s+(?:aider|"aider"|'aider')(?=\s|$)/.test(args)
+      // flag-only interpreter options may come first: python3 -u -m aider, python -X utf8 -m aider
+      return AIDER.test(basename(args)) || /^\s*(?:(?:-[bBdEiIOqsSuv]+|-X\s+\S+|-W\s+\S+)\s+)*-m\s+(?:aider|"aider"|'aider')(?=\s|$)/.test(args)
     },
     dirs: ['.aider', '.aider.conf.yml', '.local/bin/aider', '.local/bin/aider.exe'],
   },

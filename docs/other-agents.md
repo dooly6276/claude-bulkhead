@@ -74,7 +74,7 @@ Each row was checked against the agent's own documentation or source (links belo
 | Factory Droid | `~/.factory/hooks.json` (or the `hooks` key of `settings.json` when that is where yours live) | `PreToolUse`, `Execute` | `permissionDecision: "deny"` | `droid` |
 | Windsurf | `~/.codeium/windsurf/hooks.json` | `pre_run_command` | exit code 2 | none (the editor process is not tracked) |
 | Devin CLI | `~/.config/devin/config.json` (`%APPDATA%\devin\config.json`) | `PreToolUse`, `exec` | exit code 2 | none (not matched) |
-| Aider | — | — | Session discovery only | `aider`, `aider.exe`, the Python console script, or `python -m aider` |
+| Aider | none (no pre-command hook) | none | nothing, sessions only | `aider`, `aider.exe`, the Python console script, or `python -m aider` |
 
 The opencode and Amp rows install a small plugin, because both agents extend through code, not through a command. The plugin pipes `{ command, cwd, session_id }` to `bulkhead hook --agent opencode|amp` and turns exit code 2 into the agent's own rejection.
 

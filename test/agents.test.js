@@ -58,6 +58,8 @@ const SHAPES = {
     proc(1, 0, 'Python', '/opt/python/bin/python3 /home/dev/.local/share/pipx/venvs/aider-chat/bin/aider'),
     proc(1, 0, 'python3', '/usr/local/bin/python3 /usr/local/bin/aider'),
     proc(1, 0, 'python3', 'python3 -m aider --model example'),
+    proc(1, 0, 'python3', 'python3 -u -m aider'),
+    proc(1, 0, 'python.exe', 'python.exe -X utf8 -m aider --model example'),
     proc(1, 0, 'aider.exe', '"C:\\Users\\dev\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\aider.exe"'),
   ],
 }
@@ -84,6 +86,7 @@ test('leaves look-alikes alone', () => {
     proc(1, 0, 'python3', 'python3 /home/dev/aider-tools.py'),
     proc(1, 0, 'python3', 'python3 -m pytest tests/test_aider_utils.py'),
     proc(1, 0, 'python3', 'python3 -m aider_tools'),
+    proc(1, 0, 'python3', 'python3 -u -m pytest -k aider'),
     proc(1, 0, 'node', 'node /home/dev/aider'),
   ]) assert.strictEqual(agentOf(p), null, p.cmd)
   assert.strictEqual(agentOf(null), null)
