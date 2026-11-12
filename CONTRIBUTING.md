@@ -12,7 +12,9 @@ cd claude-bulkhead
 node --test
 ```
 
-CI runs the same command on Linux, macOS and Windows with Node 18 and 22. Run it on every platform you can; process reading, paths and shells differ on each.
+That is the full suite and takes ten minutes or more. `BULKHEAD_TEST_QUICK=1 node --test` skips the 1 MB fuzz timings and runs every fourth line of the allow corpus, and takes a minute or two.
+
+CI runs the quick suite on Linux, macOS and Windows with Node 22 for every push and pull request, and the full suite with Node 18, 22 and 24 plus coverage every night when `main` changed. Run it on every platform you can; process reading, paths and shells differ on each.
 
 To try the plugin in Claude Code from your checkout:
 

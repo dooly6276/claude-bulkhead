@@ -89,8 +89,12 @@ test('corpus sizes', () => {
   for (const t of tags) assert.ok(H.GUARDS.includes(t), `block.txt names an unknown guard: ${t}`)
 })
 
+// Every allow line through every guard is about 11,000 hook processes. The quick CI run on every push
+// takes every fourth line (all guards still run on each); the nightly full run and a local `npm test` take all.
+const QUICK = process.env.BULKHEAD_TEST_QUICK === '1'
+
 test('allow corpus: every guard lets ordinary commands through', { timeout: 900000 }, async t => {
-  const entries = H.readCorpus(ALLOW)
+  const entries = H.readCorpus(ALLOW).filter((e, i) => !QUICK || i % 4 === 0)
   const jobs = []
   for (const e of entries) {
     for (const guard of H.GUARDS) {

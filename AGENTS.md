@@ -5,7 +5,7 @@ claude-bulkhead is a Claude Code plugin: hooks and a small CLI that keep paralle
 ## Before you change anything
 
 - Read `CONTRIBUTING.md`. The rules for guards there are requirements, not suggestions: fail open, block only what hurts another session or loses work, tell Claude what to do instead.
-- Run `node --test` first, so you know the baseline. It takes a few seconds and needs no install.
+- Run `BULKHEAD_TEST_QUICK=1 node --test` first, so you know the baseline. It takes a minute or two and needs no install. Plain `node --test` adds the 1 MB fuzz timings and the whole allow corpus and takes ten minutes or more; run it before a change to a guard's matching code.
 - This machine may be running other Claude sessions while you work. The plugin's own guards apply to you: do not kill processes by name, do not stop servers on ports you did not start, do not `git checkout` or `git stash` in a checkout another session uses. Work in a git worktree.
 
 ## Making a change

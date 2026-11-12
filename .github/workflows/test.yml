@@ -1,19 +1,63 @@
 name: test
 
+# Two tiers.
+# Quick (every push to main and every pull request): Linux, macOS and Windows on Node 22, with the two
+# slow suites trimmed (BULKHEAD_TEST_QUICK=1: the 1 MB fuzz timings are skipped and the allow corpus
+# runs every fourth line). A run takes minutes instead of close to an hour.
+# Full (nightly when main changed, or by hand from the Actions tab): Node 18, 22 and 24 on all three
+# systems, the whole fuzz and corpus, and coverage.
 on:
   # Branch pushes are tested through their pull request, so a PR runs the matrix once, not twice.
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '0 18 * * *' # 03:00 KST
+  workflow_dispatch:
+
+# A newer push to the same branch or pull request replaces a run that is still going.
+concurrency:
+  group: test-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      full: ${{ steps.p.outputs.full }}
+      run: ${{ steps.p.outputs.run }}
+    steps:
+      - id: p
+        env:
+          EVENT: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          full=false; run=true
+          if [ "$EVENT" = workflow_dispatch ]; then full=true; fi
+          if [ "$EVENT" = schedule ]; then
+            full=true
+            # nightly only when main has a commit from the last 25 hours
+            last=$(gh api "repos/$REPO/commits/main" --jq .commit.committer.date)
+            if [ $(( $(date +%s) - $(date -d "$last" +%s) )) -gt 90000 ]; then run=false; fi
+          fi
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
   test:
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        node: [18, 22, 24]
+        node: ${{ fromJSON(needs.plan.outputs.full == 'true' && '[18, 22, 24]' || '[22]') }}
     runs-on: ${{ matrix.os }}
+    env:
+      BULKHEAD_TEST_QUICK: ${{ needs.plan.outputs.full == 'true' && '0' || '1' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
@@ -24,6 +68,8 @@ jobs:
       - run: node --test
 
   lint:
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -36,6 +82,8 @@ jobs:
       - run: npm run lint
 
   coverage:
+    needs: plan
+    if: needs.plan.outputs.run == 'true' && needs.plan.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -50,6 +98,8 @@ jobs:
   # bulkhead remote against a real sshd on localhost: transfer, copies, ports, exit codes and a
   # dropped connection. The matrix above runs the same paths through test/fake-ssh.js.
   remote-ssh:
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

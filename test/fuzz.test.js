@@ -298,7 +298,11 @@ const LONG_LIMIT_MS = Number(process.env.FUZZ_LONG_LIMIT_MS) || (process.env.CI 
 // runner that reads 3x per doubling at 4, 16, 49, 166 ms is noise, not a super-linear pattern.
 const FAST_MS = 500
 
-test('fuzz: 1 MB inputs never throw and finish in time', { timeout: 900000 }, async t => {
+// The quick CI run on every push skips this one: best-of-five timings of every check on every 1 MB
+// shape take 15 minutes or more on a hosted runner. The nightly full run and a local `npm test` keep it.
+const QUICK = process.env.BULKHEAD_TEST_QUICK === '1'
+
+test('fuzz: 1 MB inputs never throw and finish in time', { timeout: 900000, skip: QUICK && 'BULKHEAD_TEST_QUICK=1 (runs in the nightly full suite)' }, async t => {
   const worst = {}
   const slowest = []
   for (const [shape, make] of Object.entries(LONG)) {
