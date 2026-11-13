@@ -140,7 +140,18 @@ function payload(command, { cwd, tool = 'Bash', timeout = 120000, sessionId = 'c
 // Runs one hook script. Resolves { status, stdout, stderr, ms }.
 // The hook never sees the real home: the state directory (event log, config.json) and the Claude
 // config directory are temporary. Directories this function creates are removed afterwards.
-function runHook(guard, input, { cwd, memory = PLENTY, mock = {}, env = {}, stateDir, configDir, timeoutMs = 30000 } = {}) {
+// A hook that outlives timeoutMs is killed. On Windows a killed process reports exit 1 with no output,
+// which reads like a crash, so a timeout is retried once (a loaded CI runner, not a stuck hook) and,
+// if it happens again, reported as a timeout.
+async function runHook(guard, input, opts = {}) {
+  const r = await runHookOnce(guard, input, opts)
+  if (!r.timedOut) return r
+  const again = await runHookOnce(guard, input, opts)
+  if (!again.timedOut) return again
+  return { ...again, status: null, stderr: `timed out after ${again.ms} ms (twice)\n` + again.stderr }
+}
+
+function runHookOnce(guard, input, { cwd, memory = PLENTY, mock = {}, env = {}, stateDir, configDir, timeoutMs = 30000 } = {}) {
   const stdin = typeof input === 'string' || Buffer.isBuffer(input) ? input : JSON.stringify(input)
   const own = []
   if (!stateDir) own.push((stateDir = realTemp('bulkhead-state-')))
@@ -162,11 +173,12 @@ function runHook(guard, input, { cwd, memory = PLENTY, mock = {}, env = {}, stat
     let stderr = ''
     child.stdout.on('data', d => (stdout += d))
     child.stderr.on('data', d => (stderr += d))
-    const timer = setTimeout(() => child.kill(), timeoutMs)
+    let timedOut = false
+    const timer = setTimeout(() => { timedOut = true; child.kill() }, timeoutMs)
     child.on('close', status => {
       clearTimeout(timer)
       for (const dir of own) fs.rmSync(dir, { recursive: true, force: true })
-      resolve({ status, stdout, stderr, ms: Date.now() - started })
+      resolve({ status, stdout, stderr, ms: Date.now() - started, timedOut })
     })
     child.stdin.on('error', () => {})
     child.stdin.end(stdin)

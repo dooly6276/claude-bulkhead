@@ -200,9 +200,11 @@ test('notify.command runs when a session starts waiting, with the three variable
   hook(dir, prompt, { OUT: out })
   assert.ok(!fs.existsSync(out))
   hook(dir, stop, { OUT: out })
+  // the command runs detached, so the file can exist before writeFileSync has written into it
+  const read = () => { try { return fs.readFileSync(out, 'utf8') } catch { return '' } }
   const until = Date.now() + 5000
-  while (!fs.existsSync(out) && Date.now() < until) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50)
-  assert.strictEqual(fs.readFileSync(out, 'utf8'), '/Users/me/dev/api|waiting|4242')
+  while (!read() && Date.now() < until) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50)
+  assert.strictEqual(read(), '/Users/me/dev/api|waiting|4242')
 })
 
 test('notify.command is ignored in a project config file', () => {
