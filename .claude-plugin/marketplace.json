@@ -1,6 +1,6 @@
 {
   "name": "bulkhead",
-  "description": "Hooks for running many Claude Code sessions on one machine.",
+  "description": "Hooks that stop coding agents from running shell commands that cannot be undone.",
   "owner": {
     "name": "Myeongseok Kang",
     "url": "https://github.com/dooly6276"
@@ -9,7 +9,7 @@
     {
       "name": "bulkhead",
       "source": "./",
-      "description": "Blocks name-based kills, port collisions, whole-disk and parallel scans, long foreground sleeps, and git commands that would move, sweep up or delete another session's tree; budgets RAM for heavy commands; stops what exited sessions leave running; and replays your past transcripts with bulkhead scan."
+      "description": "Blocks rm -rf and rsync --delete through an empty variable, deletes of a drive root, home or .git, link-following deletes, and pkill patterns that hit other sessions, and tells Claude the safe form. Also keeps parallel sessions from colliding on processes, ports and the git tree."
     }
   ]
 }

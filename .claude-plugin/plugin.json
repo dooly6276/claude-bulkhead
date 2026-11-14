@@ -1,7 +1,7 @@
 {
   "name": "bulkhead",
   "version": "0.5.1",
-  "description": "Keeps parallel Claude Code sessions and subagents on one machine from killing each other's processes, taking each other's ports, exhausting RAM, pegging the disk, or moving, sweeping up and deleting each other's git tree. bulkhead scan shows what it would have stopped in your past sessions.",
+  "description": "Blocks shell commands a coding agent is about to run that cannot be undone: rm -rf or rsync --delete through an empty variable, deletes of a drive root, home, app data or .git, link-following deletes, and pkill patterns that hit other sessions. Claude gets the reason and the safe form and usually rewrites the command. Also keeps parallel sessions from killing each other's processes, ports and git tree.",
   "author": {
     "name": "Myeongseok Kang",
     "url": "https://github.com/dooly6276"
@@ -13,5 +13,18 @@
   "privacyPolicyUrl": "https://github.com/dooly6276/claude-bulkhead/blob/main/PRIVACY.md",
   "termsOfServiceUrl": "https://github.com/dooly6276/claude-bulkhead/blob/main/LICENSE",
   "license": "MIT",
-  "keywords": ["hooks", "processes", "ports", "memory", "subagents", "worktrees", "windows", "linux", "macos", "disk", "git", "parallel"]
+  "keywords": [
+    "safety",
+    "rm-rf",
+    "data-loss",
+    "hooks",
+    "pretooluse",
+    "guardrails",
+    "subagents",
+    "worktrees",
+    "windows",
+    "linux",
+    "macos",
+    "git"
+  ]
 }
