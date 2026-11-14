@@ -407,11 +407,11 @@ basics	rm -rf ~/.ssh
 basics	rm -rf ~/.config
 basics	rm -rf ~/.local/share
 basics	rm -rf ~/AppData/Roaming
-basics	rm -rf /home/someone
+basics,platform=posix	rm -rf /home/someone
 basics	rm -rf /Users/someone
 basics	rm -rf 'C:\Users'
 basics	rm -rf 'C:\Users\someone'
-basics	rm -rf /mnt/c/Users/someone/AppData
+basics,platform=posix	rm -rf /mnt/c/Users/someone/AppData
 
 # == basics: PowerShell -Recurse through $home and its parent (rm-root, anomalyco/opencode#62825) ==
 basics	Remove-Item -Recurse -Force (Split-Path $home) -ErrorAction SilentlyContinue

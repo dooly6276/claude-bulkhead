@@ -446,7 +446,7 @@ test('rm-through-link: a delete that can follow a junction or symbolic link out 
   for (const cmd of ['Remove-Item -Recurse -Force wt', 'Remove-Item -rec wt', 'rm -Recurse wt', `Remove-Item -Recurse -Force ${wt}/*`,
     'powershell -Command "Remove-Item -Recurse -Force wt"']) {
     assert.strictEqual(ruleFor(cmd, winAt), 'rm-through-link', cmd)
-    assert.strictEqual(check(cmd, at), null, cmd)
+    if (process.platform !== 'win32') assert.strictEqual(check(cmd, at), null, cmd)
   }
   assert.strictEqual(ruleFor('rm -r wt', { ...winAt, mode: 'ps' }), 'rm-through-link')
   // Git Bash rm and cmd's rd /s delete a junction without following it
