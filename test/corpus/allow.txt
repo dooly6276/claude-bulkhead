@@ -1027,6 +1027,10 @@ timeout /t 2 /nobreak
 ping -n 2 127.0.0.1 > nul
 rd /s /q dist
 rmdir /s /q node_modules
+cmd //c "rmdir /s /q \"D:\My Documents\Projects\_scratch_sitevideo\profile\""
+cmd //c "del /s /q \"D:\work\logs\*.log\""
+cmd /c rmdir /s /q "D:\proj\build"
+cmd /c "rmdir /s /q build"
 del /q build.log
 copy .env.example .env
 xcopy /e /i templates out
@@ -1201,6 +1205,12 @@ Get-Process -Name myapp | Stop-Process
 Stop-Process -Name notepad
 Get-Process | Where-Object { $_.WorkingSet64 -gt 2GB } | Select-Object Name, Id
 powershell -NoProfile -Command "Get-Process -Id 4312 | Stop-Process"
+cmd /c rmdir /s /q "D:\proj\build"
+cmd /c "rmdir /s /q build"
+cmd /c "rmdir /s /q "D:\work\proj\build""
+cmd /c 'rmdir /s /q "D:\work\proj\build"'
+rmdir /s /q .\dist
+cmd /c "del /s /q *.tmp"
 #@ tool Bash
 
 #@ timeout 600000

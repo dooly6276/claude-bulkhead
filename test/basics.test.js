@@ -472,3 +472,27 @@ test('rm-through-link: a delete that can follow a junction or symbolic link out 
     else process.env.BULKHEAD_DISABLE = prev
   }
 })
+
+test('cmd /c rmdir with backslash-escaped quotes is cut to the drive root (Antigravity wiped drive D)', () => {
+  const incident = 'cmd /c "rmdir /s /q \\"D:\\My Documents\\Projects\\_scratch_sitevideo\\profile\\""'
+  // PowerShell and cmd have no backslash escape: cmd reads rmdir /s /q \"D:\..." and rd starts at \
+  for (const mode of ['ps', 'cmd']) {
+    const why = check(incident, { ...win(), mode })
+    assert.strictEqual(ruleOf(why), 'rm-root', mode)
+    assert.match(why, /does not treat \\" as an escaped quote/)
+    assert.match(why, /Remove-Item -LiteralPath 'D:\\My Documents\\Projects\\_scratch_sitevideo\\profile' -Recurse/)
+  }
+  for (const cmd of ['cmd /c "rmdir /s /q \\"D:\\x\\""', 'cmd /c "rd /s /q \\"C:\\a b\\c\\" && echo hi"',
+    'cmd /c "del /s /q \\"D:\\x\\*.log\\""', 'cmd /c "del /s /q \\"', 'rd /s /q \\"D:\\x\\"']) {
+    assert.strictEqual(ruleOf(check(cmd, { ...win(), mode: 'ps' })), 'rm-root', cmd)
+  }
+  // bash removes the escapes before cmd reads the line: the whole quoted path reaches rmdir
+  assert.strictEqual(check(incident, { ...win(), mode: 'sh' }), null)
+  assert.strictEqual(check('cmd //c "rmdir /s /q \\"D:\\work\\out\\""', { ...win(), mode: 'sh' }), null)
+  assert.strictEqual(ruleOf(check('cmd //c \'rmdir /s /q \\"D:\\work\\out\\"\'', { ...win(), mode: 'sh' })), 'rm-root')
+  for (const mode of ['sh', 'ps']) {
+    for (const cmd of ['cmd /c rmdir /s /q "D:\\proj\\build"', 'cmd /c "rmdir /s /q build"', 'rmdir /s /q .\\dist', 'cmd /c "del /s /q *.tmp"']) {
+      assert.strictEqual(check(cmd, { ...win(), mode }), null, `${mode}: ${cmd}`)
+    }
+  }
+})

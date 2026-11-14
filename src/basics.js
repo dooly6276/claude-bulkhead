@@ -70,6 +70,24 @@ function rmTargets(t, mode = 'sh') {
   return []
 }
 
+// cmd.exe has no backslash escape: in rmdir /s /q \"D:\x\" the backslash is a word of its own to
+// rd, so the target is cut to \, the root of the current drive (a wiped drive D: in Antigravity).
+// Returns the cut word of an rd /s or del /s that cmd reads, or null.
+function cmdRootCut(c) {
+  if (c.mode !== 'cmd' || !c.words) return null
+  const t = c.argv
+  const b = path.basename(t[0] || '').replace(/\.exe$/i, '').toLowerCase()
+  if (!/^(?:rd|rmdir|del|erase)$/.test(b) || !t.some(a => /^\/s$/i.test(a))) return null
+  for (const w of c.words.slice(1)) {
+    if (/^\/[a-z](?::\S*)?$/i.test(w.v)) continue
+    const raw = String(c.src || '').slice(w.s, w.e)
+    // \"D:\x\" as cmd reads it, or \D:\x\ once PowerShell has already ended its string at \"
+    const escaped = /^\\"/.test(raw) || /^\\[a-z]:/i.test(w.v)
+    if (escaped || (/^(?:del|erase)$/.test(b) && /^[\\/]$/.test(w.v))) return { escaped, del: /^(?:del|erase)$/.test(b), path: w.v.replace(/^\\/, '').replace(/\\$/, '') }
+  }
+  return null
+}
+
 // PowerShell takes any unambiguous prefix of a parameter: -r, -rec and -Recurse are the same, and
 // -Recurse:$true too. Remove-Item -Recurse deletes the tree without -Force; -Force only adds hidden
 // and read-only items.
@@ -824,6 +842,17 @@ function check(cmd, {
         const what = dangerousTarget(hit.path, { cwd, home, platform, repoRoot })
         if (what) return `[bulkhead] basics: \`${oneLine(psWords(c.src, c.words[0].s).join(' '), 120)}\` deletes ${what} (${hit.word} is ${hit.path}).\n${nameIt}${psHomeNote(hit.word)}`
       }
+    }
+    const cut = rmRoot() && cmdRootCut(c)
+    if (cut) {
+      const p = cut.path || '<path>'
+      const written = oneLine(String(c.src || '').slice(c.s, c.e) || seg, 120)
+      if (!cut.escaped) return `[bulkhead] basics: \`${written}\` deletes a filesystem root (\\, the root of the current drive).\nName the folder you mean inside the project instead, for example rmdir /s /q .\\dist.`
+      return `[bulkhead] basics: \`${written}\` deletes the root of the current drive (\\).\n` +
+        'cmd.exe does not treat \\" as an escaped quote, so the path is cut at \\, which is the root of the current drive. ' +
+        (cut.del
+          ? `Run Remove-Item -Path '${p}' -Recurse from PowerShell, or cmd /c del /s /q "${p}" without backslash-escaped quotes.`
+          : `Run Remove-Item -LiteralPath '${p}' -Recurse from PowerShell, or cmd /c rmdir /s /q "${p}" without backslash-escaped quotes.`)
     }
     if (targets.length && rmRoot()) {
       for (const target of targets) {

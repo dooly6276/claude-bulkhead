@@ -428,6 +428,17 @@ basics	rm -r $home
 basics	Remove-Item -Recurse:$true -Path $env:USERPROFILE
 #@ tool Bash
 
+# == basics: cmd.exe has no backslash escape, so \" cuts an rd /s path to \ (rm-root, Antigravity wiped drive D) ==
+#@ tool PowerShell
+basics	cmd /c "rmdir /s /q \"D:\My Documents\Projects\_scratch_sitevideo\profile\""
+basics	cmd /c "rmdir /s /q \"D:\x\""
+basics	cmd /c "rd /s /q \"C:\work\out\" && echo done"
+basics	cmd /c "del /s /q \"D:\x\*.log\""
+basics	cmd /c "del /s /q \"
+#@ tool Bash
+basics	cmd //c 'rmdir /s /q \"D:\My Documents\Projects\profile\"'
+basics	cmd /c "rmdir /s /q \"D:\x\""
+
 # == basics: xargs splits paths before a recursive rm (rm-xargs-split, a r/ClaudeCode report) ==
 basics	find ~/Library/Application\ Support/Foo -name '*.log' | xargs -n1 dirname | xargs rm -rf
 basics	find . -name node_modules | xargs rm -rf

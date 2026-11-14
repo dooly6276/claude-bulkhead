@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- basics `rm-root` blocks `cmd /c "rmdir /s /q \"D:\path\""` run from PowerShell or cmd. Neither cmd.exe nor PowerShell treats `\"` as an escaped quote, so rd gets a path that starts at `\`, the root of the current drive; the same line from Antigravity wiped drive D (a r/google_antigravity report). `rd /s` and `del /s` targets that start with `\"` (or with `\D:` once PowerShell has ended its string at `\"`) are blocked, and so is `del /s` of `\`. The message suggests `Remove-Item -LiteralPath '<path>' -Recurse` or `cmd /c rmdir /s /q "<path>"` without backslash-escaped quotes. From bash (Git Bash) the escapes are removed before cmd reads the line, so `cmd //c "rmdir /s /q \"D:\work\out\""` gets the whole path and passes; a single quoted `cmd /c` argument from bash or PowerShell is now read as that shell's value, so such a path is checked like any other `rd /s` target.
+
 ## 0.5.0 - 2026-11-14
 
 ### Added

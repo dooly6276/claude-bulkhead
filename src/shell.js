@@ -362,7 +362,14 @@ function innerOf(src, argv, mode) {
     for (let k = 1; k < argv.length; k++) {
       const v = vals[k].toLowerCase()
       if (/^\/\/?[ck]$/.test(v)) {
-        let text = rawFrom(src, argv, k + 1)
+        // One quoted argument from bash or PowerShell reaches cmd as that shell's value: in bash
+        // "rmdir /s /q \"D:\x\"" is rmdir /s /q "D:\x", the escapes are gone before cmd reads it.
+        // Anything else is cmd's own text, read with cmd's rules (a backslash is literal there).
+        const raw = rawFrom(src, argv, k + 1)
+        if (k + 1 === argv.length - 1 && mode !== 'cmd' && raw.length > 1 && /^["']$/.test(raw[0]) && raw[raw.length - 1] === raw[0]) {
+          return vals[k + 1] ? { text: vals[k + 1], mode: 'cmd' } : null
+        }
+        let text = raw
         if (text.length > 1 && text[0] === '"' && text[text.length - 1] === '"') text = text.slice(1, -1)
         return text ? { text, mode: 'cmd' } : null
       }
@@ -547,7 +554,7 @@ const WRAPPER_HINT = /(?:^|[^\w-])(?:bash|sh|zsh|dash|ksh|ash|mksh|fish|busybox|
 const REMOTE_HINT = /(?:^|[^\w-])(?:ssh|docker|podman|nerdctl|kubectl|oc|bulkhead)(?:\.exe)?(?![\w-])/i
 
 // Every simple command the text runs, with wrappers taken off and shell wrappers opened.
-// Each item is { argv, words, remote, depth, sub, seg, s, e, src }: s and e are offsets in src, the
+// Each item is { argv, words, remote, depth, sub, seg, s, e, src, mode }: s and e are offsets in src, the
 // text the command was read from (the hook's command, or the string a bash -c ran).
 // lexed is the result of lex(src, mode) when the caller already has it, so a long text is read once.
 function commands(src, mode = 'sh', depth = 0, out = [], lexed = null) {
@@ -585,7 +592,7 @@ function collect(src, cmds, mode, depth, out) {
       commands(s.inner.text, s.inner.mode, depth + 1, out)
       continue
     }
-    if (s.argv.length) out.push({ argv: s.argv.map(w => w.v), words: s.argv, remote: s.remote, depth, sub: c.sub, seg: c.seg, s: c.s, e: c.e, src })
+    if (s.argv.length) out.push({ argv: s.argv.map(w => w.v), words: s.argv, remote: s.remote, depth, sub: c.sub, seg: c.seg, s: c.s, e: c.e, src, mode })
   }
 }
 
