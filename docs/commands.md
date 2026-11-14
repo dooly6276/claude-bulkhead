@@ -145,7 +145,7 @@ Reads the transcripts Claude Code keeps in `~/.claude/projects` (subagent transc
 $ bulkhead scan --since 30d
 bulkhead scan  what your past Claude Code sessions would have run into
 Found 1,203 shell commands in 211 of your 437 sessions that bulkhead would have stopped.
-Most common: 338 foreground sleeps and polling loops past the wait limit; 55 checkout/merge/rebase/stash in a tree another session was using.
+Most common: 338 long foreground sleeps and polling loops; 55 branch switches, merges, rebases or stashes in a tree another session was using.
 Up to 11 Claude Code sessions ran at the same time (Nov 01); on 11 days two or more did.
   read 1,396 transcripts (6.4 GB), 90,855 shell commands in 31.7s, Oct 27 .. Nov 08 (since 30d)
 
@@ -170,16 +170,17 @@ checkout-guard  stage-all  19 times in 8 sessions  another session was active in
 
 `--since` takes `24h`, `7d`, `2w` or a date, and the same value can be given without the flag (`bulkhead scan 30d`). `--project acme` keeps sessions whose folder contains `acme`. `--path` reads another folder or a single `.jsonl`. `--json` prints every rule with its counts and up to five masked examples.
 
-**`--share`** prints 5 to 8 lines you can paste into a post, an issue or a chat: how many days, sessions and the most at once, and how many commands the guards would have stopped, grouped in plain words. It carries counts only, never a project path, command text or secret, and comes from the same numbers as the report above. `--share --markdown` prints the same as a small table.
+**`--share`** prints 5 to 8 lines you can paste into a post, an issue or a chat: how many days, sessions and the most at once, and how many commands the guards would have stopped, grouped in plain words. The lines start with what hurts another session or loses work (kills by name, recursive deletes, `git add -A` of another session's edits, branch switches in a shared tree, port clashes), then the rest folded into one line, and the foreground waits last. It carries counts only, never a project path, command text or secret, and comes from the same numbers as the report above. `--share --markdown` prints the same as a small table.
 
 ```
 $ bulkhead scan 14d --share
 bulkhead scan, 14 days, 437 sessions, up to 18 at once.
 It would have stopped 200 commands in 60 sessions:
-  90 foreground sleeps and polling loops past the wait limit
-  55 checkout/merge/rebase/stash in a tree another session was using
-  29 git add -A while another session was active in the same tree
-  11 other risky commands (4 kinds)
+  7 kills by name (pkill, killall, taskkill) that would also have hit other sessions' processes
+  29 git add -A or commits that would have taken another session's edits
+  55 branch switches, merges, rebases or stashes in a tree another session was using
+  4 other risky commands (3 kinds)
+  90 long foreground sleeps and polling loops
 (bulkhead scan, github.com/dooly6276/claude-bulkhead)
 ```
 

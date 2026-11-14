@@ -41,10 +41,11 @@ test('--share is a fixed, compact summary with counts only', () => {
   assert.strictEqual(sr.shareText(fixed()), [
     'bulkhead scan, 14 days, 437 sessions, up to 18 at once.',
     'It would have stopped 200 commands in 60 sessions:',
-    '  90 foreground sleeps and polling loops past the wait limit',
-    '  55 checkout/merge/rebase/stash in a tree another session was using',
-    '  29 git add -A while another session was active in the same tree',
-    '  11 other risky commands (4 kinds)',
+    '  7 kills by name (pkill, killall, taskkill) that would also have hit other sessions\' processes',
+    '  29 git add -A or commits that would have taken another session\'s edits',
+    '  55 branch switches, merges, rebases or stashes in a tree another session was using',
+    '  4 other risky commands (3 kinds)',
+    '  90 long foreground sleeps and polling loops',
     '(bulkhead scan, github.com/dooly6276/claude-bulkhead)',
   ].join('\n'))
 })
@@ -53,7 +54,7 @@ test('--share --markdown is a small table with the same numbers', () => {
   const md = sr.shareMarkdown(fixed())
   assert.match(md, /^\*\*bulkhead scan\*\*, 14 days, 437 sessions, up to 18 at once\./)
   assert.match(md, /\| Would have been stopped \| Count \|\n\| --- \| ---: \|/)
-  assert.match(md, /\| checkout\/merge\/rebase\/stash in a tree another session was using \| 55 \|/)
+  assert.match(md, /\| branch switches, merges, rebases or stashes in a tree another session was using \| 55 \|/)
   assert.match(md, /\| \*\*Total\*\* \| \*\*200\*\* commands in 60 sessions \|/)
   assert.match(md, /\[github\.com\/dooly6276\/claude-bulkhead\]\(https:\/\/github\.com\/dooly6276\/claude-bulkhead\)/)
 })
@@ -64,7 +65,7 @@ test('share numbers and the normal report come from the same result', () => {
   assert.strictEqual(s.items.reduce((n, x) => n + x.count, 0), r.summary.rules.reduce((n, x) => n + x.count, 0))
   const text = renderScan(r, { examples: 0 })
   assert.match(text, /Found 200 shell commands in 60 of your 437 sessions that bulkhead would have stopped/)
-  assert.match(text, /Most common: 90 foreground sleeps.*; 55 checkout\/merge/)
+  assert.match(text, /Most common: 90 long foreground sleeps.*; 55 branch switches/)
   assert.match(text, /Up to 18 Claude Code sessions ran at the same time/)
   assert.match(text, /Share these numbers: bulkhead scan --share/)
 })
@@ -149,7 +150,7 @@ test('the CLI: --share, --share --markdown, --explain and bad combinations', () 
   const share = run('--share')
   assert.strictEqual(share.status, 0, share.stderr)
   assert.match(share.stdout, /^bulkhead scan, 1 day, 1 session\./)
-  assert.match(share.stdout, /1 pkill\/killall by name/)
+  assert.match(share.stdout, /1 kills by name \(pkill/)
   assert.ok(!/zed|next dev|private/.test(share.stdout))
   assert.match(run('--share', '--markdown').stdout, /\| Would have been stopped \| Count \|/)
   const ex = run('--explain', '1')
@@ -170,5 +171,27 @@ test('scan() itself feeds --share', async () => {
   fs.writeFileSync(f, JSON.stringify({ type: 'assistant', timestamp: new Date(T).toISOString(), cwd: '/tmp', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'a', name: 'Bash', input: { command: 'pkill node' } }] } }) + '\n')
   const r = await scan({ dir, home: '/nonexistent' })
   assert.strictEqual(sr.shareSummary(r).commandsHit, r.summary.commandsHit)
-  assert.match(sr.shareText(r), /1 pkill\/killall by name/)
+  assert.match(sr.shareText(r), /1 kills by name \(pkill/)
+})
+
+test('--share puts what hurts other sessions and loses work first, in plain words, and the waiting last', () => {
+  const r = fixed()
+  r.summary.rules = [
+    rule('wait-guard', 'long-sleep', 479, 40),
+    rule('basics', 'self-allow', 3, 1),
+    rule('basics', 'rm-empty-var', 2, 1),
+    rule('basics', 'rm-git-dir', 1, 1),
+    rule('port-guard', 'port-in-use', 4, 2),
+    rule('kill-guard', 'bsd-pkill', 1, 1),
+    rule('checkout-guard', 'stage-all', 5, 2),
+  ]
+  const lines = sr.shareText(r).split('\n')
+  assert.match(lines[0], /^bulkhead scan, 14 days, 437 sessions, up to 18 at once\.$/)
+  assert.match(lines[2], /^ {2}1 kills by name/)
+  assert.match(lines[3], /^ {2}3 recursive deletes \(rm -rf\)/)
+  assert.match(lines[4], /^ {2}5 git add -A/)
+  assert.match(lines[5], /^ {2}7 other risky commands \(2 kinds\)$/)
+  assert.match(lines[6], /^ {2}479 long foreground sleeps/)
+  const text = sr.shareText(r) + sr.shareMarkdown(r)
+  for (const id of ['self-allow', 'rm-empty-var', 'rm-git-dir', 'port-in-use', 'bsd-pkill', 'stage-all', 'long-sleep', 'basics', 'guard']) assert.ok(!text.includes(id), id)
 })

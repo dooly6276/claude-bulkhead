@@ -5,20 +5,31 @@ const REPO = 'https://github.com/dooly6276/claude-bulkhead'
 const DAY_MS = 86400000
 
 // What each rule means, in words a person who has never seen the guard names understands.
-// A group is one line of the share text; rules in the same group are added together.
+// A group is one line of the share text; rules in the same group are added together. The order
+// is the share order: first what people fear most (another session's processes killed, files
+// deleted, edits committed or a tree moved under someone), the waiting last.
+const SHARED_KILL = new Set(['mass-kill', 'docker-mass', 'device-kill', 'app-quit', 'service-stop'])
+const DELETES = new Set(['rm-root', 'rm-empty-var', 'rm-unquoted-var', 'rm-git-dir'])
 const GROUPS = [
-  { key: 'stage-all', match: (g, r) => g === 'checkout-guard' && r === 'stage-all', text: 'git add -A while another session was active in the same tree' },
-  { key: 'git', match: (g, r) => g === 'checkout-guard' && r.startsWith('git-'), text: 'checkout/merge/rebase/stash in a tree another session was using' },
-  { key: 'remove-dir', match: (g, r) => g === 'checkout-guard' && r === 'remove-session-dir', text: 'rm -rf or worktree remove on a folder another session was in' },
-  { key: 'kill', match: g => g === 'kill-guard', text: 'pkill/killall by name, which also stops other sessions\' processes' },
-  { key: 'wait', match: g => g === 'wait-guard', text: 'foreground sleeps and polling loops past the wait limit' },
+  { key: 'kill', match: (g, r) => (g === 'kill-guard' && !SHARED_KILL.has(r)) || (g === 'port-guard' && r === 'kill-by-port'), text: 'kills by name (pkill, killall, taskkill) that would also have hit other sessions\' processes' },
+  { key: 'delete', match: (g, r) => (g === 'basics' && DELETES.has(r)) || (g === 'checkout-guard' && r === 'remove-session-dir'), text: 'recursive deletes (rm -rf) of a drive root, home, .git, an empty $VAR/ or another session\'s folder' },
+  { key: 'stage-all', match: (g, r) => g === 'checkout-guard' && r === 'stage-all', text: 'git add -A or commits that would have taken another session\'s edits' },
+  { key: 'git', match: (g, r) => g === 'checkout-guard' && r.startsWith('git-'), text: 'branch switches, merges, rebases or stashes in a tree another session was using' },
+  { key: 'port', match: g => g === 'port-guard', text: 'servers started on a port another session already held' },
+  { key: 'shared-kill', match: (g, r) => g === 'kill-guard' && SHARED_KILL.has(r), text: 'stops of every container, emulator, app or service, other sessions\' included' },
+  { key: 'memory', match: (g, r) => g === 'memory-guard' && r !== 'slot-files', text: 'heavy builds or tests started with RAM nearly gone' },
+  { key: 'force-push', match: (g, r) => g === 'basics' && (r === 'force-push-main' || r === 'protected-delete'), text: 'force-pushes to main or deletes of main' },
+  { key: 'discard', match: (g, r) => g === 'basics' && r === 'discard-changes', text: 'reset --hard or clean -f that would have lost uncommitted work' },
+  { key: 'edit', match: g => g === 'edit-guard', text: 'edits over a file another session had just changed' },
+  { key: 'secrets', match: g => g === 'secrets-guard', text: 'reads of secret files such as .env and keys' },
+  { key: 'author', match: (g, r) => g === 'basics' && r === 'agent-author', text: 'commits authored as Claude instead of you' },
+  { key: 'self-allow', match: (g, r) => g === 'basics' && r === 'self-allow', text: 'attempts by the agent to approve its own blocks' },
   { key: 'disk', match: g => g === 'disk-guard', text: 'whole-disk or parallel disk scans' },
-  { key: 'rm-root', match: (g, r) => g === 'basics' && r === 'rm-root', text: 'rm -rf at a root, home or system folder' },
-  { key: 'force-push', match: (g, r) => g === 'basics' && r === 'force-push-main', text: 'force-pushes to main' },
-  { key: 'discard', match: (g, r) => g === 'basics' && r === 'discard-changes', text: 'reset --hard or clean -f that lose uncommitted work' },
-  { key: 'author', match: (g, r) => g === 'basics' && r === 'agent-author', text: 'commits authored as Claude' },
   { key: 'slots', match: g => g === 'memory-guard', text: 'hand-edited slot files' },
+  { key: 'wait', match: g => g === 'wait-guard', text: 'long foreground sleeps and polling loops' },
 ]
+const OTHER = { key: 'other', text: 'other risky commands' }
+const rankOf = key => { const i = GROUPS.findIndex(g => g.key === key); return i < 0 ? GROUPS.length : i }
 
 function describe(guard, rule) {
   const g = GROUPS.find(x => x.match(guard, rule))
@@ -29,14 +40,16 @@ function describe(guard, rule) {
 function groups(r) {
   const by = new Map()
   for (const x of r.summary.rules) {
-    const g = GROUPS.find(y => y.match(x.guard, x.rule))
-    const key = g ? g.key : `${x.guard} ${x.rule}`
-    const cur = by.get(key) || { text: g ? g.text : `${x.guard} ${x.rule}`, count: 0 }
+    const g = GROUPS.find(y => y.match(x.guard, x.rule)) || OTHER
+    const cur = by.get(g.key) || { key: g.key, text: g.text, count: 0 }
     cur.count += x.count
-    by.set(key, cur)
+    by.set(g.key, cur)
   }
   return [...by.values()].sort((a, b) => b.count - a.count || a.text.localeCompare(b.text))
 }
+
+// The same groups in share order: what hurts other sessions and loses work first, waiting last.
+const byFear = items => [...items].sort((a, b) => rankOf(a.key) - rankOf(b.key) || b.count - a.count)
 
 const num = n => n.toLocaleString('en-US')
 const plural = (n, word) => `${num(n)} ${word}${n === 1 ? '' : 's'}`
@@ -54,11 +67,11 @@ function shareSummary(r) {
     maxAtOnce: r.concurrency.max,
     commandsHit: r.summary.commandsHit,
     sessionsHit: r.summary.sessionsHit,
-    items: groups(r),
+    items: byFear(groups(r)),
   }
 }
 
-const SHOWN = 4
+const SHOWN = 5
 
 function headline(s) {
   const parts = []
@@ -71,8 +84,13 @@ function headline(s) {
 // Folds the groups beyond the shown ones into one "other" line.
 function shownItems(s) {
   if (s.items.length <= SHOWN) return s.items
-  const rest = s.items.slice(SHOWN - 1)
-  return [...s.items.slice(0, SHOWN - 1), { text: `other risky commands (${plural(rest.length, 'kind')})`, count: rest.reduce((n, x) => n + x.count, 0) }]
+  // the waiting keeps its own last line; the middle of the list folds
+  const wait = s.items.find(x => x.key === 'wait')
+  const rest = s.items.filter(x => x !== wait)
+  const keep = SHOWN - 1 - (wait ? 1 : 0)
+  const folded = rest.slice(keep)
+  const other = { text: `${OTHER.text} (${plural(folded.length, 'kind')})`, count: folded.reduce((n, x) => n + x.count, 0) }
+  return [...rest.slice(0, keep), other, ...(wait ? [wait] : [])]
 }
 
 function shareText(r) {

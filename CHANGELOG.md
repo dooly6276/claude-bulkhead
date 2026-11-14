@@ -10,6 +10,10 @@
 - basics `rm-git-dir`: `rm -rf .git`, `rm -rf path/.git` and `find . -name .git -exec rm -rf {} +` are blocked when that `.git` is an existing folder, since the repository's history goes with it (anthropics/claude-code#107274). A `.git` the same line creates, such as after `git clone`, passes. Turn it off with `basics.rmGitDir`.
 - kill-guard `bsd-pkill`: on macOS and the BSDs, `pkill` with a long option (`--signal`, `--full`) or with more than one pattern is blocked, also with a single session. BSD `pkill` has no long options and reads everything after the first pattern as another pattern, so `pkill -f "gcloud.py compute" -u me --signal 0`, meant as an existence check, also matched `0` and sent SIGTERM to about 66 processes, every other Claude Code session among them (anthropics/claude-code#109627). The message suggests `pgrep -f '<pattern>'` for an existence check. Turn it off with `killGuard.bsdPkill`.
 
+### Changed
+
+- `bulkhead scan --share` lists what people fear first, in plain words: kills by name that would have hit other sessions' processes, recursive deletes, `git add -A` of another session's edits, branch switches in a shared tree, port clashes. The rest folds into one line and the foreground waits come last. No rule names appear in the share text any more (before, a rule without a description showed as `basics self-allow`).
+
 ### Fixed
 
 - kill-guard reads `pkill` arguments the way the platform's `pkill` does. On Linux, options written after the pattern (`pkill -f x --signal 0`, `pkill -f x -P $$`) are options, as procps reads them, so a signal-0 check or a `-P` scope there passes. On macOS, every extra operand is a pattern, and each gets the same checks as the first.
