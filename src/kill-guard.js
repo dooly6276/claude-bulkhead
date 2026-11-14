@@ -118,18 +118,22 @@ const NUMERIC_SCOPE = /^(?:-[Psg]|--(?:parent|session|pgroup))$/
 const IDS = /^(?:\d+|\$[\w{}()$#!?-]+)(?:,(?:\d+|\$[\w{}()$#!?-]+))*$/
 const PKILL_SCOPE = { test: ([o, v]) => PKILL_SCOPE_OPT.test(o) && (!NUMERIC_SCOPE.test(o) || IDS.test(String(v == null ? '' : v))) }
 
-// Options and operands of pkill, pgrep or killall.
-function parseKillByName(argv, valued) {
+// Options and operands of pkill, pgrep or killall. With permute (GNU procps), options after the
+// pattern are still options, as getopt reads them; BSD pkill (macOS) stops at the first operand,
+// and everything after it is another pattern.
+function parseKillByName(argv, valued, { permute = false } = {}) {
   const opts = []
   const operands = []
   let signal = null
+  let ended = false
   for (let k = 1; k < argv.length; k++) {
     const v = argv[k]
-    if (operands.length || !/^-./.test(v)) {
-      if (v === '--' && !operands.length) continue
+    if (ended || (operands.length && !permute) || !/^-./.test(v)) {
+      if (v === '--' && !ended && (!operands.length || permute)) { ended = true; continue }
       operands.push(v)
       continue
     }
+    if (v === '--') { ended = true; continue }
     const eq = /^(--[\w-]+)=(.*)$/.exec(v)
     if (eq) { opts.push([eq[1], eq[2]]); if (eq[1] === '--signal') signal = eq[2]; continue }
     if (valued.has(v)) {
@@ -144,6 +148,9 @@ function parseKillByName(argv, valued) {
   const flags = opts.filter(([o]) => /^-[a-zA-Z]+$/.test(o)).map(([o]) => o.slice(1)).join('')
   return { opts, operands, signal, flags }
 }
+
+// pkill as the BSDs ship it: no long options, no option after the first pattern
+const BSD = /^(?:darwin|freebsd|openbsd|netbsd)$/
 
 const zeroSignal = s => s != null && /^(?:0|SIG0)$/i.test(String(s))
 
@@ -164,16 +171,41 @@ function softName(pattern, full) {
 }
 
 // pkill, killall: [rule, why] to block now, [rule, why, check] to block when check(table) says so.
-function checkPkill(argv, names, { stdin = [], off = new Set() } = {}) {
+function checkPkill(argv, names, { stdin = [], off = new Set(), platform = process.platform } = {}) {
   const b = shell.bin(argv[0])
   if (b === 'pkill') {
-    const p = parseKillByName(argv, PKILL_VALUE)
+    const bsd = BSD.test(platform)
+    const p = parseKillByName(argv, PKILL_VALUE, { permute: !bsd })
+    if (bsd && !off.has('bsd-pkill')) {
+      const long = p.opts.find(([o]) => o.startsWith('--'))
+      if (long) return ['bsd-pkill', `pkill on macOS (BSD) has no long options such as ${long[0]}; it stops with a usage error before it kills anything, or, written after the pattern, reads it as another pattern.`]
+      if (p.operands.length > 1) {
+        const extra = p.operands.slice(1, 5).map(o => JSON.stringify(o)).join(', ')
+        return ['bsd-pkill', `pkill on macOS (BSD) stops reading options at the first pattern, so ${extra} after it ${p.operands.length > 2 ? 'are more patterns' : 'is another pattern'}, and a process that matches any of them is killed. A short one such as "0" matches almost every command line (anthropics/claude-code#109627).`]
+      }
+    }
     if (zeroSignal(p.signal) || p.opts.some(ov => PKILL_SCOPE.test(ov))) return null
     const operands = p.operands.length ? p.operands : stdin.slice(0, 1)
     if (!operands.length) return null
     const full = /f/.test(p.flags) || p.opts.some(([o]) => o === '--full')
     const exact = /x/.test(p.flags)
-    return byName(operands[0], names, { full, exact }, off)
+    // BSD pkill kills what matches any of its patterns; GNU pkill takes one
+    const later = []
+    for (const o of bsd ? operands.slice(0, 20) : operands.slice(0, 1)) {
+      const hit = byName(o, names, { full, exact }, off)
+      if (hit && !hit[2]) return hit
+      if (hit) later.push(hit)
+    }
+    if (later.length < 2) return later[0] || null
+    // several patterns, each with a check on the process table: the first that finds something
+    return ['other-session-match', '', (t, ctx) => {
+      for (const [rule, why, fn] of later) {
+        const r = fn(t, ctx)
+        if (r && typeof r === 'object') return { rule: r.rule, text: [why, r.text].filter(Boolean).join(' ') }
+        if (r) return { rule, text: [why, r].filter(Boolean).join(' ') }
+      }
+      return null
+    }]
   }
   if (b === 'killall') {
     const p = parseKillByName(argv, KILLALL_VALUE)
@@ -314,7 +346,7 @@ function judgeStatement(cmds, names, mode, vars, cfg, deferred) {
     if (!argv.length || c.inert) continue
     const b = shell.bin(argv[0])
     // direct kills by name
-    const direct = checkPkill(argv, names, { stdin, off: cfg.off }) || checkTaskkill(argv, names) || checkStopProcess(argv, names) || checkWmic(argv, names)
+    const direct = checkPkill(argv, names, { stdin, off: cfg.off, platform: cfg.platform }) || checkTaskkill(argv, names) || checkStopProcess(argv, names) || checkWmic(argv, names)
     if (direct && !direct[2]) return direct
     if (direct) deferred.push(direct)
     if (c.remote) continue
@@ -463,9 +495,9 @@ function resolve(hit, ctx) {
 
 // { rule, why } for the first kill, or null. ctx (see kill-owners makeContext) lets the checks
 // that need the process table run; without it only what the text alone shows is judged.
-function classify(cmd, names = {}, mode = 'sh', ctx = null) {
+function classify(cmd, names = {}, mode = 'sh', ctx = null, platform = process.platform) {
   const list = nameList(names)
-  const cfg = { off: ctx ? ctx.off : new Set() }
+  const cfg = { off: ctx ? ctx.off : new Set(), platform }
   const text = shell.unwrap(shell.prepare(String(cmd || ''), mode), mode)
   let hit = judge(text, list, mode, cfg)
   if (!hit || hit.deferred) {
@@ -544,8 +576,8 @@ function judgeLexed(text, lexed, names, mode, cfg) {
   return deferred.length ? { deferred: deferred.map(([rule, why, fn]) => ({ rule, why, check: fn })) } : null
 }
 
-function check(cmd, names, mode) {
-  const hit = classify(cmd, names, mode)
+function check(cmd, names, mode, platform) {
+  const hit = classify(cmd, names, mode, null, platform)
   return hit ? hit.why : null
 }
 
@@ -555,6 +587,8 @@ const FIX = {
   'device-kill': 'Target your own device: adb -s <your device> emu kill, xcrun simctl shutdown <your device UDID>.',
   'app-quit': 'Close only what you opened: kill <your own pid>.',
   'service-stop': 'Stop only a service you started yourself, by its PID: kill <your own pid>.',
+  'bsd-pkill': "Put every option before the one pattern: pkill -u <user> -f '<pattern>'. To check whether a process exists, use pgrep -f '<pattern>', which only lists. " +
+    'Better still, stop only the process you started, by its PID: kill <your own pid>.',
   'broad-pattern': "Stop only the process you started, by its PID: pgrep -fl '<pattern>' shows everything a pattern reaches. " +
     'On macOS, BSD pkill reads options written after the pattern (-n, -u, -P) as more patterns, so they narrow nothing.',
 }
@@ -574,7 +608,7 @@ function message(why, platform = process.platform, rule) {
 }
 
 // Rules with their own switch (config keys killGuard.<name>), on inside a guard that is on.
-const RULES = ['mass-kill', 'docker-mass', 'device-kill', 'app-quit', 'service-stop', 'owner-check', 'broad-pattern']
+const RULES = ['mass-kill', 'docker-mass', 'device-kill', 'app-quit', 'service-stop', 'owner-check', 'broad-pattern', 'bsd-pkill']
 
 function handle(input) {
   const cmd = input.tool_input && input.tool_input.command

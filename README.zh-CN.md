@@ -378,6 +378,7 @@ bulkhead 解决的是另一个问题：同一台机器上的会话因为进程�
 | kill-guard | `pkill`、`taskkill-im`、`stop-process-name` 以及其他按名字结束进程的规则 | `{"killGuard":{"allowNames":["ffmpeg"]}}` |
 | kill-guard | `other-session-pid`: 属于其他会话进程树的 PID | `{"killGuard":{"ownerCheck":false}}` |
 | kill-guard | `broad-pattern`: 会命中桌面应用或大量进程的 `pkill -f` 模式 | `{"killGuard":{"broadPattern":false}}` |
+| kill-guard | `bsd-pkill`: macOS 上带长选项或第二个模式的 `pkill`，BSD `pkill` 会把它们都当成模式 | `{"killGuard":{"bsdPkill":false}}` |
 | kill-guard | `mass-kill`, `docker-mass`, `device-kill`, `app-quit`, `service-stop`: 其他规则（仅当有其他会话在运行时） | `{"killGuard":{"massKill":false}}`, 其余同理 (`dockerMass`, `deviceKill`, `appQuit`, `serviceStop`) |
 | wait-guard | `long-sleep`、`poll-loop`、`follow` | `{"waitGuard":{"limitSeconds":600}}` |
 | memory-guard | `low-memory` | `{"memory":{"minFreeGb":1}}` |

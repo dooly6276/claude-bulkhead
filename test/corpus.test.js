@@ -130,7 +130,7 @@ function parseBlock(e) {
   return { guard, command: H.decode(rest.join('\t')), timeout: Number(o.timeout) || 120000, platform: o.platform, state: o.state }
 }
 
-const platformMatches = p => !p || (p === 'win32' ? process.platform === 'win32' : process.platform !== 'win32')
+const platformMatches = p => !p || p === process.platform || (p === 'posix' && process.platform !== 'win32')
 
 test('block corpus: each guard blocks what it is for', { timeout: 900000 }, async t => {
   const entries = H.readCorpus(BLOCK).map(e => ({ e, ...parseBlock(e) }))

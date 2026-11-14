@@ -1,5 +1,5 @@
 # Commands a guard must block. Format: <guard>[,option=value...] TAB <command>
-# Options: timeout=<ms> (tool timeout, default 120000), platform=win32|posix (run only there).
+# Options: timeout=<ms> (tool timeout, default 120000), platform=win32|posix|darwin|linux (run only there).
 # Each guard runs in the machine state it needs:
 #   kill-guard, wait-guard  no other session, plenty of RAM
 #   memory-guard            RAM nearly gone
@@ -21,6 +21,9 @@ kill-guard	pkill -f 'vite'
 kill-guard	pkill -f vite
 kill-guard	pkill -KILL node
 kill-guard	pkill --signal 9 node
+kill-guard,platform=darwin	pkill -f "gcloud.py compute" -u kms --signal 0
+kill-guard,platform=darwin	pkill --signal 0 -f gcloud.py
+kill-guard,platform=darwin	pkill -f worker.py -n
 kill-guard	pkill -SIGTERM python
 kill-guard	pkill python3
 kill-guard	pkill -f python

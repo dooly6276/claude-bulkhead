@@ -20,6 +20,7 @@ const RULE_KEYS = {
   'service-stop': ['killGuard', 'serviceStop'],
   'other-session-pid': ['killGuard', 'ownerCheck', 'owner-check'],
   'broad-pattern': ['killGuard', 'broadPattern'],
+  'bsd-pkill': ['killGuard', 'bsdPkill'],
 }
 const SECTION = {
   'kill-guard': 'killGuard', 'wait-guard': 'waitGuard', 'memory-guard': 'memoryGuard', 'port-guard': 'portGuard',

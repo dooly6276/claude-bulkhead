@@ -378,6 +378,7 @@ A forma de liberar uma única vez é sempre `bulkhead allow <code>`, rodado por 
 | kill-guard | `pkill`, `taskkill-im`, `stop-process-name` e os outros kills por nome | `{"killGuard":{"allowNames":["ffmpeg"]}}` |
 | kill-guard | `other-session-pid`: um PID da árvore de outra sessão | `{"killGuard":{"ownerCheck":false}}` |
 | kill-guard | `broad-pattern`: um padrão de `pkill -f` que alcança um app de desktop ou muitos processos | `{"killGuard":{"broadPattern":false}}` |
+| kill-guard | `bsd-pkill`: no macOS, um `pkill` com opção longa ou um segundo padrão, que o `pkill` do BSD lê como mais padrões | `{"killGuard":{"bsdPkill":false}}` |
 | kill-guard | `mass-kill`, `docker-mass`, `device-kill`, `app-quit`, `service-stop`: as outras regras (só enquanto outra sessão roda) | `{"killGuard":{"massKill":false}}`, e assim por diante (`dockerMass`, `deviceKill`, `appQuit`, `serviceStop`) |
 | wait-guard | `long-sleep`, `poll-loop`, `follow` | `{"waitGuard":{"limitSeconds":600}}` |
 | memory-guard | `low-memory` | `{"memory":{"minFreeGb":1}}` |

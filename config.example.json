@@ -10,7 +10,8 @@
     "appQuit": true,
     "serviceStop": true,
     "ownerCheck": true,
-    "broadPattern": true
+    "broadPattern": true,
+    "bsdPkill": true
   },
   "waitGuard": {
     "enabled": true,

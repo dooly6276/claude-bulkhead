@@ -86,6 +86,7 @@ An unknown key, or a value of the wrong type, is dropped on its own with a warni
 | `appQuit` | boolean | `true` | Quitting shared apps (`osascript` quit, `pkill Slack`, `killall Finder`), while another session is alive |
 | `serviceStop` | boolean | `true` | `brew services stop`, `launchctl bootout`, `systemctl stop` and `pkill redis-server` for shared services, while another session is alive |
 | `ownerCheck` | boolean | `true` | `kill <pid>` and `pkill -f <pattern>` that reach another Claude session's processes |
+| `bsdPkill` | boolean | `true` | On macOS and the BSDs, `pkill` with a long option (`--signal`, `--full`) or more than one pattern, such as `pkill -f "gcloud.py compute" -u me --signal 0`: BSD `pkill` reads everything after the first pattern as more patterns. Applies with one session too |
 | `broadPattern` | boolean | `true` | `pkill -f <pattern>` that matches a desktop app or 8 or more processes outside this session, such as `pkill -f cat`. Applies with one session too |
 
 The five rules that say "while another session is alive" never stop anything when you work with one session. `ownerCheck` and `broadPattern` read the process table once, and only for a command with a literal PID or a pkill pattern.

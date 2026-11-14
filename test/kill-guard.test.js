@@ -205,7 +205,7 @@ function machine({ solo = false, reads = { n: 0 }, fail = false, cwd = '/work/mi
   })
 }
 
-const rule = (cmd, ctx, mode = 'sh') => (classify(cmd, {}, mode, ctx) || {}).rule || null
+const rule = (cmd, ctx, mode = 'sh', platform = process.platform) => (classify(cmd, {}, mode, ctx, platform) || {}).rule || null
 
 const withOthers = {
   'mass-kill': ['pkill -u $USER', 'killall -u kms', 'killall -9 -u $USER', 'kill -9 -1', 'kill -9 0', 'kill 0', 'kill -KILL -1'],
@@ -330,9 +330,16 @@ const apps = [
 ]
 
 test('a pkill -f pattern that reaches a desktop app is blocked even with one session', () => {
-  for (const cmd of ['pkill -f "cat" -n 2>/dev/null; git diff --stat', "pkill -f 'cat' -P $$", "pkill -f 'cat' -n -u 501 2>/dev/null", 'pkill -f cat']) {
-    assert.strictEqual(rule(cmd, lone(apps)), 'broad-pattern', cmd)
+  for (const cmd of ['pkill -f "cat" -n 2>/dev/null; git diff --stat', "pkill -f 'cat' -n -u 501 2>/dev/null", 'pkill -f cat']) {
+    assert.strictEqual(rule(cmd, lone(apps), 'sh', 'linux'), 'broad-pattern', cmd)
   }
+  // GNU pkill reads -P after the pattern as an option: only the shell's own children
+  assert.strictEqual(rule("pkill -f 'cat' -P $$", lone(apps), 'sh', 'linux'), null)
+  // BSD pkill reads everything after the pattern as more patterns (anthropics/claude-code#100684)
+  for (const cmd of ['pkill -f "cat" -n 2>/dev/null; git diff --stat', "pkill -f 'cat' -P $$", "pkill -f 'cat' -n -u 501 2>/dev/null"]) {
+    assert.strictEqual(rule(cmd, lone(apps), 'sh', 'darwin'), 'bsd-pkill', cmd)
+  }
+  assert.strictEqual(rule('pkill -f cat', lone(apps), 'sh', 'darwin'), 'broad-pattern')
   const hit = classify('pkill -f cat', {}, 'sh', lone(apps))
   assert.match(hit.why, /PID 500 \(Safari\), a desktop app and 1 more process outside this session/)
   assert.match(message(hit.why, 'darwin', hit.rule), /pgrep -fl '<pattern>'.*narrow nothing/s)
@@ -340,6 +347,35 @@ test('a pkill -f pattern that reaches a desktop app is blocked even with one ses
   assert.strictEqual(rule('pkill -n -f cat', lone(apps)), 'broad-pattern', 'the newest match can be an app')
   assert.strictEqual(rule('pkill cat', lone(apps)), null, 'the name alone')
   assert.strictEqual(rule('pkill -f cat', lone(apps, ['broad-pattern'])), null, 'switched off')
+})
+
+test('bsd-pkill: on macOS, a long option or a second pattern is blocked (anthropics/claude-code#109627)', () => {
+  const cmd = 'pkill -f "gcloud.py compute" -u kms --signal 0'
+  assert.strictEqual(rule(cmd, lone([]), 'sh', 'darwin'), 'bsd-pkill')
+  assert.strictEqual(rule(cmd, null, 'sh', 'darwin'), 'bsd-pkill', 'no process table needed')
+  assert.strictEqual(rule(cmd, null, 'sh', 'freebsd'), 'bsd-pkill')
+  const hit = classify(cmd, {}, 'sh', null, 'darwin')
+  assert.match(hit.why, /"-u", "kms", "--signal", "0" after it are more patterns/)
+  assert.match(message(hit.why, 'darwin', hit.rule), /pgrep -f '<pattern>', which only lists/)
+  for (const c of ['pkill --signal 0 -f gcloud', 'pkill --full gcloud', 'pkill -f a b', 'pkill -9 node 0', 'sudo pkill -f x -n']) {
+    assert.strictEqual(rule(c, null, 'sh', 'darwin'), 'bsd-pkill', c)
+  }
+  // GNU pkill: --signal 0 after the pattern is an option, and signal 0 sends nothing
+  assert.strictEqual(rule(cmd, lone([]), 'sh', 'linux'), null)
+  assert.strictEqual(rule('pkill -f gcloud.py --signal 0', lone([]), 'sh', 'linux'), null)
+  assert.strictEqual(rule('pkill -f gcloud.py -- --signal', null, 'sh', 'linux'), null)
+  // pgrep only lists, and one pattern with options before it is what BSD pkill expects
+  for (const c of ['pgrep -f "gcloud.py compute" -u kms', 'pgrep -f gcloud.py', 'pkill -u kms -f "gcloud.py compute"', 'pkill -0 -f gcloud.py']) {
+    assert.strictEqual(rule(c, lone([]), 'sh', 'darwin'), null, c)
+  }
+  assert.strictEqual(rule(cmd, lone([], ['bsd-pkill']), 'sh', 'darwin'), null, 'switched off')
+})
+
+test('BSD pkill: each extra pattern is checked like the first', () => {
+  const many = Array.from({ length: 8 }, (_, i) => proc(600 + i, 1, 'python3', `python3 worker.py --id ${i}`, T0))
+  assert.strictEqual(rule('pkill -f gcloud.py worker.py', lone(many, ['bsd-pkill']), 'sh', 'darwin'), 'broad-pattern')
+  assert.strictEqual(rule('pkill -f gcloud.py worker.py', lone(many, ['bsd-pkill']), 'sh', 'linux'), null, 'GNU reads only the first')
+  assert.strictEqual(rule('pkill gcloud node', lone([], ['bsd-pkill']), 'sh', 'darwin'), 'pkill', 'a shared name in the second place')
 })
 
 test('a pkill -f pattern that reaches many processes outside the session is blocked', () => {

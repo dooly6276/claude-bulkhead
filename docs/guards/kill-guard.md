@@ -90,6 +90,8 @@ Linux differs: procps `pkill` permutes its arguments, so options such as `-n` an
 
 `broad-pattern` blocks `pkill -f <pattern>` when the pattern matches a desktop app (a process inside an `.app` bundle) or 8 or more processes outside your session's own tree. Processes your session started do not count, so `pkill -f cat` with only your own `cat` running passes. The answer asks for the PID instead and points to `pgrep -fl '<pattern>'` to see what the pattern reaches.
 
+`bsd-pkill` (macOS, FreeBSD, OpenBSD, NetBSD) blocks a `pkill` that has a long option or more than one pattern, whatever the process table holds. BSD `pkill` has no long options and stops reading options at the first pattern, so in `pkill -f "gcloud.py compute" -u me --signal 0`, meant as an existence check, `-u`, `me`, `--signal` and `0` are four more patterns, and `0` matches almost every command line: about 66 processes, every other Claude Code session among them, got SIGTERM (anthropics/claude-code#109627). The answer says to put every option before the one pattern, and to use `pgrep -f '<pattern>'`, which only lists, for an existence check. On Linux, procps `pkill` reads `--signal 0` after the pattern as an option and signal 0 sends nothing, so the same command passes there. Each extra pattern on BSD also gets the checks the first one gets.
+
 The process table is read once per call, only for these commands, and never for `ls`, `npm test` or `kill $PID`. If it cannot be read, the command passes.
 
 ## Allowed
@@ -133,7 +135,7 @@ On Windows the second line is `taskkill /PID <your own pid> /T /F`, with `netsta
 - `BULKHEAD_DISABLE=kill-guard`, or `"killGuard": { "enabled": false }` in a config file, turns it off.
 - `killGuard.allowNames` takes names off the shared list, so killing them by name passes, for example `["ffmpeg"]`.
 - `killGuard.extraSharedNames` adds names that must not be killed by name, for example `["redis-server", "mysqld"]`.
-- `killGuard.massKill`, `dockerMass`, `deviceKill`, `appQuit`, `serviceStop`, `ownerCheck` and `broadPattern` turn the rules of the sections above off one by one. `BULKHEAD_DISABLE=mass-kill,docker-mass` works too.
+- `killGuard.massKill`, `dockerMass`, `deviceKill`, `appQuit`, `serviceStop`, `ownerCheck`, `broadPattern` and `bsdPkill` turn the rules of the sections above off one by one. `BULKHEAD_DISABLE=mass-kill,docker-mass` works too.
 
 See [configuration](../configuration.md).
 

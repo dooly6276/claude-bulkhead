@@ -8,6 +8,11 @@
 - basics `rm-empty-var`: `rm -rf $D/`, `rm -rf "$D"/*`, `rm -rf $(cygpath -u "$X")/` and `rsync --delete src/ $D/` are blocked when the variable is not set to something non-empty earlier in the same shell, because an empty or unset variable (or a command that prints nothing) turns the path into `/` (anthropics/claude-code#109735). Deleting the whole output of a path command, such as `rm -rf "$(cygpath -u 'C:\')"`, which prints `/c/`, is blocked too (anthropics/claude-code#95426 lost 600 GB). `"${D:?}/"`, `"$TMPDIR/foo"` and `D=$(mktemp -d) && rm -rf "$D"/` pass. Also `Remove-Item -Recurse -Force $env:X\`, `rd /s /q %X%\`, and the same commands inside `bash -c` and `wsl -- bash -lc`. Applies with a single session. Turn it off with `basics.rmEmptyVar`.
 - basics `rm-unquoted-var`: `rm -rf $D` with `D` unquoted is blocked when the value, set earlier on the line or in the environment, has a space or a wildcard, since bash splits it into several paths and deletes each (anthropics/claude-code#107271). Turn it off with `basics.rmUnquotedVar`.
 - basics `rm-git-dir`: `rm -rf .git`, `rm -rf path/.git` and `find . -name .git -exec rm -rf {} +` are blocked when that `.git` is an existing folder, since the repository's history goes with it (anthropics/claude-code#107274). A `.git` the same line creates, such as after `git clone`, passes. Turn it off with `basics.rmGitDir`.
+- kill-guard `bsd-pkill`: on macOS and the BSDs, `pkill` with a long option (`--signal`, `--full`) or with more than one pattern is blocked, also with a single session. BSD `pkill` has no long options and reads everything after the first pattern as another pattern, so `pkill -f "gcloud.py compute" -u me --signal 0`, meant as an existence check, also matched `0` and sent SIGTERM to about 66 processes, every other Claude Code session among them (anthropics/claude-code#109627). The message suggests `pgrep -f '<pattern>'` for an existence check. Turn it off with `killGuard.bsdPkill`.
+
+### Fixed
+
+- kill-guard reads `pkill` arguments the way the platform's `pkill` does. On Linux, options written after the pattern (`pkill -f x --signal 0`, `pkill -f x -P $$`) are options, as procps reads them, so a signal-0 check or a `-P` scope there passes. On macOS, every extra operand is a pattern, and each gets the same checks as the first.
 
 ## 0.3.7 - 2026-11-12
 
