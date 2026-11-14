@@ -1,4 +1,5 @@
 'use strict'
+const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { execFileSync } = require('child_process')
@@ -8,7 +9,8 @@ const { realPath } = require('./paths')
 const { gitCall, gitEnv, parseArgs } = require('./gitargs')
 
 // Narrow rules for mistakes that cannot be undone. Each can be turned off on its own:
-// rm-root, force-push-main, discard-changes, agent-author, self-allow.
+// rm-root, rm-empty-var, rm-unquoted-var, rm-git-dir, force-push-main, protected-delete,
+// discard-changes, agent-author, self-allow.
 
 // ~, $HOME and %USERPROFILE% become the home directory; /c/... becomes C:/... on Windows.
 // Returns null for anything with a variable we cannot expand.
@@ -91,6 +93,208 @@ function dangerousTarget(arg, { cwd, home, platform, repoRoot }) {
   return null
 }
 
+// ---------------------------------------------------------------------------------------------
+// rm-empty-var, rm-unquoted-var, rm-git-dir: deletes that are dangerous whoever runs them.
+
+const NAME = '[A-Za-z_]\\w*'
+// a variable reference that is empty when the variable is unset: $D, ${D}, $1, $@, $env:D, %D%
+const EMPTYABLE = new RegExp(`^(\\$(?:${NAME}|\\{${NAME}\\}|[1-9@*])|\\$env:${NAME}|%${NAME}%)([\\\\/]+)(?:\\*|\\.\\*)?$`, 'i')
+// always set by the shell, or already judged by rm-root once expanded
+const ALWAYS_SET = /^(?:HOME|PWD|USERPROFILE)$/i
+const varName = ref => ref.replace(/^\$env:|^\$\{?|^%|[}%]$/gi, '')
+
+// $(...) or `...` at the start of a word: the index just past it, or -1
+function substitutionEnd(v) {
+  if (v.startsWith('`')) { const e = v.indexOf('`', 1); return e < 0 ? -1 : e + 1 }
+  if (!v.startsWith('$(')) return -1
+  let depth = 0
+  let quote = null
+  for (let i = 1; i < v.length; i++) {
+    const c = v[i]
+    if (quote) { if (c === quote) quote = null; continue }
+    if (c === '"' || c === "'") quote = c
+    else if (c === '(') depth++
+    else if (c === ')' && --depth === 0) return i + 1
+  }
+  return -1
+}
+
+// Variables the same command line sets before using them, name -> raw value: D=..., export D=...,
+// local D=..., PowerShell $D = ... and $env:D = ..., cmd set D=..., and for D in ... (value null).
+const ASSIGN_SH = new RegExp(`(?:^|[\\s;&|(])(?:(?:export|local|declare|typeset|readonly)\\s+(?:-\\w+\\s+)*)?(${NAME})=((?:"(?:[^"\\\\]|\\\\.)*"|'[^']*'|\\$\\((?:[^()]|\\([^()]*\\))*\\)|\`[^\`]*\`|[^\\s;&|()"'\`])*)`, 'g')
+const ASSIGN_PS = new RegExp(`\\$(?:env:)?(${NAME})\\s*=\\s*("[^"]*"|'[^']*'|\\$\\((?:[^()]|\\([^()]*\\))*\\)|[^\\s;|]+)`, 'gi')
+const ASSIGN_CMD = new RegExp(`\\bset\\s+"?(${NAME})=([^"&|\\r\\n]*)`, 'gi')
+const FOR_LOOP = new RegExp(`(?:^|[\\s;&|(])for\\s+(${NAME})\\s+in\\s`, 'g')
+function assignments(text, mode) {
+  const out = new Map()
+  const re = mode === 'ps' ? ASSIGN_PS : mode === 'cmd' ? ASSIGN_CMD : ASSIGN_SH
+  for (const m of text.matchAll(re)) out.set(mode === 'sh' ? m[1] : m[1].toUpperCase(), m[2])
+  if (mode === 'sh') for (const m of text.matchAll(FOR_LOOP)) out.set(m[1], null)
+  return out
+}
+const lookup = (vars, name, mode) => (mode === 'sh' ? vars.get(name) : vars.get(name.toUpperCase()))
+const hasVar = (vars, name, mode) => vars.has(mode === 'sh' ? name : name.toUpperCase())
+
+// Whether an assigned value can be empty. A literal, a mktemp, ${X:?} (stops when X is empty) and
+// ${X:-default} cannot; a bare $OTHER or a command's output can.
+function nonEmpty(raw) {
+  if (raw === null) return true // a for loop's variable
+  const v = raw.replace(/^["']/, '')
+  if (/^(?:\$\(\s*|`\s*)mktemp\b/.test(v)) return true
+  if (new RegExp(`^\\$\\{(?:${NAME}|\\d+):?(?:\\?|[-=][^}])`).test(v)) return true
+  const rest = raw
+    .replace(/\$\((?:[^()]|\([^()]*\))*\)|`[^`]*`|\$\{[^}]*\}|\$(?:env:)?\w+|\$[@*#?$!-]|%\w+%/g, '')
+    .replace(/["']/g, '')
+  return rest.length > 0
+}
+
+// Commands that print one path: deleting their output deletes whatever path that turns out to be.
+const PATH_TOOLS = /^(?:cygpath|wslpath|dirname|realpath|readlink|pwd|mktemp)$/
+// cygpath -u 'C:\', wslpath C:/, realpath /, dirname /: a drive or filesystem root
+const ROOT_ARG = /^(?:[a-z]:[\\/]?|[\\/]+)$/i
+
+// Why deleting this operand can delete a whole drive, or null:
+//   { kind: 'var', what: '$D', name: 'D' }   $D/ or $D/* with D possibly empty: / or /*
+//   { kind: 'sub', what: '$(...)', tail }    $(...)/: empty output gives /
+//   { kind: 'whole', what: '$(...)' }        "$(...)" alone: the deleted path is whatever it prints
+//   { kind: 'root', what: '$(...)' }         $(cygpath -u 'C:\')...: it prints a drive root
+function emptyVarTarget(word, vars, mode) {
+  const v = word.v
+  const m = EMPTYABLE.exec(v)
+  if (m) {
+    const name = varName(m[1])
+    if (ALWAYS_SET.test(name)) return null
+    if (hasVar(vars, name, mode) && nonEmpty(lookup(vars, name, mode))) return null
+    return { kind: 'var', what: m[1], name }
+  }
+  const end = substitutionEnd(v)
+  if (end < 0) return null
+  const what = v.slice(0, end)
+  const tail = v.slice(end)
+  const inner = shell.commands(v.startsWith('$(') ? what.slice(2, -1) : what.slice(1, -1), mode === 'cmd' ? 'sh' : mode, shell.MAX_DEPTH)
+  const tool = inner.length === 1 && PATH_TOOLS.test(shell.bin(inner[0].argv[0]))
+  if (tool && inner[0].argv.slice(1).some(a => !a.startsWith('-') && ROOT_ARG.test(a))) return { kind: 'root', what }
+  if (/^[\\/]+(?:\*|\.\*)?$/.test(tail)) return { kind: 'sub', what, tail }
+  // "$(...)" stands for one path; an unquoted $(find ...) is a list, and an empty list deletes nothing
+  if (!tail && (word.q || tool)) return { kind: 'whole', what }
+  return null
+}
+
+// rsync --delete makes the destination match the source: with an empty $D/ that destination is /.
+// A bare empty $D also shifts the last source into the destination's place.
+const RSYNC_DELETE = /^--(?:del|delete(?:-\w+)*|remove-source-files)$/
+function rsyncDeleteDest(t, words, vars, mode) {
+  if (shell.bin(t[0]) !== 'rsync' || !t.some(a => RSYNC_DELETE.test(a))) return null
+  const k = t.length - 1
+  if (k < 2 || t[k].startsWith('-')) return null
+  const w = words[k]
+  const bare = new RegExp(`^\\$(?:${NAME}|\\{${NAME}\\})$`).exec(w.v)
+  if (bare) {
+    const name = varName(bare[0])
+    if (ALWAYS_SET.test(name) || (hasVar(vars, name, mode) && nonEmpty(lookup(vars, name, mode)))) return null
+    return { kind: 'var', what: bare[0], name }
+  }
+  const hit = emptyVarTarget(w, vars, mode)
+  return hit && hit.kind !== 'whole' ? hit : null
+}
+
+const GLOB_OR_SPACE = /[\s*?[]/
+// An unquoted word with a variable whose value has a space or a glob character: bash and sh split
+// it into several words and delete each of them. The value comes from an assignment earlier on the
+// line, or from the environment when the line does not set it. A value from $(...) is not known.
+function splitVar(word, vars, env) {
+  if (word.q) return null
+  for (const m of word.v.matchAll(new RegExp(`\\$(?:(${NAME})|\\{(${NAME})\\})`, 'g'))) {
+    const name = m[1] || m[2]
+    let value
+    if (vars.has(name)) {
+      const raw = vars.get(name)
+      if (raw === null || /\$\(|`/.test(raw)) continue
+      value = raw.replace(/^"(.*)"$|^'(.*)'$/s, '$1$2').replace(new RegExp(`\\$(?:(${NAME})|\\{(${NAME})\\})`, 'g'), (_, a, b) => env[a || b] || '')
+        .replace(/\$\{[^}]*\}|\$[\d@*#?$!-]/g, '') // ${1:?}, $1: not known here
+    } else value = env[name]
+    if (value && GLOB_OR_SPACE.test(value)) return { what: m[0], name, value }
+  }
+  return null
+}
+
+// A path whose last part is .git: the repository's history, or a worktree's link to it.
+const isGitDirPath = v => /(?:^|[\\/])\.git[\\/]*$/i.test(v)
+function defaultIsDir(p) {
+  try { return fs.statSync(p).isDirectory() } catch { return false }
+}
+
+// Whether deleting the .git operand loses history: it is a folder (a worktree's .git file only
+// links to the history and goes with git worktree remove anyway), or it cannot be resolved here.
+// A .git the same line creates (git clone, git init, a fresh mktemp folder) does not exist yet.
+function gitDirAtRisk(v, { cwd, home, platform, vars, env, mode, isDir }) {
+  let unknown = false
+  let created = false
+  const expanded = v
+    .replace(/^~(?=[\\/]|$)/, home)
+    .replace(new RegExp(`\\$env:(${NAME})|\\$\\{(${NAME})\\}|\\$(${NAME})|%(${NAME})%`, 'gi'), (all, a, b, c, d) => {
+      const name = a || b || c || d
+      if (/^(?:HOME|USERPROFILE)$/i.test(name)) return home
+      if (hasVar(vars, name, mode)) {
+        const raw = lookup(vars, name, mode)
+        if (raw !== null && /^["']?[^$`"']+["']?$/.test(raw)) return raw.replace(/["']/g, '')
+        created = true
+        return all
+      }
+      const val = env[name] !== undefined ? env[name] : env[name.toUpperCase()]
+      if (val) return val
+      unknown = true
+      return all
+    })
+  if (created) return false
+  if (unknown || /[$`*?[]/.test(expanded)) return true
+  return isDir(pathFor(platform).resolve(cwd, expanded))
+}
+
+// find <start> -name .git -exec rm -rf {} +: removes the .git of the repository it starts in
+function findRemovesGit(t) {
+  if (shell.bin(t[0]) !== 'find') return false
+  const named = t.some((a, i) => /^-(?:i?name|i?path|wholename)$/.test(a) && /^(?:\*\/)?\.git$/.test(t[i + 1] || ''))
+  if (!named) return false
+  const exec = t.findIndex(a => a === '-exec' || a === '-execdir')
+  if (exec < 0) return false
+  const stop = t.findIndex((a, i) => i > exec && (a === ';' || a === '+'))
+  if (!rmTargets(t.slice(exec + 1, stop < 0 ? undefined : stop)).length) return false
+  const starts = []
+  for (let i = 1; i < t.length && !/^[-(!]/.test(t[i]); i++) starts.push(t[i])
+  // with no start, find starts in the current directory; a start inside the project (vendor/) only
+  // reaches nested copies
+  return !starts.length || starts.some(s => /^(?:\.{1,2}[\\/]?|[\\/~$%]|[a-z]:)/i.test(s))
+}
+
+function emptyVarMessage(seg, operand, hit, rsync) {
+  const rest = operand.slice(hit.what.length)
+  const becomes = rsync ? `${rest.replace(/^[\\/]+/, '/') || 'missing'}, and --delete then deletes everything there the source does not have` : `${rest.replace(/^[\\/]+/, '/')}, the whole drive`
+  const sub = `\`${oneLine(hit.what, 60)}\``
+  const why = {
+    var: `if ${hit.name} is empty or unset, ${operand} becomes ${becomes}`,
+    sub: `if ${sub} prints nothing (it failed or found nothing), ${operand} becomes ${becomes}`,
+    whole: `it deletes whatever path ${sub} prints, and a path command can print a drive root (cygpath -u 'C:\\' prints /c/)`,
+    root: `${sub} prints a drive or filesystem root, so this deletes at the root of the drive`,
+  }[hit.kind]
+  const tool = rsync ? 'rsync --delete <source>/' : 'rm -rf'
+  const safe = hit.kind === 'var' && !/^%|^\$env:/i.test(hit.what)
+    ? `${tool} "\${${hit.name}:?}${rest}"`
+    : `D=$(...) first, check it, then ${tool} "\${D:?}/"`
+  return `[bulkhead] basics: \`${oneLine(seg, 120)}\` is dangerous: ${why}.\n` +
+    `Use \`${safe}\` (the shell stops when the variable is empty), or write the path out.`
+}
+
+function splitVarMessage(seg, hit) {
+  return `[bulkhead] basics: \`${oneLine(seg, 120)}\` leaves ${hit.what} unquoted, and its value (${oneLine(hit.value, 60)}) has a space or a wildcard, so bash splits it into several paths and deletes each one.\n` +
+    `Quote it: rm -rf "${hit.what}".`
+}
+
+function gitDirMessage(seg) {
+  return `[bulkhead] basics: \`${oneLine(seg, 120)}\` deletes the repository's history: every commit not pushed, the other branches and the stashes. Nothing brings it back.\n` +
+    'To remove a checkout, use `git worktree remove <path>` or move the folder to the trash. To start the history over, ask the user first.'
+}
+
 function git(args, cwd) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', timeout: 5000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }).trim()
 }
@@ -165,6 +369,7 @@ function agentMessage(what) {
 function check(cmd, {
   cwd = process.cwd(), home = os.homedir(), platform = process.platform, run = git,
   protectedBranches = setting('basics.protectedBranches', ['main', 'master']), mode = 'sh',
+  env = process.env, isDir = defaultIsDir,
 } = {}) {
   // each rule's switch and the repository root are read once, however many commands the line has
   const once = fn => { let v; let done = false; return () => (done ? v : ((done = true), (v = fn()))) }
@@ -173,6 +378,9 @@ function check(cmd, {
   const discard = once(() => enabled('discard-changes'))
   const protectedDelete = once(() => enabled('protected-delete'))
   const author = once(() => enabled('agent-author'))
+  const emptyVar = once(() => enabled('rm-empty-var'))
+  const unquotedVar = once(() => enabled('rm-unquoted-var'))
+  const gitDir = once(() => enabled('rm-git-dir'))
   if (/allow/i.test(String(cmd || '')) && enabled('self-allow')) {
     const self = require('./self-allow').check(cmd, { mode })
     if (self) return self
@@ -184,11 +392,20 @@ function check(cmd, {
     const runsGit = cmds.some(c => shell.bin(c.argv[0]) === 'git')
     for (const c of cmds) {
       const own = c.depth === 0 ? prepared.slice(c.s, c.e) : c.argv.join(' ')
-      const env = agentEnv(own)
-      if (env && (runsGit || /^(?:export|set|setx|\$env:)/i.test(own.trim()))) return agentMessage(env)
+      const setsAgent = agentEnv(own)
+      if (setsAgent && (runsGit || /^(?:export|set|setx|\$env:)/i.test(own.trim()))) return agentMessage(setsAgent)
     }
   }
   const repoRoot = once(() => { try { return run(['rev-parse', '--show-toplevel'], cwd) } catch { return null } })
+  // wsl [options] -- bash -c '...' runs a Linux shell; read the commands inside it too
+  for (const c of [...cmds]) {
+    if (shell.bin(c.argv[0] || '') !== 'wsl' || c.depth >= shell.MAX_DEPTH) continue
+    const k = c.argv.findIndex((a, i) => i > 0 && (a === '--' || a === '-e' || a === '--exec'))
+    const linux = k > 0 ? c.argv.slice(k + 1) : []
+    const sh = linux.length && /^(?:bash|sh|zsh|dash)$/.test(shell.bin(linux[0])) ? linux.findIndex(a => /^-[a-z]*c[a-z]*$/.test(a)) : -1
+    const inner = sh > 0 ? linux[sh + 1] : linux.length ? linux.join(' ') : null
+    if (inner) cmds.push(...shell.commands(inner, 'sh', c.depth + 1))
+  }
   for (const c of cmds) {
     const t = c.argv
     if (!t.length) continue
@@ -202,6 +419,29 @@ function check(cmd, {
             'Name the folder you mean inside the project instead, for example rm -rf ./dist.'
         }
       }
+    }
+    const cmdMode = c.depth > 0 && mode !== 'sh' && !/^(?:rd|rmdir|del|erase|remove-item|ri)$/i.test(shell.bin(t[0])) ? 'sh' : mode
+    // variables the same shell sets before this command: the text before it in the string it was read from
+    const vars = (targets.length || shell.bin(t[0]) === 'rsync') ? assignments(String(c.src || '').slice(0, c.s), cmdMode) : null
+    if (targets.length && emptyVar()) {
+      const operands = c.words.filter((w, i) => i > 0 && targets.includes(w.v))
+      for (const w of operands) {
+        const hit = emptyVarTarget(w, vars, cmdMode)
+        if (hit) return emptyVarMessage(seg, w.v, hit, false)
+      }
+    }
+    if (vars && shell.bin(t[0]) === 'rsync' && emptyVar()) {
+      const hit = rsyncDeleteDest(t, c.words, vars, cmdMode)
+      if (hit) return emptyVarMessage(seg, t[t.length - 1], hit, true)
+    }
+    if (targets.length && cmdMode === 'sh' && unquotedVar()) {
+      for (const w of c.words.filter((x, i) => i > 0 && targets.includes(x.v))) {
+        const hit = splitVar(w, vars, env)
+        if (hit) return splitVarMessage(seg, hit)
+      }
+    }
+    if (gitDir() && ((targets.length && targets.some(v => isGitDirPath(v) && gitDirAtRisk(v, { cwd, home, platform, vars, env, mode: cmdMode, isDir }))) || findRemovesGit(t))) {
+      return gitDirMessage(seg)
     }
     if (path.basename(t[0]).replace(/\.exe$/i, '') !== 'git') continue
     const call = gitCall(t, cwd, c.depth === 0 ? gitEnv(prepared.slice(c.s, c.e)) : {})
@@ -249,7 +489,10 @@ function ruleOf(message) {
   if (/force-pushing/.test(message)) return 'force-push-main'
   if (/deletes the protected branch/.test(message)) return 'protected-delete'
   if (/would throw away/.test(message)) return 'discard-changes'
+  if (/` is dangerous: /.test(message)) return 'rm-empty-var'
+  if (/bash splits it into several paths/.test(message)) return 'rm-unquoted-var'
+  if (/deletes the repository's history/.test(message)) return 'rm-git-dir'
   return 'rm-root'
 }
 
-module.exports = { handle, check, rmTargets, dangerousTarget, forcePushToMain, deletesProtected, ruleOf, agentAuthor }
+module.exports = { handle, check, rmTargets, dangerousTarget, emptyVarTarget, splitVar, assignments, nonEmpty, findRemovesGit, forcePushToMain, deletesProtected, ruleOf, agentAuthor }

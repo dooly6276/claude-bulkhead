@@ -58,6 +58,89 @@ test('everyday deletes pass', () => {
   assert.strictEqual(check('rd /s /q node_modules', win()), null)
 })
 
+// The repository at the fake cwd has a .git folder; nothing else exists.
+const gitHere = p => /[\\/]shop[\\/]web[\\/]\.git$|[\\/]shop[\\/]\.git$/.test(p)
+const opts = (extra = {}) => ({ ...linux(), env: {}, isDir: gitHere, ...extra })
+const ruleFor = (cmd, o = opts()) => { const m = check(cmd, o); return m && ruleOf(m) }
+
+test('rm-empty-var: a variable or command output followed by / becomes / when it is empty', () => {
+  for (const cmd of ['rm -rf $D/', 'rm -rf ${D}/', 'rm -rf "$D"/', 'rm -rf "$D/"', 'rm -rf "$BUILD_DIR"/*', 'rm -rf $X/*',
+    'rm -rf $1/', 'rm -rf $(cygpath -u "$X")/', 'rm -rf `dirname $F`/', 'rm -rf "$(git rev-parse --show-toplevel)"/*',
+    'sudo rm -rf $OUT/', 'bash -c \'rm -rf $R/\'', 'R=/x; bash -c \'rm -rf $R/\'', 'D=; rm -rf $D/', 'D=$OTHER; rm -rf $D/',
+    'D=$(git rev-parse --show-toplevel); rm -rf "$D"/']) {
+    assert.strictEqual(ruleFor(cmd), 'rm-empty-var', cmd)
+  }
+  const m = check('rm -rf "$D"/', opts())
+  assert.match(m, /if D is empty or unset, \$D\/ becomes \/, the whole drive/)
+  assert.match(m, /rm -rf "\$\{D:\?\}\/"/)
+})
+
+test('rm-empty-var: a path command\'s output deleted as a whole (anthropics/claude-code#95426)', () => {
+  for (const cmd of ['rm -rf "$(cygpath -u \'C:\\\')" 2>/dev/null', 'rm -rf "$(cygpath -u \'C:\\\')"Users', 'rm -rf $(wslpath C:/)',
+    'rm -rf "$(mktemp -d)"', 'rm -rf "$(pwd)"', 'rm -rf $(dirname "$0")']) {
+    assert.strictEqual(ruleFor(cmd), 'rm-empty-var', cmd)
+  }
+  assert.match(check('rm -rf "$(cygpath -u \'C:\\\')"', opts()), /prints a drive or filesystem root/)
+})
+
+test('rm-empty-var: rsync --delete into an empty destination (anthropics/claude-code#109735)', () => {
+  for (const cmd of ['rsync -a --delete src/ $R/', 'rsync -a --delete-after src/ "${R}"/', 'rsync -av --delete src/ dst/ $R',
+    'rsync -a --del ./ $(cygpath -u "$X")/',
+    'wsl -d Ubuntu-24.04 -- bash -lc \'set -u; mkdir -p $R; rsync -a --delete --exclude node_modules /mnt/d/p/ $R/\'',
+    'wsl -d Ubuntu-24.04 -- bash -lc \'rm -rf $R/\'', 'wsl -- rm -rf $R/']) {
+    assert.strictEqual(ruleFor(cmd), 'rm-empty-var', cmd)
+  }
+  assert.match(check('rsync -a --delete src/ $R/', opts()), /--delete then deletes everything there/)
+  for (const cmd of ['rsync -a --delete src/ dist/', 'rsync -a src/ $R/', 'rsync -a --delete src/ "$TMPDIR/out/"', 'rsync -a --delete src/ "${R:?}/"',
+    'wsl -d Ubuntu-24.04 -- bash -lc \'set -u; R=~/some-dir; mkdir -p $R; rsync -a --delete --exclude x /mnt/d/p/ $R/\'']) {
+    assert.strictEqual(check(cmd, opts()), null, cmd)
+  }
+})
+
+test('rm-empty-var: the safe forms and variables set on the same line pass', () => {
+  for (const cmd of ['rm -rf "${D:?}/"', 'rm -rf "${D:?}"/*', 'rm -rf "${D:?missing}"/', 'rm -rf "$TMPDIR/foo"', 'rm -rf $D/build',
+    'rm -rf "$D"', 'rm -rf "$(git rev-parse --show-toplevel)/dist"', 'rm -rf $(find . -name "*.pyc")', 'rm -rf $(git ls-files -o)',
+    'D=$(mktemp -d) && rm -rf $D/', 'D=/some/literal; rm -rf "$D"/', 'export D="$TMPDIR/x"; rm -rf "$D"/', 'local D=${1:?}; rm -rf $D/*',
+    'for d in a b; do rm -rf $d/; done', 'rm -rf $PWD/', 'git commit -m "never rm -rf $D/ again"', 'echo "rm -rf $D/"',
+    "grep -n 'rm -rf $D/' notes.md", 'git rm -r --cached x']) {
+    assert.strictEqual(check(cmd, opts()), null, cmd)
+  }
+  process.env.BULKHEAD_DISABLE = 'rm-empty-var'
+  try { assert.strictEqual(check('rm -rf $D/', opts()), null) } finally { delete process.env.BULKHEAD_DISABLE }
+})
+
+test('rm-empty-var: PowerShell and cmd forms', () => {
+  assert.strictEqual(ruleOf(check('Remove-Item -Recurse -Force $env:X\\', { ...win(), env: {}, mode: 'ps' })), 'rm-empty-var')
+  assert.strictEqual(ruleOf(check('rd /s /q %X%\\', { ...win(), env: {} })), 'rm-empty-var')
+  assert.strictEqual(check('$env:X = "C:\\tmp\\x"; Remove-Item -Recurse -Force $env:X\\', { ...win(), env: {}, mode: 'ps' }), null)
+  assert.strictEqual(check('Remove-Item -Recurse -Force "$env:TEMP\\scratch"', { ...win(), env: {}, mode: 'ps' }), null)
+})
+
+test('rm-unquoted-var: an unquoted variable whose value has a space is split (anthropics/claude-code#107271)', () => {
+  assert.strictEqual(ruleFor('D="My Project/build"; rm -rf $D'), 'rm-unquoted-var')
+  assert.strictEqual(ruleFor('rm -rf $OUT', opts({ env: { OUT: '/home/dev/My Files/out' } })), 'rm-unquoted-var')
+  assert.strictEqual(ruleFor('rm -rf $OUT/cache', opts({ env: { OUT: '/home/dev/My Files' } })), 'rm-unquoted-var')
+  assert.match(check('D="a b"; rm -rf $D', opts()), /Quote it: rm -rf "\$D"/)
+  for (const cmd of ['rm -rf $D', 'D=dist; rm -rf $D', 'D="a b"; rm -rf "$D"', 'D=$(pwd); rm -rf $D/x']) assert.strictEqual(check(cmd, opts()), null, cmd)
+  assert.strictEqual(check('rm -rf $OUT', opts({ env: { OUT: '/tmp/out' } })), null)
+})
+
+test('rm-git-dir: deleting a repository\'s .git folder is blocked (anthropics/claude-code#107274)', () => {
+  const at = p => p.replace(/\\/g, '/')
+  const isDir = p => ['/home/dev/work/shop/web/.git', '/home/dev/work/shop/.git'].includes(at(p))
+  for (const cmd of ['rm -rf .git', 'rm -rf ./.git', 'rm -rf .git/', 'rm -rf ../.git', 'rm -rf /home/dev/work/shop/.git', 'rm -rf "$REPO/.git"',
+    'rm -rf */.git', 'find . -name .git -exec rm -rf {} +', "find -name '.git' -type d -exec rm -rf {} \\;"]) {
+    assert.strictEqual(ruleFor(cmd, opts({ isDir })), 'rm-git-dir', cmd)
+  }
+  assert.match(check('rm -rf .git', opts({ isDir })), /git worktree remove/)
+  for (const cmd of ['rm -rf build/.git-cache', 'rm -rf .github', 'rm -rf vendor/x/.git', 'rm -rf .gitignore', 'git rm -r --cached .git',
+    'git clone https://example.com/x.git /tmp/x && rm -rf /tmp/x/.git', 'D=$(mktemp -d) && git clone u "$D" && rm -rf "$D/.git"',
+    'find vendor -name .git -exec rm -rf {} +', 'echo rm -rf .git']) {
+    assert.strictEqual(check(cmd, opts({ isDir })), null, cmd)
+  }
+  assert.strictEqual(check('rm -rf "$REPO/.git"', opts({ isDir, env: { REPO: '/tmp/fresh' } })), null)
+})
+
 test('rm inside the current directory does not ask git', () => {
   const git = fakeGit()
   check('rm -rf node_modules dist', linux(git))

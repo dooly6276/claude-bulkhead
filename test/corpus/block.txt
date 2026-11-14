@@ -348,6 +348,32 @@ basics	Remove-Item -Recurse -Force ~
 basics	Remove-Item -Recurse -Force $HOME
 basics,platform=win32	Remove-Item -Recurse -Force C:\
 basics,platform=win32	rd /s /q C:\
+
+# == basics: a variable or command output that can be empty, before a slash (rm-empty-var) ==
+basics	rm -rf $D/
+basics	rm -rf ${D}/
+basics	rm -rf "$D"/
+basics	rm -rf "$D/"
+basics	rm -rf "$BUILD_DIR"/*
+basics	rm -rf $X/*
+basics	rm -rf $(cygpath -u "$X")/
+basics	rm -rf `dirname $F`/
+basics	rm -rf "$(cygpath -u 'C:\')" 2>/dev/null
+basics	D=$OTHER; rm -rf $D/
+basics	R=/x; bash -c 'rm -rf $R/'
+basics	rsync -a --delete src/ $R/
+basics	rsync -a --delete-after src/ "${R}"/
+basics	wsl -d Ubuntu-24.04 -- bash -lc 'set -u; mkdir -p $R; rsync -a --delete --exclude node_modules /mnt/d/app/ $R/'
+basics	wsl -d Ubuntu-24.04 -- bash -lc 'rm -rf $R/'
+
+# == basics: unquoted variable split into several paths (rm-unquoted-var) ==
+basics	D="My Project/build"; rm -rf $D
+
+# == basics: the repository's history (rm-git-dir) ==
+basics	rm -rf .git
+basics	rm -rf ./.git
+basics	rm -rf .git/
+basics	find . -name .git -exec rm -rf {} +
 basics,platform=win32	rmdir /s /q C:\
 basics,platform=win32	rm -rf /c/
 basics,platform=win32	Remove-Item -Recurse -Force $env:USERPROFILE

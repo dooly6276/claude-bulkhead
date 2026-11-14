@@ -260,7 +260,7 @@ Rules per guard:
 | memory-guard | `low-memory`, `slot-files` |
 | port-guard | `port-in-use` (starting a server on another session's port), `kill-by-port` |
 | checkout-guard | `git-<subcommand>`, such as `git-checkout`, `git-stash`, `git-pull` |
-| basics | `rm-root`, `force-push-main`, `discard-changes` |
+| basics | `rm-root`, `rm-empty-var`, `rm-unquoted-var`, `rm-git-dir`, `force-push-main`, `protected-delete`, `discard-changes`, `agent-author`, `self-allow` |
 | orphan-reaper | `test-runner`, `watcher`, `builder`, `headless-browser`, `dev-server`, `extra-name`; see [the rules table](guards/orphan-reaper.md#what-it-stops) |
 
 The file is rotated at 1 MB: the current file becomes `events.jsonl.1` (replacing the previous one) and a new file starts, so the log never takes more than about 2 MB. `bulkhead log` reads both files.

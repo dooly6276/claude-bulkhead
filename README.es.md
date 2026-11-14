@@ -72,7 +72,7 @@ Node 18 o superior debe estar en el `PATH` (el instalador nativo de Claude Code 
 | Tres sesiones lanzan `next build`, `npm test` y Playwright en el mismo minuto, y la máquina se congela. | memory-guard bloquea los comandos pesados cuando queda poca RAM. Con `bulkhead-slot`, el tercer trabajo espera en una cola hasta que haya espacio. |
 
 <details>
-<summary>Cinco más</summary>
+<summary>Seis más</summary>
 
 | Sin bulkhead | Con bulkhead |
 |---|---|
@@ -81,10 +81,11 @@ Node 18 o superior debe estar en el `PATH` (el instalador nativo de Claude Code 
 | Un subagente hace polling en primer plano durante diez minutos. La sesión no puede responderte y la caché del prompt caduca. | wait-guard bloquea el bucle y pide usar `run_in_background: true`. |
 | Un agente quiere saber qué ocupa el disco y lanza diez `du` a la vez sobre tu carpeta personal. Los builds y el `git status` de todas las sesiones van a paso de tortuga durante minutos. | disk-guard lo bloquea y pide una carpeta cada vez. |
 | Una tarea de "limpiar los worktrees" ejecuta `git worktree remove` sobre un worktree en el que otra sesión sigue trabajando. | checkout-guard lo bloquea e indica qué sesión sigue allí. |
+| Una limpieza ejecuta `rm -rf "$BUILD_DIR"/*` con `BUILD_DIR` sin definir, que es `rm -rf /*`, o `rm -rf .git`, y el historial del repositorio desaparece. | basics lo bloquea y da la forma segura, `rm -rf "${BUILD_DIR:?}"/*`. |
 
 </details>
 
-Con una sola sesión siguen activos kill-guard, memory-guard, wait-guard, disk-guard y basics (nada de `rm -rf ~`, ni force-push a `main`, ni `reset --hard` sobre trabajo sin commit). port-guard y checkout-guard actúan cuando hay una segunda sesión o un subagente activo.
+Con una sola sesión siguen activos kill-guard, memory-guard, wait-guard, disk-guard y basics (nada de `rm -rf ~`, ni `rm -rf $D/`, que con `D` vacío se convierte en `rm -rf /`, ni `rm -rf .git`, ni force-push a `main`, ni `reset --hard` sobre trabajo sin commit). port-guard y checkout-guard actúan cuando hay una segunda sesión o un subagente activo.
 
 ## ¿Qué es?
 
@@ -290,9 +291,9 @@ Desactivar: `BULKHEAD_DISABLE=orphan-reaper`. Detalles: [docs/guards/orphan-reap
 </details>
 
 <details>
-<summary><strong>basics</strong>: cinco errores que no se pueden deshacer</summary>
+<summary><strong>basics</strong>: ocho errores que no se pueden deshacer</summary>
 
-`rm-root` (`rm -rf` en una raíz, en una carpeta de primer nivel como `/srv`, en el home, en una carpeta directamente dentro del home como `~/Documents`, o por encima del repositorio), `force-push-main` (`git push --force` a `main` o `master`; `--force-with-lease` pasa), `protected-delete` (`git push origin :main`, `git push --delete origin main`, `git branch -D main`), `discard-changes` (`git reset --hard` o `git clean -fd` que perderían trabajo sin commitear) y `agent-author` (`--author="Claude <noreply@anthropic.com>"`, `git config user.name Claude` y similares, para que tus commits sigan contando como tuyos).
+`rm-root` (`rm -rf` en una raíz, en una carpeta de primer nivel como `/srv`, en el home, en una carpeta directamente dentro del home como `~/Documents`, o por encima del repositorio), `rm-empty-var` (`rm -rf $D/`, `rm -rf "$(cygpath -u ...)"` y `rsync --delete` hacia `$D/`, que se convierten en `/` si la variable o la salida están vacías; `"${D:?}/"` pasa), `rm-unquoted-var` (`rm -rf $D` sin comillas cuando el valor tiene un espacio, y bash borra cada parte), `rm-git-dir` (`rm -rf .git` en un repositorio), `force-push-main` (`git push --force` a `main` o `master`; `--force-with-lease` pasa), `protected-delete` (`git push origin :main`, `git push --delete origin main`, `git branch -D main`), `discard-changes` (`git reset --hard` o `git clean -fd` que perderían trabajo sin commitear) y `agent-author` (`--author="Claude <noreply@anthropic.com>"`, `git config user.name Claude` y similares, para que tus commits sigan contando como tuyos).
 
 Desactivar: `BULKHEAD_DISABLE=basics`, o una sola regla por su nombre. Detalles: [docs/guards/basics.md](docs/guards/basics.md).
 </details>
@@ -348,7 +349,7 @@ Las variables de entorno siguen funcionando y tienen prioridad sobre ambos archi
 
 | Variable | Valor por defecto | Equivale a |
 |---|---|---|
-| `BULKHEAD_DISABLE` | vacío | Guards que se desactivan, separados por comas: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `disk-guard`, `orphan-reaper`, `basics`, o `all`. También se pueden desactivar reglas sueltas: `rm-root`, `force-push-main`, `protected-delete`, `discard-changes`, `agent-author`, `stage-all`, `remove-session-dir`. Un nombre aquí queda desactivado digan lo que digan los archivos |
+| `BULKHEAD_DISABLE` | vacío | Guards que se desactivan, separados por comas: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `disk-guard`, `orphan-reaper`, `basics`, o `all`. También se pueden desactivar reglas sueltas: `rm-root`, `rm-empty-var`, `rm-unquoted-var`, `rm-git-dir`, `force-push-main`, `protected-delete`, `discard-changes`, `agent-author`, `stage-all`, `remove-session-dir`. Un nombre aquí queda desactivado digan lo que digan los archivos |
 | `BULKHEAD_PRESET` | `normal` | El preset: `quiet`, `normal` o `strict` |
 | `BULKHEAD_WAIT_MAX_SEC` | 180 | `waitGuard.limitSeconds` |
 | `BULKHEAD_MIN_FREE_GB` | 3, o el 15 % de la RAM si es menos | `memory.minFreeGb` |
@@ -387,6 +388,7 @@ La vía de una sola vez es siempre `bulkhead allow <code>`, ejecutada por ti. La
 | checkout-guard | `git-checkout`, `git-pull` y los demás cambios de árbol | `{"checkoutGuard":{"enabled":false}}` |
 | disk-guard | `disk-wide-find`, `parallel-disk-scan`, `disk-wide-scan` | `{"diskGuard":{"enabled":false}}` |
 | basics | `rm-root` | `{"basics":{"rmRoot":false}}` |
+| basics | `rm-empty-var`, `rm-unquoted-var`, `rm-git-dir` | `{"basics":{"rmEmptyVar":false}}`, y así con las demás (`rmUnquotedVar`, `rmGitDir`) |
 | basics | `force-push-main` | `{"basics":{"forcePushMain":false}}` |
 | basics | `discard-changes` | `{"basics":{"discardChanges":false}}` |
 | basics | `agent-author` | `{"basics":{"agentAuthor":false}}` |

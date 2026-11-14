@@ -5,6 +5,9 @@
 ### Added
 
 - Bulkhead recognizes Aider CLI sessions in status and session ownership checks.
+- basics `rm-empty-var`: `rm -rf $D/`, `rm -rf "$D"/*`, `rm -rf $(cygpath -u "$X")/` and `rsync --delete src/ $D/` are blocked when the variable is not set to something non-empty earlier in the same shell, because an empty or unset variable (or a command that prints nothing) turns the path into `/` (anthropics/claude-code#109735). Deleting the whole output of a path command, such as `rm -rf "$(cygpath -u 'C:\')"`, which prints `/c/`, is blocked too (anthropics/claude-code#95426 lost 600 GB). `"${D:?}/"`, `"$TMPDIR/foo"` and `D=$(mktemp -d) && rm -rf "$D"/` pass. Also `Remove-Item -Recurse -Force $env:X\`, `rd /s /q %X%\`, and the same commands inside `bash -c` and `wsl -- bash -lc`. Applies with a single session. Turn it off with `basics.rmEmptyVar`.
+- basics `rm-unquoted-var`: `rm -rf $D` with `D` unquoted is blocked when the value, set earlier on the line or in the environment, has a space or a wildcard, since bash splits it into several paths and deletes each (anthropics/claude-code#107271). Turn it off with `basics.rmUnquotedVar`.
+- basics `rm-git-dir`: `rm -rf .git`, `rm -rf path/.git` and `find . -name .git -exec rm -rf {} +` are blocked when that `.git` is an existing folder, since the repository's history goes with it (anthropics/claude-code#107274). A `.git` the same line creates, such as after `git clone`, passes. Turn it off with `basics.rmGitDir`.
 
 ## 0.3.7 - 2026-11-12
 

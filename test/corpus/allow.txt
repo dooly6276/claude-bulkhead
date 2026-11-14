@@ -714,6 +714,26 @@ rm -rf /tmp/bulkhead-build
 rm -rf "$TMPDIR/scratch"
 rm -rf ../shop-login
 rm -rf *.egg-info
+rm -rf "${D:?}/"
+rm -rf "${D:?}"/*
+rm -rf "$BUILD_DIR"
+rm -rf build/.git-cache
+rm -rf .github/old-workflows
+git rm -r --cached x
+git commit -m "never rm -rf $D/ again"
+echo "rm -rf $D/ is what an empty variable does"
+grep -n 'rm -rf $D/' notes.md
+D=$(mktemp -d) && rm -rf $D/
+D=/tmp/bulkhead-literal; rm -rf "$D"/
+for d in a b; do rm -rf $d/; done
+rm -rf "$(git rev-parse --show-toplevel)/dist"
+rm -rf $(find . -name '*.pyc')
+git clone https://example.com/x.git /tmp/bulkhead-x && rm -rf /tmp/bulkhead-x/.git
+find vendor -name .git -exec rm -rf {} +
+rsync -a --delete src/ dist/
+rsync -a src/ $R/
+wsl -d Ubuntu-24.04 -- bash -lc 'set -u; R=~/some-dir; mkdir -p $R; rsync -a --delete --exclude x /mnt/d/app/ $R/'
+D=dist; rm -rf $D
 rm -r out
 rmdir empty-dir
 tar -czf dist.tar.gz dist

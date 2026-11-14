@@ -4,6 +4,9 @@
 
 const RULE_KEYS = {
   'rm-root': ['basics', 'rmRoot'],
+  'rm-empty-var': ['basics', 'rmEmptyVar'],
+  'rm-unquoted-var': ['basics', 'rmUnquotedVar'],
+  'rm-git-dir': ['basics', 'rmGitDir'],
   'force-push-main': ['basics', 'forcePushMain'],
   'protected-delete': ['basics', 'protectedDelete'],
   'discard-changes': ['basics', 'discardChanges'],

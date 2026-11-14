@@ -547,7 +547,8 @@ const WRAPPER_HINT = /(?:^|[^\w-])(?:bash|sh|zsh|dash|ksh|ash|mksh|fish|busybox|
 const REMOTE_HINT = /(?:^|[^\w-])(?:ssh|docker|podman|nerdctl|kubectl|oc|bulkhead)(?:\.exe)?(?![\w-])/i
 
 // Every simple command the text runs, with wrappers taken off and shell wrappers opened.
-// Each item is { argv, words, remote, depth, sub }.
+// Each item is { argv, words, remote, depth, sub, seg, s, e, src }: s and e are offsets in src, the
+// text the command was read from (the hook's command, or the string a bash -c ran).
 // lexed is the result of lex(src, mode) when the caller already has it, so a long text is read once.
 function commands(src, mode = 'sh', depth = 0, out = [], lexed = null) {
   src = String(src || '')
@@ -584,7 +585,7 @@ function collect(src, cmds, mode, depth, out) {
       commands(s.inner.text, s.inner.mode, depth + 1, out)
       continue
     }
-    if (s.argv.length) out.push({ argv: s.argv.map(w => w.v), words: s.argv, remote: s.remote, depth, sub: c.sub, seg: c.seg, s: c.s, e: c.e })
+    if (s.argv.length) out.push({ argv: s.argv.map(w => w.v), words: s.argv, remote: s.remote, depth, sub: c.sub, seg: c.seg, s: c.s, e: c.e, src })
   }
 }
 
