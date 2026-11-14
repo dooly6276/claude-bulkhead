@@ -82,7 +82,49 @@ const OPENCODE_PLUGIN = `export const BulkheadPlugin = async ({ directory }) => 
 })
 `
 
+// The Pi extension body after its HOOK line, shared with pi/extension.js, the copy that Pi loads
+// from the npm package (package.json "pi.extensions") after `pi install npm:claude-bulkhead`.
+// Pi awaits the handler, so the guard runs in a child process without stopping Pi's event loop.
+const PI_EXTENSION = `function ask(input) {
+  return new Promise(resolve => {
+    let child
+    try {
+      child = spawn(HOOK[0], HOOK.slice(1), { stdio: ['pipe', 'ignore', 'pipe'], windowsHide: true })
+    } catch {
+      return resolve(null)
+    }
+    let err = ''
+    const timer = setTimeout(() => child.kill(), 25000)
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', d => (err += d))
+    child.stdin.on('error', () => {})
+    child.on('error', () => { clearTimeout(timer); resolve(null) })
+    child.on('close', code => { clearTimeout(timer); resolve(code === 2 ? err.trim() || 'blocked by bulkhead' : null) })
+    child.stdin.end(JSON.stringify(input))
+  })
+}
+
+module.exports = function bulkhead(pi) {
+  pi.on('tool_call', async (event, ctx) => {
+    if (!event || (event.toolName !== 'bash' && event.toolName !== 'powershell')) return undefined
+    const command = event.input && event.input.command
+    if (typeof command !== 'string' || !command) return undefined
+    const sessions = ctx && ctx.sessionManager
+    const session = sessions && typeof sessions.getSessionId === 'function' ? sessions.getSessionId() : undefined
+    const reason = await ask({ command, cwd: (ctx && ctx.cwd) || process.cwd(), session_id: session, tool: event.toolName })
+    return reason ? { block: true, reason } : undefined
+  })
+}
+`
+
 const pluginSource = (agent, argv) => ({
+  pi: `// ${MARK}: written by \`bulkhead setup pi\`, safe to delete
+'use strict'
+const { spawn } = require('child_process')
+
+const HOOK = ${JSON.stringify([...argv, 'hook', '--agent', 'pi'])}
+
+${PI_EXTENSION}`,
   opencode: `// ${MARK}: written by \`bulkhead setup opencode\`, safe to delete
 import { spawnSync } from 'node:child_process'
 
@@ -187,6 +229,56 @@ const SETUP = {
     plan: (file, existing, { argv }) => ownedPlan(file, existing, pluginSource('amp', argv), 'amp'),
     note: 'Run `plugins: reload` from the Amp command palette to load the plugin.',
   },
+  pi: {
+    where: (home, env) => path.join(env.PI_CODING_AGENT_DIR || path.join(home, '.pi', 'agent'), 'extensions', 'bulkhead.js'),
+    plan: (file, existing, { argv }) => ownedPlan(file, existing, pluginSource('pi', argv), 'pi'),
+    note: 'Run /reload in Pi, or restart it, to load the extension. `pi install npm:claude-bulkhead` loads the same extension without this file; use one or the other.',
+  },
+  qwen: {
+    where: (home, env) => path.join(env.QWEN_HOME || path.join(home, '.qwen'), 'settings.json'),
+    plan: (file, existing, { argv }) => jsonPlan(file, existing, doc => addGroup(doc, ['hooks'], 'PreToolUse',
+      { matcher: '^run_shell_command$', hooks: [{ type: 'command', command: commandLine('qwen', argv), name: 'bulkhead', timeout: 30 }] }, 'qwen')),
+  },
+  kimi: {
+    // Kimi Code reads ~/.kimi-code/config.toml ($KIMI_CODE_HOME); the older kimi-cli reads ~/.kimi/config.toml
+    where: (home, env) => {
+      if (env.KIMI_CODE_HOME) return path.join(env.KIMI_CODE_HOME, 'config.toml')
+      const legacy = path.join(home, '.kimi')
+      return !fs.existsSync(path.join(home, '.kimi-code')) && fs.existsSync(legacy) ? path.join(legacy, 'config.toml') : path.join(home, '.kimi-code', 'config.toml')
+    },
+    plan: (file, existing, { argv }) => tomlPlan(file, existing, commandLine('kimi', argv), 'kimi'),
+    note: 'Kimi ignores the whole config file when a [[hooks]] entry has a key other than event, matcher, command and timeout.',
+  },
+  grok: {
+    where: (home, env) => path.join(env.GROK_HOME || path.join(home, '.grok'), 'hooks', 'bulkhead.json'),
+    plan: (file, existing, { argv }) => ownedPlan(file, existing, pretty({
+      hooks: { PreToolUse: [{ matcher: 'Bash|bash|Shell|run_terminal', hooks: [{ type: 'command', command: commandLine('grok', argv), timeout: 30 }] }] },
+    }), 'grok'),
+    note: 'If Grok lists the hook as disabled, enable it with /hooks.',
+  },
+  antigravity: {
+    where: home => path.join(home, '.gemini', 'config', 'hooks.json'),
+    plan: (file, existing, { argv }) => jsonPlan(file, existing, doc => {
+      // top-level keys are named hook groups; ours is "bulkhead"
+      if (!isOurs(JSON.stringify(doc), 'antigravity')) {
+        if (doc.bulkhead !== undefined) throw new Error('"bulkhead" is already used by another hook group')
+        doc.bulkhead = { PreToolUse: [{ matcher: '^run_command$', hooks: [{ type: 'command', command: commandLine('antigravity', argv), timeout: 30 }] }] }
+      }
+      return doc
+    }),
+    note: 'Antigravity treats a hook that cannot start as a denial. If you move or remove this node, run the setup again.',
+  },
+}
+
+// Kimi's config is TOML. bulkhead appends one [[hooks]] table with exactly the four keys Kimi
+// accepts, and never rewrites anything that is already there.
+const tomlString = s => JSON.stringify(s)
+function tomlPlan(file, existing, command, agent) {
+  const block = `# ${MARK}: added by \`bulkhead setup ${agent}\`\n[[hooks]]\nevent = "PreToolUse"\nmatcher = "^(Bash|Shell)$"\ncommand = ${tomlString(command)}\ntimeout = 30\n`
+  if (existing === null || !existing.trim()) return { file, snippet: block, next: block }
+  if (isOurs(existing.replace(/\\\\/g, '\\'), agent)) return { file, snippet: block, next: null }
+  if (/^\s*hooks\s*=/m.test(existing)) return { file, snippet: block, error: `${file} sets hooks as an inline array; add the [[hooks]] table by hand` }
+  return { file, snippet: block, next: `${existing.replace(/\n*$/, '\n')}\n${block}` }
 }
 
 const AGENT_NAMES = Object.keys(SETUP)
@@ -257,4 +349,4 @@ function main(args, { stdout = process.stdout, stderr = process.stderr, exit = p
   return exit(0)
 }
 
-module.exports = { main, plan, apply, backupName, commandLine, isOurs, SETUP, AGENT_NAMES, OPENCODE_PLUGIN, pluginSource }
+module.exports = { main, plan, apply, backupName, commandLine, isOurs, SETUP, AGENT_NAMES, OPENCODE_PLUGIN, PI_EXTENSION, pluginSource, tomlPlan }

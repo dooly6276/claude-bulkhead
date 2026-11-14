@@ -6,13 +6,13 @@
 
 <p align="center">Hooks that know which processes, ports and git trees belong to which Claude Code session and subagent, so they block only what would hurt something else, and tell Claude the safe command to run instead.</p>
 
-<p align="center">Windows, macOS and Linux. No tmux, no sudo, no background daemon, no network calls, no dependencies. Also guards Codex, Gemini CLI, Copilot CLI, Cursor and six more agents.</p>
+<p align="center">Windows, macOS and Linux. No tmux, no sudo, no background daemon, no network calls, no dependencies. Also guards Codex, Gemini CLI, Copilot CLI, Cursor, Pi and ten more agents.</p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/claude-bulkhead"><img src="https://img.shields.io/npm/v/claude-bulkhead?style=flat-square&labelColor=24292f&logo=npm&logoColor=white&label=npm&color=0d9488" alt="npm version"></a>
   <a href="https://github.com/dooly6276/claude-bulkhead/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/dooly6276/claude-bulkhead/test.yml?branch=main&style=flat-square&labelColor=24292f&logo=githubactions&logoColor=white&label=3700%2B%20tests" alt="tests"></a>
   <a href="#install"><img src="https://img.shields.io/badge/Claude_Code-plugin-D97757?style=flat-square&labelColor=24292f&logo=claude&logoColor=white" alt="Claude Code plugin"></a>
-  <a href="docs/other-agents.md"><img src="https://img.shields.io/badge/also_guards-Codex%2C_Cursor%2C_Copilot%2C_Gemini%2C_opencode-0d9488?style=flat-square&labelColor=24292f" alt="Also guards Codex, Cursor, Copilot CLI, Gemini CLI and opencode"></a>
+  <a href="docs/other-agents.md"><img src="https://img.shields.io/badge/also_guards-Codex%2C_Cursor%2C_Copilot%2C_Gemini%2C_opencode%2C_Pi_%2B9-0d9488?style=flat-square&labelColor=24292f" alt="Also guards Codex, Cursor, Copilot CLI, Gemini CLI, opencode, Pi and nine more agents"></a>
   <br>
   <img src="https://img.shields.io/badge/platform-macOS_%7C_Linux_%7C_Windows-0d9488?style=flat-square&labelColor=24292f" alt="macOS, Linux and Windows">
   <img src="https://img.shields.io/badge/node-%E2%89%A518-0d9488?style=flat-square&labelColor=24292f&logo=nodedotjs&logoColor=white" alt="Node 18+">
@@ -56,10 +56,11 @@ Other agents load the same guards as a plugin:
 | Copilot CLI | `copilot plugin marketplace add dooly6276/claude-bulkhead`, then `copilot plugin install bulkhead@bulkhead` |
 | Cursor | `git clone https://github.com/dooly6276/claude-bulkhead ~/.cursor/plugins/local/bulkhead`, then **Developer: Reload Window** |
 | opencode | add `"plugin": ["claude-bulkhead"]` to `opencode.json` |
+| Pi | `pi install npm:claude-bulkhead` |
 | Gemini CLI | `gemini extensions install https://github.com/dooly6276/claude-bulkhead` |
 | Codex | `codex plugin marketplace add dooly6276/claude-bulkhead`, then `codex plugin add bulkhead@bulkhead`, then approve the hook with `/hooks` |
 
-For the others (Windsurf, Droid, Devin, Cline, Amp), see [Codex, Gemini and other agents](#codex-gemini-and-other-agents).
+For the others (Qwen Code, Kimi Code, Grok Build, Antigravity, Windsurf, Droid, Devin, Cline, Amp), see [Codex, Gemini and other agents](#codex-gemini-and-other-agents).
 
 Node 18 or later must be on `PATH` (the native Claude Code installer does not install it; check with `node --version`).
 
@@ -308,14 +309,14 @@ Turn off: `BULKHEAD_DISABLE=basics`, or one rule by name. Details: [docs/guards/
 
 ## Codex, Gemini and other agents
 
-If you run Codex CLI, Gemini CLI, Copilot CLI, Cursor, opencode, Amp, Cline, Factory Droid, Windsurf or Devin on the same machine as Claude Code, bulkhead guards their shell commands with the same guards and counts their sessions: an agent's dev server is protected from the others, and `bulkhead status` gets an `AGENT` column.
+If you run Codex CLI, Gemini CLI, Copilot CLI, Cursor, opencode, Pi, Qwen Code, Kimi Code, Grok Build, Antigravity, Amp, Cline, Factory Droid, Windsurf or Devin on the same machine as Claude Code, bulkhead guards their shell commands with the same guards and counts their sessions: an agent's dev server is protected from the others, and `bulkhead status` gets an `AGENT` column.
 
 ```
 bulkhead setup codex            # prints the config for ~/.codex/hooks.json
 bulkhead setup codex --write    # merges it (original saved as hooks.json.bulkhead-backup)
 ```
 
-Copilot CLI, Cursor and opencode can also load bulkhead as a plugin (see [Install](#install)), which needs no `npm install -g` and no change to your own config files. `bulkhead setup <agent>` works for `codex`, `gemini`, `copilot`, `cursor`, `windsurf`, `droid`, `devin`, `cline`, `opencode` and `amp`. Each agent calls `bulkhead hook --agent <name>` before a shell command and gets its own block format back. The agents, config files, what is guarded and the documentation each row was checked against are in [docs/other-agents.md](docs/other-agents.md).
+Copilot CLI, Cursor, opencode, Pi, Gemini CLI and Codex can also load bulkhead as a plugin (see [Install](#install)), which needs no `npm install -g` and no change to your own config files. `bulkhead setup <agent>` works for `codex`, `gemini`, `copilot`, `cursor`, `windsurf`, `droid`, `devin`, `cline`, `qwen`, `kimi`, `grok`, `antigravity`, `opencode`, `amp` and `pi`. Each agent calls `bulkhead hook --agent <name>` before a shell command and gets its own block format back. The agents, config files, what is guarded and the documentation each row was checked against are in [docs/other-agents.md](docs/other-agents.md).
 
 ## How bulkhead relates to other hook packs
 

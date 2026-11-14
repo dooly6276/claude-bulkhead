@@ -540,13 +540,13 @@ would stop 30112  test-runner  node ~/src/acme-web/node_modules/vitest/dist/work
 ## bulkhead hook and bulkhead setup
 
 ```
-bulkhead hook --agent <codex|gemini|copilot|cursor|windsurf|droid|devin|cline|opencode|amp>
+bulkhead hook --agent <codex|gemini|copilot|cursor|windsurf|droid|devin|cline|qwen|kimi|grok|antigravity|opencode|amp|pi>
 bulkhead setup <agent> [--print | --write]
 ```
 
 `hook` is what the agent runs before each shell command: it reads the agent's payload on stdin, runs the same guards as the Claude Code hook and answers in the agent's block format (exit code 2, or JSON, depending on the agent). Any error lets the command through. You normally never run it yourself.
 
-`setup` shows the config that registers `hook` for an agent. `--print` (the default) writes nothing. `--write` merges it into the agent's config file, keeping everything else, after copying the original to `<file>.bulkhead-backup`; running it again changes nothing. It refuses to rewrite a file that is not plain JSON, and never replaces a file it did not create. Config paths, block formats and sources for each agent are in [Codex, Gemini and other agents](other-agents.md).
+`setup` shows the config that registers `hook` for an agent. `--print` (the default) writes nothing. `--write` merges it into the agent's config file, keeping everything else, after copying the original to `<file>.bulkhead-backup`; running it again changes nothing. It refuses to rewrite a file that is not plain JSON, and never replaces a file it did not create. Kimi Code's TOML config is the exception to the JSON rule: setup appends one `[[hooks]]` table to it and changes nothing else. Config paths, block formats and sources for each agent are in [Codex, Gemini and other agents](other-agents.md).
 
 ## bulkhead-slot
 

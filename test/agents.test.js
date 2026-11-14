@@ -52,6 +52,20 @@ const SHAPES = {
     proc(1, 0, 'droid', '/home/dev/.local/bin/droid'),
     proc(1, 0, 'node', 'node /usr/lib/node_modules/@factory/cli/bin/droid'),
   ],
+  pi: [
+    // macOS ps shows the process.title Pi sets as the whole command line
+    proc(1, 0, 'node', 'pi'),
+    proc(1, 0, 'pi', 'pi'),
+    proc(1, 0, 'node', 'node /usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js --model x'),
+    proc(1, 0, 'node', 'node /opt/homebrew/bin/pi'),
+    proc(1, 0, 'node', 'pi-rpc'),
+    proc(1, 0, 'node.exe', '"C:\\Program Files\\nodejs\\node.exe" C:\\Users\\dev\\AppData\\Roaming\\npm\\node_modules\\@earendil-works\\pi-coding-agent\\dist\\bundle\\cli.js'),
+  ],
+  qwen: [
+    proc(1, 0, 'node', 'node /usr/local/lib/node_modules/@qwen-code/qwen-code/cli-entry.js'),
+    proc(1, 0, 'node', 'node /opt/homebrew/bin/qwen'),
+    proc(1, 0, 'qwen', 'qwen'),
+  ],
   aider: [
     proc(1, 0, 'aider', '/home/dev/.local/bin/aider --model example'),
     proc(1, 0, 'python3.12', '/home/dev/.local/share/uv/tools/aider-chat/bin/python3.12 /home/dev/.local/bin/aider'),
@@ -88,12 +102,18 @@ test('leaves look-alikes alone', () => {
     proc(1, 0, 'python3', 'python3 -m aider_tools'),
     proc(1, 0, 'python3', 'python3 -u -m pytest -k aider'),
     proc(1, 0, 'node', 'node /home/dev/aider'),
+    proc(1, 0, 'node', 'node /home/dev/scripts/pi.js'),
+    proc(1, 0, 'node', 'node /home/dev/pi'),
+    proc(1, 0, 'pip', 'pip install pi'),
+    proc(1, 0, 'python3', 'python3 pi.py'),
   ]) assert.strictEqual(agentOf(p), null, p.cmd)
   assert.strictEqual(agentOf(null), null)
 })
 
 test('labels', () => {
   assert.strictEqual(agentLabel('codex'), 'Codex')
+  assert.strictEqual(agentLabel('pi'), 'Pi')
+  assert.strictEqual(agentLabel('qwen'), 'Qwen Code')
   assert.strictEqual(agentLabel('claude'), 'Claude')
   assert.strictEqual(agentLabel(undefined), 'Claude')
   assert.strictEqual(agentLabel('newagent'), 'newagent')
@@ -112,6 +132,9 @@ test('an agent is installed when its folder exists, also under XDG_CONFIG_HOME',
   assert.deepStrictEqual(installedAgents(home, has(['/work/copilot-home']), { COPILOT_HOME: '/work/copilot-home' }), ['copilot'])
   assert.deepStrictEqual(installedAgents(home, has(['/work/codex-b']), { CODEX_HOME: '/work/codex-b' }), ['codex'])
   assert.deepStrictEqual(installedAgents(home, has([]), { COPILOT_HOME: '/work/missing' }), [])
+  assert.deepStrictEqual(installedAgents(home, has(['/home/dev/.pi/agent', '/home/dev/.qwen']), {}), ['pi', 'qwen'])
+  assert.deepStrictEqual(installedAgents(home, has(['/work/pi-agent']), { PI_CODING_AGENT_DIR: '/work/pi-agent' }), ['pi'])
+  assert.deepStrictEqual(installedAgents(home, has(['/home/dev/.pi']), {}), [], 'a .pi folder alone is not Pi')
 })
 
 test('a launcher and the program it starts are one session, at the outer process', () => {

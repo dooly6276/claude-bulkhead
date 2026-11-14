@@ -9,7 +9,7 @@ const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
 const { pathToFileURL } = require('url')
-const { OPENCODE_PLUGIN, pluginSource } = require('../src/agent-setup')
+const { OPENCODE_PLUGIN, PI_EXTENSION, pluginSource } = require('../src/agent-setup')
 
 const root = path.join(__dirname, '..')
 const read = f => fs.readFileSync(path.join(root, f), 'utf8')
@@ -101,6 +101,29 @@ test('opencode loads the package entry, which is the same plugin `bulkhead setup
   await assert.rejects(before({ tool: 'bash', sessionID: 's' }, { args: { command: 'pk' + 'ill node' } }), /kill-guard/)
   await before({ tool: 'bash', sessionID: 's' }, { args: { command: 'ls' } })
   await before({ tool: 'read', sessionID: 's' }, { args: {} })
+})
+
+test('the npm package is a Pi package whose extension is the one `bulkhead setup pi` writes', async () => {
+  // https://pi.dev/packages lists npm packages with the pi-package keyword; Pi loads "pi.extensions"
+  assert.ok(pkg.keywords.includes('pi-package'))
+  assert.deepStrictEqual(pkg.pi, { extensions: ['./pi/extension.js'] })
+  assert.ok(pkg.files.includes('pi'))
+  const src = read('pi/extension.js')
+  assert.ok(src.endsWith(PI_EXTENSION))
+  assert.ok(pluginSource('pi', ['node', 'x']).endsWith(PI_EXTENSION))
+  assert.match(src, /path\.join\(__dirname, '\.\.', 'bin', 'bulkhead'\)/)
+  // Pi changelog headings look like "## 1.2.0 - 2026-01-01"; the package's must match its version
+  assert.ok(read('CHANGELOG.md').split('\n').some(l => /^## \d+\.\d+\.\d+ - \d{4}-\d\d-\d\d$/.test(l)))
+
+  const handlers = {}
+  require(path.join(root, 'pi', 'extension.js'))({ on: (event, fn) => (handlers[event] = fn) })
+  assert.deepStrictEqual(Object.keys(handlers), ['tool_call'])
+  const ctx = { cwd: root, sessionManager: { getSessionId: () => 'pi-ses' } }
+  const blocked = await handlers.tool_call({ type: 'tool_call', toolCallId: 'c1', toolName: 'bash', input: { command: 'pk' + 'ill node' } }, ctx)
+  assert.strictEqual(blocked.block, true)
+  assert.match(blocked.reason, /^\[bulkhead\] kill-guard/)
+  assert.strictEqual(await handlers.tool_call({ type: 'tool_call', toolCallId: 'c2', toolName: 'bash', input: { command: 'ls' } }, ctx), undefined)
+  assert.strictEqual(await handlers.tool_call({ type: 'tool_call', toolCallId: 'c3', toolName: 'read', input: { path: 'x' } }, ctx), undefined)
 })
 
 test('every plugin manifest, including Gemini and Codex, carries the package version', () => {

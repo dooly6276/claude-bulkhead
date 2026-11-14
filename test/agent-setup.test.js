@@ -5,7 +5,7 @@ const fs = require('fs')
 const path = require('path')
 const { pathToFileURL } = require('url')
 const { spawnSync } = require('child_process')
-const { plan, apply, commandLine, isOurs, SETUP, AGENT_NAMES, main } = require('../src/agent-setup')
+const { plan, apply, commandLine, isOurs, SETUP, AGENT_NAMES, main, tomlPlan } = require('../src/agent-setup')
 const { tempDir } = require('./helpers')
 
 const NODE = '/usr/local/bin/node'
@@ -16,7 +16,7 @@ const write = (f, text) => { fs.mkdirSync(path.dirname(f), { recursive: true });
 const backups = f => fs.readdirSync(path.dirname(f)).filter(n => n.startsWith(path.basename(f) + '.bulkhead-backup'))
 
 test('every agent has a setup, and the printed config calls bulkhead hook for that agent', () => {
-  assert.deepStrictEqual([...AGENT_NAMES].sort(), ['amp', 'cline', 'codex', 'copilot', 'cursor', 'devin', 'droid', 'gemini', 'opencode', 'windsurf'])
+  assert.deepStrictEqual([...AGENT_NAMES].sort(), ['amp', 'antigravity', 'cline', 'codex', 'copilot', 'cursor', 'devin', 'droid', 'gemini', 'grok', 'kimi', 'opencode', 'pi', 'qwen', 'windsurf'])
   for (const agent of AGENT_NAMES) {
     const home = tempDir()
     const p = plan(agent, ctx(home))
@@ -34,8 +34,9 @@ test('writing twice changes nothing the second time, and the original is kept on
   for (const agent of AGENT_NAMES) {
     const home = tempDir()
     const first = plan(agent, ctx(home))
-    write(first.file, agent === 'cline' || agent === 'opencode' || agent === 'amp' || agent === 'copilot' ? '' : '{"keep":{"me":1}}')
-    if (['cline', 'opencode', 'amp', 'copilot'].includes(agent)) fs.rmSync(first.file)
+    const owned = ['cline', 'opencode', 'amp', 'copilot', 'pi', 'grok'].includes(agent)
+    write(first.file, owned ? '' : agent === 'kimi' ? '"keep" = 1\n' : '{"keep":{"me":1}}')
+    if (owned) fs.rmSync(first.file)
     const p1 = plan(agent, ctx(home))
     const done = apply(p1)
     assert.strictEqual(done.wrote, true, agent)
@@ -47,7 +48,7 @@ test('writing twice changes nothing the second time, and the original is kept on
     assert.strictEqual(backups(p1.file).length, done.backup ? 1 : 0, agent)
     if (done.backup) assert.ok(read(done.backup).includes('"keep"'), agent)
     // still found after the file is reformatted by hand or by the agent
-    if (p1.file.endsWith('.json') && !['copilot'].includes(agent)) {
+    if (p1.file.endsWith('.json') && !['copilot', 'grok'].includes(agent)) {
       fs.writeFileSync(p1.file, JSON.stringify(JSON.parse(after)))
       assert.strictEqual(plan(agent, ctx(home)).next, null, `${agent}: compact`)
     }
@@ -91,7 +92,8 @@ test('files that are not plain JSON objects are left alone', () => {
 })
 
 test('files bulkhead owns are replaced only when they are bulkhead\'s', () => {
-  for (const [agent, rel] of [['copilot', '.copilot/hooks/bulkhead.json'], ['cline', '.cline/hooks/PreToolUse.sh'], ['opencode', '.config/opencode/plugins/bulkhead.js'], ['amp', '.config/amp/plugins/bulkhead.ts']]) {
+  for (const [agent, rel] of [['copilot', '.copilot/hooks/bulkhead.json'], ['cline', '.cline/hooks/PreToolUse.sh'], ['opencode', '.config/opencode/plugins/bulkhead.js'], ['amp', '.config/amp/plugins/bulkhead.ts'],
+    ['pi', '.pi/agent/extensions/bulkhead.js'], ['grok', '.grok/hooks/bulkhead.json']]) {
     const home = tempDir()
     const file = path.join(home, rel)
     write(file, 'someone else\'s hook\n')
@@ -126,6 +128,54 @@ test('where each agent keeps its config', () => {
   assert.strictEqual(where('cline', {}, 'win32'), '/home/dev/.cline/hooks/PreToolUse.ps1')
   assert.strictEqual(where('devin'), '/home/dev/.config/devin/config.json')
   assert.strictEqual(where('devin', { APPDATA: 'C:\\Users\\dev\\AppData\\Roaming' }, 'win32').toLowerCase(), 'c:/users/dev/appdata/roaming/devin/config.json')
+  assert.strictEqual(where('pi'), '/home/dev/.pi/agent/extensions/bulkhead.js')
+  assert.strictEqual(where('pi', { PI_CODING_AGENT_DIR: '/x/pi' }), '/x/pi/extensions/bulkhead.js')
+  assert.strictEqual(where('qwen'), '/home/dev/.qwen/settings.json')
+  assert.strictEqual(where('qwen', { QWEN_HOME: '/x/qwen' }), '/x/qwen/settings.json')
+  assert.strictEqual(where('kimi'), '/home/dev/.kimi-code/config.toml')
+  assert.strictEqual(where('kimi', { KIMI_CODE_HOME: '/x/kimi' }), '/x/kimi/config.toml')
+  assert.strictEqual(where('grok'), '/home/dev/.grok/hooks/bulkhead.json')
+  assert.strictEqual(where('grok', { GROK_HOME: '/x/grok' }), '/x/grok/hooks/bulkhead.json')
+  assert.strictEqual(where('antigravity'), '/home/dev/.gemini/config/hooks.json')
+})
+
+test('kimi: the older kimi-cli folder when only it exists, and a [[hooks]] table appended to TOML', () => {
+  const home = tempDir()
+  fs.mkdirSync(path.join(home, '.kimi'))
+  assert.strictEqual(plan('kimi', ctx(home)).file, path.join(home, '.kimi', 'config.toml'))
+  fs.mkdirSync(path.join(home, '.kimi-code'))
+  const file = path.join(home, '.kimi-code', 'config.toml')
+  assert.strictEqual(plan('kimi', ctx(home)).file, file)
+  const before = 'default_model = "kimi-k2"\n\n[[hooks]]\nevent = "Stop"\ncommand = "notify.sh"'
+  write(file, before)
+  apply(plan('kimi', ctx(home)))
+  const text = read(file)
+  assert.ok(text.startsWith(before + '\n\n# bulkhead-managed'), text)
+  // exactly the four keys Kimi accepts, the command as a TOML string
+  const ours = text.slice(text.lastIndexOf('[[hooks]]')).trim().split('\n').slice(1)
+  assert.deepStrictEqual(ours.map(l => l.split(' = ')[0]), ['event', 'matcher', 'command', 'timeout'])
+  assert.strictEqual(JSON.parse(ours[2].split(' = ')[1]), `${NODE} ${SCRIPT} hook --agent kimi`)
+  assert.strictEqual(plan('kimi', ctx(home)).next, null)
+  // a path with spaces and backslashes stays one valid string, and is still found the second time
+  const win = tomlPlan('/x/config.toml', '', commandLine('kimi', ['C:\\Program Files\\nodejs\\node.exe', 'C:\\b\\bin\\bulkhead']), 'kimi')
+  const line = win.next.split('\n').find(l => l.startsWith('command = '))
+  assert.strictEqual(JSON.parse(line.slice(10)), '"C:\\Program Files\\nodejs\\node.exe" C:\\b\\bin\\bulkhead hook --agent kimi')
+  assert.strictEqual(tomlPlan('/x/config.toml', win.next, 'whatever', 'kimi').next, null)
+  // an inline hooks array cannot take a [[hooks]] table
+  assert.match(tomlPlan('/x/config.toml', 'hooks = []\n', 'c', 'kimi').error, /inline array/)
+})
+
+test('antigravity: a "bulkhead" hook group next to the others, never over another group of that name', () => {
+  const home = tempDir()
+  const file = path.join(home, '.gemini', 'config', 'hooks.json')
+  write(file, JSON.stringify({ lint: { PreToolUse: [{ matcher: 'run_command', hooks: [{ type: 'command', command: './lint.sh' }] }] } }))
+  apply(plan('antigravity', ctx(home)))
+  const doc = JSON.parse(read(file))
+  assert.deepStrictEqual(Object.keys(doc), ['lint', 'bulkhead'])
+  assert.strictEqual(doc.bulkhead.PreToolUse[0].matcher, '^run_command$')
+  assert.strictEqual(doc.bulkhead.PreToolUse[0].hooks[0].command, `${NODE} ${SCRIPT} hook --agent antigravity`)
+  write(file, JSON.stringify({ bulkhead: { Stop: [] } }))
+  assert.match(plan('antigravity', ctx(home)).error, /already used/)
 })
 
 test('droid: hooks.json when it exists, else the hooks key of settings.json, else a new hooks.json', () => {
@@ -227,6 +277,38 @@ test('the opencode plugin blocks a bash tool call when the hook exits 2, and onl
   fs.writeFileSync(file, plan('opencode', ctx(dir, { argv: ['/nonexistent/node', stub] })).snippet)
   const again = await import(pathToFileURL(file).href + '?second')
   await (await again.BulkheadPlugin({ directory: '/w' }))['tool.execute.before']({ tool: 'bash', sessionID: 's', callID: 'c' }, { args: { command: 'boom' } })
+})
+
+test('the Pi extension blocks a bash or powershell tool call when the hook exits 2, and only then', async () => {
+  const dir = tempDir()
+  const stub = path.join(dir, 'hook.js')
+  const seen = path.join(dir, 'seen.json')
+  fs.writeFileSync(stub, `let s = ''; process.stdin.on('data', d => (s += d)).on('end', () => {
+    require('fs').writeFileSync(${JSON.stringify(seen)}, s)
+    if (JSON.parse(s).command.includes('boom')) { console.error('[bulkhead] stopped\\n'); process.exit(2) }
+  })`)
+  const load = argv => {
+    const file = path.join(dir, `ext-${Math.random().toString(36).slice(2)}.js`)
+    fs.writeFileSync(file, plan('pi', ctx(dir, { argv })).snippet)
+    const handlers = {}
+    require(file)({ on: (event, fn) => (handlers[event] = fn) })
+    assert.deepStrictEqual(Object.keys(handlers), ['tool_call'])
+    return handlers.tool_call
+  }
+  const onCall = load([process.execPath, stub])
+  // the event and context shapes from Pi's ToolCallEvent and ExtensionContext
+  const ctxOf = cwd => ({ cwd, sessionManager: { getSessionId: () => 'pi-ses-1' } })
+  assert.strictEqual(await onCall({ type: 'tool_call', toolCallId: 'c1', toolName: 'bash', input: { command: 'ls' } }, ctxOf('/work/api')), undefined)
+  assert.deepStrictEqual(JSON.parse(read(seen)), { command: 'ls', cwd: '/work/api', session_id: 'pi-ses-1', tool: 'bash' })
+  assert.deepStrictEqual(await onCall({ type: 'tool_call', toolCallId: 'c2', toolName: 'powershell', input: { command: 'boom' } }, ctxOf('C:\\w')),
+    { block: true, reason: '[bulkhead] stopped' })
+  assert.strictEqual(JSON.parse(read(seen)).tool, 'powershell')
+  fs.rmSync(seen)
+  assert.strictEqual(await onCall({ type: 'tool_call', toolCallId: 'c3', toolName: 'read', input: { path: 'boom' } }, ctxOf('/w')), undefined)
+  assert.strictEqual(await onCall({ type: 'tool_call', toolCallId: 'c4', toolName: 'bash', input: {} }, ctxOf('/w')), undefined)
+  assert.ok(!fs.existsSync(seen))
+  // a hook that cannot start lets the call through
+  assert.strictEqual(await load(['/nonexistent/node', stub])({ toolName: 'bash', input: { command: 'boom' } }, {}), undefined)
 })
 
 test('the Amp plugin rejects a shell tool call when the hook exits 2, and only then', async () => {
