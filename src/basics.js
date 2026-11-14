@@ -207,6 +207,9 @@ function dangerousTarget(arg, { cwd, home, platform, repoRoot }) {
   const dir = expanded.replace(/[\\/]\*$/, '') || '/'
   const rel = expanded === '*' ? '.' : dir
   if (DRIVE_LETTER_ROOT.test(dir)) return 'a filesystem root'
+  // /mnt/c and /cygdrive/c name the drive in WSL and Cygwin even when the hook runs on Windows,
+  // where resolving them would give C:\mnt\c
+  if (MOUNTED_DRIVE.test(dir.replace(/\/+$/, ''))) return 'a filesystem root'
   // C:\Users\x written out is a Windows path wherever the hook runs, as C:\ is
   if (platform !== 'win32' && /^[a-z]:[\\/]/i.test(dir)) {
     const abs = norm(path.win32.resolve(dir), 'win32')
