@@ -1,7 +1,7 @@
 <h1 align="center">claude-bulkhead</h1>
 
 <p align="center">
-  <strong>Claude Code が他の dev server に <code>pkill node</code> を実行したり、そのポートを奪ったり、<code>git add -A</code> で別セッションの編集をコミットしたりするのを止めます。</strong>
+  <strong>Claude Code が空の変数で <code>rm -rf $DIR/</code> を実行したり、他の dev server に <code>pkill node</code> を実行したり、そのポートを奪ったり、<code>git add -A</code> で別セッションの編集をコミットしたりするのを止めます。</strong>
 </p>
 
 <p align="center">どのプロセス、ポート、git ツリーがどの Claude Code セッションやサブエージェントのものかを把握する hook です。他に害が出るコマンドだけをブロックし、代わりに実行すべき安全なコマンドを Claude に伝えます。</p>

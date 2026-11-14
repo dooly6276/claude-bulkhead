@@ -1,7 +1,7 @@
 <h1 align="center">claude-bulkhead</h1>
 
 <p align="center">
-  <strong>Stop Claude Code from running <code>pkill node</code> on your other dev servers, taking their ports, and committing another session's edits with <code>git add -A</code>.</strong>
+  <strong>Stop Claude Code from running <code>rm -rf $DIR/</code> when <code>$DIR</code> is empty, <code>pkill node</code> on your other dev servers, taking their ports, and committing another session's edits with <code>git add -A</code>.</strong>
 </p>
 
 <p align="center">Hooks that know which processes, ports and git trees belong to which Claude Code session and subagent, so they block only what would hurt something else, and tell Claude the safe command to run instead.</p>

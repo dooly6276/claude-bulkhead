@@ -1,7 +1,7 @@
 <h1 align="center">claude-bulkhead</h1>
 
 <p align="center">
-  <strong>阻止 Claude Code 对你其他的开发服务器执行 <code>pkill node</code>、抢占它们的端口，以及用 <code>git add -A</code> 提交另一个会话的修改。</strong>
+  <strong>阻止 Claude Code 在 <code>$DIR</code> 为空时执行 <code>rm -rf $DIR/</code>、对你其他的开发服务器执行 <code>pkill node</code>、抢占它们的端口，以及用 <code>git add -A</code> 提交另一个会话的修改。</strong>
 </p>
 
 <p align="center">这组 hook 清楚哪些进程、端口和 git 工作树属于哪个 Claude Code 会话和子代理，只拦截会伤到其他东西的命令，并告诉 Claude 应该改用哪条安全的命令。</p>

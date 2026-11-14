@@ -1,7 +1,7 @@
 <h1 align="center">claude-bulkhead</h1>
 
 <p align="center">
-  <strong>Claude Code 가 <code>pkill node</code> 로 다른 개발 서버를 종료하거나, 다른 세션의 포트를 사용하거나, <code>git add -A</code> 로 다른 세션의 수정 사항을 커밋하는 일을 막습니다.</strong>
+  <strong>Claude Code 가 비어 있는 변수로 <code>rm -rf $DIR/</code> 를 실행하거나, <code>pkill node</code> 로 다른 개발 서버를 종료하거나, 다른 세션의 포트를 사용하거나, <code>git add -A</code> 로 다른 세션의 수정 사항을 커밋하는 일을 막습니다.</strong>
 </p>
 
 <p align="center">어느 프로세스, 포트, git 트리가 어느 Claude Code 세션과 서브에이전트 것인지 아는 훅입니다. 다른 세션에 영향을 주는 명령만 막고, 대신 실행할 안전한 명령을 Claude 에게 알려 줍니다.</p>

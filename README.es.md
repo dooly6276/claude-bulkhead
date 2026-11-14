@@ -1,7 +1,7 @@
 <h1 align="center">claude-bulkhead</h1>
 
 <p align="center">
-  <strong>Evita que Claude Code ejecute <code>pkill node</code> sobre tus otros servidores de desarrollo, les quite los puertos y haga commit de las ediciones de otra sesión con <code>git add -A</code>.</strong>
+  <strong>Evita que Claude Code ejecute <code>rm -rf $DIR/</code> con <code>$DIR</code> vacía, <code>pkill node</code> sobre tus otros servidores de desarrollo, les quite los puertos y haga commit de las ediciones de otra sesión con <code>git add -A</code>.</strong>
 </p>
 
 <p align="center">Hooks que saben qué procesos, puertos y árboles de git pertenecen a cada sesión y subagente de Claude Code, así que bloquean solo lo que dañaría a otra cosa y le dicen a Claude qué comando seguro ejecutar en su lugar.</p>
