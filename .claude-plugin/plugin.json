@@ -1,6 +1,6 @@
 {
   "name": "bulkhead",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Keeps parallel Claude Code sessions and subagents on one machine from killing each other's processes, taking each other's ports, exhausting RAM, pegging the disk, or moving, sweeping up and deleting each other's git tree. bulkhead scan shows what it would have stopped in your past sessions.",
   "author": {
     "name": "Myeongseok Kang",
