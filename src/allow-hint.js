@@ -7,6 +7,8 @@ const RULE_KEYS = {
   'rm-empty-var': ['basics', 'rmEmptyVar'],
   'rm-unquoted-var': ['basics', 'rmUnquotedVar'],
   'rm-git-dir': ['basics', 'rmGitDir'],
+  'rm-xargs-split': ['basics', 'rmXargsSplit'],
+  'rm-through-link': ['basics', 'rmThroughLink'],
   'force-push-main': ['basics', 'forcePushMain'],
   'protected-delete': ['basics', 'protectedDelete'],
   'discard-changes': ['basics', 'discardChanges'],

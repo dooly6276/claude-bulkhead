@@ -9,7 +9,7 @@ const DAY_MS = 86400000
 // is the share order: first what people fear most (another session's processes killed, files
 // deleted, edits committed or a tree moved under someone), the waiting last.
 const SHARED_KILL = new Set(['mass-kill', 'docker-mass', 'device-kill', 'app-quit', 'service-stop'])
-const DELETES = new Set(['rm-root', 'rm-empty-var', 'rm-unquoted-var', 'rm-git-dir'])
+const DELETES = new Set(['rm-root', 'rm-empty-var', 'rm-unquoted-var', 'rm-git-dir', 'rm-xargs-split', 'rm-through-link'])
 const GROUPS = [
   { key: 'kill', match: (g, r) => (g === 'kill-guard' && !SHARED_KILL.has(r)) || (g === 'port-guard' && r === 'kill-by-port'), text: 'kills by name (pkill, killall, taskkill) that would also have hit other sessions\' processes' },
   { key: 'delete', match: (g, r) => (g === 'basics' && DELETES.has(r)) || (g === 'checkout-guard' && r === 'remove-session-dir'), text: 'recursive deletes (rm -rf) of a drive root, home, .git, an empty $VAR/ or another session\'s folder' },
@@ -135,6 +135,8 @@ const MATCHERS = {
   'basics:rm-empty-var': /\b(?:rm|rsync|Remove-Item|rd|rmdir)\s[^\n;&|]*/,
   'basics:rm-unquoted-var': /\brm\s[^\n;&|]*/,
   'basics:rm-git-dir': /\b(?:rm|find|Remove-Item)\s[^\n;&|]*/,
+  'basics:rm-xargs-split': /[^\n;&|]*\|[^\n;&]*\bxargs\b[^\n;&]*/,
+  'basics:rm-through-link': /\b(?:rm|git\s+worktree\s+remove|Remove-Item|rd|rmdir)\s[^\n;&|]*/,
   'basics:force-push-main': /\bgit\s[^\n;&|]*?\bpush\b[^\n;&|]*/,
   'basics:discard-changes': /\bgit\s[^\n;&|]*?\b(?:reset|clean|checkout|restore)\b[^\n;&|]*/,
   'basics:agent-author': /--author\S*(?:\s*=?\s*(?:"[^"]*"|'[^']*'|\S+))?|git\s[^\n;&|]*user\.\w+[^\n;&|]*|GIT_(?:AUTHOR|COMMITTER)_\w+=\S+/,

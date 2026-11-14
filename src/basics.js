@@ -9,15 +9,17 @@ const { realPath } = require('./paths')
 const { gitCall, gitEnv, parseArgs } = require('./gitargs')
 
 // Narrow rules for mistakes that cannot be undone. Each can be turned off on its own:
-// rm-root, rm-empty-var, rm-unquoted-var, rm-git-dir, force-push-main, protected-delete,
-// discard-changes, agent-author, self-allow.
+// rm-root, rm-empty-var, rm-unquoted-var, rm-git-dir, rm-xargs-split, rm-through-link,
+// force-push-main, protected-delete, discard-changes, agent-author, self-allow.
 
 // ~, $HOME and %USERPROFILE% become the home directory; /c/... becomes C:/... on Windows.
 // Returns null for anything with a variable we cannot expand.
 function expand(arg, home, platform) {
   let a = arg
     .replace(/^~(?=[\\/]|$)/, home)
-    .replace(/^(?:\$HOME|\$\{HOME\}|\$env:USERPROFILE|\$env:HOME|%USERPROFILE%|\$USERPROFILE)(?=[\\/]|$)/i, home)
+    .replace(/^(?:\$HOME|\$\{HOME\}|\$env:USERPROFILE|\$env:HOME|\$env:HOMEPATH|%USERPROFILE%|%HOMEPATH%|\$USERPROFILE)(?=[\\/]|$)/i, home)
+    // the Windows system drive, written as a variable: $env:SystemDrive\ is C:\
+    .replace(/^(?:\$env:(?:SystemDrive|HOMEDRIVE)|%(?:SystemDrive|HOMEDRIVE)%)(?=[\\/]|$)/i, 'C:')
   if (/[$%]/.test(a)) return null
   if (platform === 'win32') a = a.replace(/^\/(?:cygdrive\/)?([a-z])(?=\/|$)/i, '$1:')
   return a
@@ -49,7 +51,7 @@ function realOnce(p) {
 }
 const isAncestorOrSame = (a, b) => b === a || b.startsWith(a.endsWith('/') ? a : a + '/')
 
-function rmTargets(t) {
+function rmTargets(t, mode = 'sh') {
   const cmd = path.basename(t[0] || '').replace(/\.exe$/i, '').toLowerCase()
   const args = t.slice(1)
   if (cmd === 'rm') {
@@ -59,27 +61,158 @@ function rmTargets(t) {
     const operands = dash < 0 ? args.filter(a => !a.startsWith('-')) : [...args.slice(0, dash).filter(a => !a.startsWith('-')), ...args.slice(dash + 1)]
     const recursive = opts.some(a => /^-[a-zA-Z]*[rR]/.test(a) || a === '--recursive')
     const force = opts.some(a => /^-[a-zA-Z]*f/.test(a) || a === '--force')
+    // PowerShell's rm is Remove-Item: rm -Recurse $home, or rm -r in the PowerShell tool
+    if (opts.some(a => PS_RECURSE.test(a) && (a.length > 2 || mode === 'ps'))) return psOperands(args)
     return recursive && force ? operands : []
   }
-  if (/^(?:remove-item|ri|rmdir|rd|del|erase)$/.test(cmd) && args.some(a => /^-r(?:ecurse)?$/i.test(a)) && args.some(a => /^-fo(?:rce)?$/i.test(a))) {
-    return args.filter(a => !a.startsWith('-'))
-  }
+  if (/^(?:remove-item|ri|rmdir|rd|del|erase)$/.test(cmd) && args.some(a => PS_RECURSE.test(a))) return psOperands(args)
   if (/^(?:rd|rmdir)$/.test(cmd) && args.some(a => /^\/s$/i.test(a))) return args.filter(a => !/^\/[sq]$/i.test(a))
   return []
+}
+
+// PowerShell takes any unambiguous prefix of a parameter: -r, -rec and -Recurse are the same, and
+// -Recurse:$true too. Remove-Item -Recurse deletes the tree without -Force; -Force only adds hidden
+// and read-only items.
+const PS_RECURSE = /^-r(?:e(?:c(?:u(?:r(?:s(?:e)?)?)?)?)?)?(?::\$true)?$/i
+// Remove-Item parameters (and common ones) that take a value that is not a path
+const PS_VALUE = /^-(?:fi(?:l(?:t(?:er?)?)?)?|inc(?:l(?:u(?:de?)?)?)?|ex(?:c(?:l(?:u(?:de?)?)?)?)?|cr(?:e(?:d(?:e(?:n(?:t(?:i(?:al?)?)?)?)?)?)?)?|st(?:r(?:e(?:am?)?)?)?|ea|erroraction|wa|warningaction|infa|informationaction|ev|errorvariable|ov|outvariable)$/i
+function psOperands(args) {
+  const out = []
+  for (let i = 0; i < args.length; i++) {
+    if (PS_VALUE.test(args[i])) i++
+    else if (!args[i].startsWith('-')) out.push(args[i])
+  }
+  return out
+}
+
+// ---------------------------------------------------------------------------------------------
+// PowerShell targets in parentheses: Remove-Item -Recurse -Force (Split-Path $home). The parser
+// reads (...) as a command of its own, so the statement is read again here from its raw text.
+
+const PS_REMOVE = /^(?:remove-item|ri|rm|rmdir|rd|del|erase)$/
+
+// The raw text of one PowerShell statement from `from`: up to a ; | or newline outside quotes and
+// parentheses. Words are split at blanks outside them, so (Split-Path $home) is one word.
+function psWords(src, from) {
+  const words = []
+  let w = ''
+  let depth = 0
+  let quote = null
+  for (let i = from; i < src.length; i++) {
+    const c = src[i]
+    if (quote) { w += c; if (c === quote) quote = null; continue }
+    if (c === '"' || c === "'") { quote = c; w += c; continue }
+    if (c === '(') depth++
+    else if (c === ')') { if (depth === 0) break; depth-- }
+    if (depth === 0 && (c === ';' || c === '|' || c === '\n' || c === '&')) break
+    if (depth === 0 && /\s/.test(c)) { if (w) words.push(w); w = ''; continue }
+    w += c
+  }
+  if (w) words.push(w)
+  return words
+}
+
+const unquote = v => v.replace(/^"(.*)"$|^'(.*)'$/s, '$1$2')
+
+// The path a parenthesized PowerShell expression gives, when it is the home directory or a path
+// tool applied to it: (Split-Path $home) is the folder above home (C:\Users), (Split-Path -Qualifier
+// $home) the drive. Returns null for anything else.
+function psValue(word, home, platform, depth = 0) {
+  const v = unquote(word.trim())
+  if (depth > 4) return null
+  if (!v.startsWith('(')) return expand(v, home, platform)
+  if (!v.endsWith(')')) return null
+  const inner = psWords(v.slice(1, -1), 0)
+  if (!inner.length || !/^(?:split-path|resolve-path|convert-path)$/i.test(inner[0])) return inner.length === 1 ? psValue(inner[0], home, platform, depth + 1) : null
+  const args = inner.slice(1)
+  if (args.some(a => /^-(?:leaf|leafbase|extension|noqualifier|isabsolute|childpath|additionalchildpath)/i.test(a))) return null
+  const operand = args.filter((a, i) => !a.startsWith('-') || /^-(?:path|literalpath)$/i.test(args[i - 1] || ''))
+    .find(a => !a.startsWith('-'))
+  if (!operand) return null
+  const value = psValue(operand, home, platform, depth + 1)
+  if (value === null) return null
+  if (!/^split-path$/i.test(inner[0])) return value
+  const p = pathFor(platform)
+  if (args.some(a => /^-q(?:u(?:a(?:l(?:i(?:f(?:i(?:er?)?)?)?)?)?)?)?$/i.test(a))) {
+    const q = /^[a-z]:/i.exec(value)
+    return q ? q[0] + '\\' : null
+  }
+  const up = /^[a-z]:[\\/]/i.test(value) ? path.win32.dirname(value) : p.dirname(value.replace(/[\\/]+$/, '') || '/')
+  return up
+}
+
+// The parser ends the command at a ( that starts a word: Remove-Item -Recurse (Split-Path $home)
+const parenNext = c => /^\s*\(/.test(String(c.src || '').slice(c.e, c.e + 32))
+
+// The parenthesized targets of a recursive PowerShell delete, each { word, path }.
+function psParenTargets(c, home, platform) {
+  if (!c.src || !PS_REMOVE.test(shell.bin(c.argv[0] || '')) || !parenNext(c)) return []
+  const words = psWords(c.src, c.words[0].s)
+  if (!words.slice(1).some(a => PS_RECURSE.test(a) || /^\/s$/i.test(a) || /^-(?=[a-zA-Z]*[rR])[rRfv]{1,3}$/.test(a))) return []
+  const out = []
+  for (const w of words.slice(1)) {
+    if (!w.startsWith('(')) continue
+    const p = psValue(w, home, platform)
+    if (p !== null) out.push({ word: w, path: p })
+  }
+  return out
+}
+
+// A delete PowerShell runs: its own cmdlet, or an alias (rm, rd, rmdir) with -Recurse, or any delete
+// from the PowerShell tool.
+function psDelete(t, mode) {
+  const b = shell.bin(t[0] || '')
+  if (/^(?:remove-item|ri|del|erase)$/.test(b) || (mode === 'ps' && PS_REMOVE.test(b))) return true
+  return /^(?:rd|rmdir|rm)$/.test(b) && t.slice(1).some(a => PS_RECURSE.test(a) && (a.length > 2 || b !== 'rm'))
+}
+
+// A PowerShell delete that names $home or a profile variable: say what that variable is.
+function psHomeNote(target) {
+  if (!/\$(?:home\b|\{home\}|env:(?:userprofile|homepath)\b)|split-path/i.test(target)) return ''
+  return '\n$home (in any case, $HOME too) is PowerShell\'s automatic variable for your user profile folder (C:\\Users\\<you>): it is always set and read-only, so it is never empty, and $env:USERPROFILE is the same folder. (Split-Path $home) is therefore C:\\Users, the folder with every user\'s profile.'
 }
 
 // Folders directly in the home directory that are only caches and can always be rebuilt.
 const HOME_CACHES = /^\.?(?:cache|caches|tmp|temp|npm|pnpm-store|yarn|bun|gradle|m2|nuget|cargo|rustup|deno|expo|Trash|node-gyp|pyenv|bundle|cocoapods)$/i
 
+// Folders in a home directory that hold the apps' data, documents and keys. Deleting one of them as a
+// whole loses what no build brings back; a folder deeper inside (~/Library/Caches/x, ~/.config/x) passes.
+const HOME_KEEP = /^(?:library|documents|desktop|downloads|pictures|movies|music|videos|onedrive|appdata|\.ssh|\.gnupg|\.config|\.local|\.aws)$/i
+const HOME_KEEP_INNER = /^(?:library\/(?:application support|containers|group containers|preferences|keychains|mobile documents|mail|messages|cloudstorage)|appdata\/(?:roaming|local|locallow)|\.local\/(?:share|state))$/i
+// A user's home folder, own or another's: /Users/<name>, /home/<name>, C:/Users/<name>, and the
+// same drive seen from WSL, Cygwin or Git Bash (/mnt/c/Users/<name>, /c/Users/<name>).
+const USER_HOME = /^(?:[a-z]:|\/(?:mnt\/|cygdrive\/)?[a-z])?\/users\/[^/]+|^\/home\/[^/]+/i
+
+// Why deleting abs (normalized) loses a home directory or what it holds, or null.
+function homeReason(abs, homeKey) {
+  if (isAncestorOrSame(abs, homeKey)) return 'your home directory or a folder above it'
+  const own = isAncestorOrSame(homeKey, abs)
+  const base = own ? homeKey : (USER_HOME.exec(abs) || [])[0]
+  if (!base) return null
+  const rel = abs.slice(base.length).replace(/^\//, '')
+  if (!rel) return 'a user\'s home directory'
+  if (HOME_KEEP_INNER.test(rel) || HOME_KEEP.test(rel)) return own ? 'a folder in your home directory that holds your apps\' data, documents or keys' : 'a folder in a user\'s home directory that holds their apps\' data, documents or keys'
+  if (own && !rel.includes('/') && !HOME_CACHES.test(rel)) return 'a folder directly in your home directory'
+  return null
+}
+
 // The dangerous targets: a filesystem or drive root, a top-level folder such as /usr or /srv,
 // the home directory or anything above it, a folder directly in it (~/Documents, ~/backups;
-// caches excepted), and any directory above the repository the command runs in.
+// caches excepted), the folders in it that hold app data (~/Library/Application Support,
+// ~/AppData/Roaming), another user's home and those folders in it, and any directory above the
+// repository the command runs in.
 function dangerousTarget(arg, { cwd, home, platform, repoRoot }) {
   const expanded = expand(arg, home, platform)
   if (expanded === null) return null
   const dir = expanded.replace(/[\\/]\*$/, '') || '/'
   const rel = expanded === '*' ? '.' : dir
   if (DRIVE_LETTER_ROOT.test(dir)) return 'a filesystem root'
+  // C:\Users\x written out is a Windows path wherever the hook runs, as C:\ is
+  if (platform !== 'win32' && /^[a-z]:[\\/]/i.test(dir)) {
+    const abs = norm(path.win32.resolve(dir), 'win32')
+    if (/^[a-z]:\/[^/]+$/.test(abs)) return 'a top-level folder of the drive'
+    return homeReason(abs, norm(home, platform))
+  }
   // as written, and on this machine also from the real cwd and home: rm resolves .. from the
   // folder the cwd really is, not from the link it was entered through
   const views = [{ cwd, home }]
@@ -89,10 +222,9 @@ function dangerousTarget(arg, { cwd, home, platform, repoRoot }) {
     if (/^(?:\/|[a-z]:\/?)$/i.test(abs) || /^[a-z]:$/i.test(abs)) return 'a filesystem root'
     if (MOUNTED_DRIVE.test(abs)) return 'a filesystem root'
     if (MOUNTED_DRIVE.test(pathFor('linux').dirname(abs)) && !isAncestorOrSame(abs, norm(v.cwd, platform))) return 'a top-level folder of the drive'
-    const homeKey = norm(v.home, platform)
-    if (isAncestorOrSame(abs, homeKey)) return 'your home directory or a folder above it'
+    const atHome = homeReason(abs, norm(v.home, platform))
+    if (atHome) return atHome
     const parent = pathFor('linux').dirname(abs)
-    if (parent === homeKey && !HOME_CACHES.test(pathFor('linux').basename(abs))) return 'a folder directly in your home directory'
     if ((parent === '/' || /^[a-z]:\/?$/i.test(parent)) && !isAncestorOrSame(abs, norm(v.cwd, platform))) return 'a top-level folder of the drive'
     // a folder inside the current directory cannot be above the repository
     if (abs !== norm(v.cwd, platform) && isAncestorOrSame(norm(v.cwd, platform), abs)) continue
@@ -349,6 +481,169 @@ function findRemovesGit(t) {
   return !starts.length || starts.some(s => /^(?:\.{1,2}[\\/]?|[\\/~$%]|[a-z]:)/i.test(s))
 }
 
+// ---------------------------------------------------------------------------------------------
+// rm-xargs-split: xargs splits its input at blanks and newlines and reads quotes and backslashes,
+// unless -0 or -d says what separates the items. A path with a space reaches rm as several shorter
+// paths, and dirname turns such a piece into its parent: find ~/Library/Application\ Support/x |
+// xargs -n1 dirname | xargs rm -rf deleted ~/Library (a r/ClaudeCode report).
+
+// The xargs in front of a command (the parser takes it off the words), or null:
+// { whole } when -0/--null or -d/--delimiter keeps each item whole, { replace } for -I/-i/--replace.
+function xargsOf(c) {
+  const first = c.words && c.words[0]
+  if (!c.src || !first || first.s <= c.s) return null
+  const words = c.src.slice(c.s, first.s).split(/\s+/).filter(Boolean).map(unquote)
+  const at = words.map(w => shell.bin(w)).lastIndexOf('xargs')
+  if (at < 0) return null
+  let whole = false
+  let replace = false
+  for (const w of words.slice(at + 1)) {
+    if (w === '--null' || /^--delimiter(?:=|$)/.test(w)) whole = true
+    else if (/^--replace(?:=|$)/.test(w)) replace = true
+    else if (/^-[^-]/.test(w)) {
+      for (const ch of w.slice(1)) {
+        if (ch === '0') whole = true
+        else if (ch === 'd') { whole = true; break }
+        else if (ch === 'I' || ch === 'i') { replace = true; break }
+        else if ('nPLlsEeaJR'.includes(ch)) break
+      }
+    }
+  }
+  return { whole, replace }
+}
+
+const recursiveRm = t => {
+  if (shell.bin(t[0] || '') !== 'rm') return false
+  const dash = t.indexOf('--')
+  return (dash < 0 ? t : t.slice(0, dash)).slice(1).some(a => /^-[a-zA-Z]*[rR]/.test(a) || a === '--recursive')
+}
+
+// The commands that feed c through pipes, nearest first: same string, same level, a | between.
+const indexCache = new WeakMap()
+function upstream(cmds, c) {
+  if (!indexCache.has(cmds)) indexCache.set(cmds, new Map(cmds.map((x, i) => [x, i])))
+  const out = []
+  let next = c
+  // a pipeline longer than 64 commands is not a real one; the bound keeps a huge line linear
+  for (let i = indexCache.get(cmds).get(c) - 1; i >= 0 && out.length < 64; i--) {
+    const p = cmds[i]
+    if (p.src !== c.src || p.depth !== c.depth || p.sub || p.e > next.s) continue
+    const gap = c.src.slice(p.e, next.s).replace(/\d*>&\d+|&>/g, '')
+    if (!/^[^;&|\n]*\|&?\s*$/.test(gap)) break
+    out.push(p)
+    next = p
+  }
+  return out
+}
+
+// Why this rm is fed paths that xargs split, or null: { kind: 'split' | 'dirname', via, replace }.
+function xargsSplit(cmds, c) {
+  const t = c.argv
+  if (!recursiveRm(t)) return null
+  const x = xargsOf(c)
+  if (!x) return null
+  const feed = upstream(cmds, c)
+  // echo a b | xargs rm -rf: the words are written out on the line, splitting them is the point
+  const source = feed[feed.length - 1]
+  if (source && /^(?:echo|printf)$/.test(shell.bin(source.argv[0])) && source.argv.slice(1).every(a => !/[$`*?[]/.test(a))) return null
+  const namer = feed.find(p => /^(?:dirname|basename)$/.test(shell.bin(p.argv[0] || '')) && xargsOf(p))
+  if (namer) {
+    const nx = xargsOf(namer)
+    const zero = namer.argv.some(a => a === '-z' || a === '--zero')
+    if (!(x.whole && nx.whole && zero)) return { kind: 'dirname', via: shell.bin(namer.argv[0]), replace: x.replace }
+  }
+  return x.whole ? null : { kind: 'split', replace: x.replace }
+}
+
+function xargsSplitMessage(text, hit) {
+  const head = `[bulkhead] basics: \`${oneLine(text, 140)}\` `
+  const how = hit.replace
+    ? 'feeds rm -rf through xargs -I without -0: -I still splits its input at newlines and reads quotes and backslashes in it (C:\\Users\\me\\x becomes C:Usersmex), so rm can get other paths than the ones printed.'
+    : 'feeds rm -rf through xargs without -0: xargs splits its input at every space, tab and newline and reads quotes and backslashes in it, so a path with a space (~/Library/Application Support/x) reaches rm as several shorter paths, and rm deletes each one.'
+  const why = hit.kind === 'dirname'
+    ? `runs ${hit.via} on paths xargs splits at spaces, so a piece such as ~/Library/Application turns into its parent folder, ~/Library, and the rm -rf at the end of the pipeline deletes that folder whole. This is how a user lost ~/Library.`
+    : how
+  return head + why + '\n' +
+    'Keep each path whole: `find ... -print0 | xargs -0 rm -rf --`, or let find delete (`find ... -delete`, `find ... -exec rm -rf {} +`). Or print the list first, check it, and delete the folders by name.'
+}
+
+// ---------------------------------------------------------------------------------------------
+// rm-through-link: a delete that can follow a link out of the folder. Junctions in a worktree that
+// point at shared data (D:\models, a .venv) went with it when two old worktrees were removed on
+// Windows (r/ClaudeAI, about 230 GB). GNU and BSD rm, Git Bash's rm (it sees a junction as a link),
+// rd /s and current git delete the link and not what it points at, but Windows PowerShell 5.1
+// Remove-Item -Recurse and older Git for Windows follow junctions. So on Windows the PowerShell
+// deletes are checked, and git worktree remove --force everywhere: --force skips git's own check,
+// and a worktree is where links to shared data live. A plain rm -rf node_modules in Git Bash, whose
+// workspace junctions point outside it, stays allowed. On every platform, rm -rf link/ with a slash
+// deletes the folder the link points at, not the link.
+
+const LINK_BUDGET = { entries: 2000, depth: 6 }
+
+// A link (symbolic link or junction) inside root whose target is outside root and exists, or null.
+// Breadth first, so the links at the top (.venv, models) are seen before a deep node_modules uses up
+// the budget; past the budget it gives up and lets the command through.
+function outwardLink(root, budget = LINK_BUDGET) {
+  let rootReal
+  try {
+    if (!fs.lstatSync(root).isDirectory()) return null
+    rootReal = fs.realpathSync(root)
+  } catch { return null }
+  const key = p => norm(p, process.platform)
+  const roots = [key(root), key(rootReal)]
+  const inside = p => roots.some(r => isAncestorOrSame(r, key(p)))
+  const queue = [[root, 0]]
+  let seen = 0
+  for (let q = 0; q < queue.length; q++) {
+    const [dir, depth] = queue[q]
+    let entries
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { continue }
+    for (const e of entries) {
+      if (++seen > budget.entries) return null
+      const p = path.join(dir, e.name)
+      if (e.isSymbolicLink()) {
+        let to
+        try { to = fs.readlinkSync(p) } catch { continue }
+        const target = path.resolve(dir, to.replace(/^\\\\\?\\|^\\\?\?\\/, ''))
+        if (!inside(target) && fs.existsSync(target)) return { link: p, target }
+      } else if (e.isDirectory() && e.name !== '.git' && depth + 1 < budget.depth) queue.push([p, depth + 1])
+    }
+  }
+  return null
+}
+
+// The folder a delete operand names, when it can be read here: no variable, no glob but a last /*.
+function operandDir(arg, cwd, home, platform) {
+  const v = expand(arg, home, platform)
+  if (v === null || /[*?[`]/.test(v.replace(/[\\/]\*$/, ''))) return null
+  return path.resolve(cwd, v.replace(/[\\/]\*$/, '') || '/')
+}
+
+// rm -rf link/ (or link/* or link/.): the slash makes rm go into the folder the link points at.
+function slashThroughLink(arg, cwd, home, platform) {
+  if (!/[\\/](?:\*|\.)?$/.test(arg) || /^[\\/]+$/.test(arg)) return null
+  const v = expand(arg.replace(/[\\/](?:\*|\.)?$/, ''), home, platform)
+  if (v === null || !v || /[*?[`]/.test(v)) return null
+  const p = path.resolve(cwd, v)
+  try {
+    if (!fs.lstatSync(p).isSymbolicLink()) return null
+    const target = fs.realpathSync(p)
+    return fs.statSync(target).isDirectory() ? { link: p, target, slash: true } : null
+  } catch { return null }
+}
+
+function linkMessage(text, hit, platform) {
+  const head = `[bulkhead] basics: \`${oneLine(text, 140)}\` `
+  if (hit.slash) {
+    return head + `goes through a link: ${hit.link} is a symbolic link to ${hit.target}, and with the slash after it rm deletes what is in ${hit.target} instead of the link.\n` +
+      `To remove only the link, leave out the slash: rm ${hit.link} (or unlink ${hit.link}).`
+  }
+  const unlink = platform === 'win32' ? `cmd /c rmdir "${hit.link}"` : `unlink ${hit.link}`
+  return head + `would delete through a link: ${hit.link} is a junction or symbolic link to ${hit.target}, outside the folder being deleted. ` +
+    'Some tools follow such links when they delete a folder (Windows PowerShell 5.1 Remove-Item -Recurse, older Git for Windows), and then the files at the other end are deleted too.\n' +
+    `Remove the link itself first (${unlink}; this deletes only the link, never its target), then run the command again.`
+}
+
 function emptyVarMessage(seg, operand, hit, rsync) {
   const rest = operand.slice(hit.what.length)
   const becomes = rsync ? `${rest.replace(/^[\\/]+/, '/') || 'missing'}, and --delete then deletes everything there the source does not have` : `${rest.replace(/^[\\/]+/, '/')}, the whole drive`
@@ -479,6 +774,8 @@ function check(cmd, {
   const emptyVar = once(() => enabled('rm-empty-var'))
   const unquotedVar = once(() => enabled('rm-unquoted-var'))
   const gitDir = once(() => enabled('rm-git-dir'))
+  const xargsSplitOn = once(() => enabled('rm-xargs-split'))
+  const throughLink = once(() => enabled('rm-through-link'))
   if (/allow/i.test(String(cmd || '')) && enabled('self-allow')) {
     const self = require('./self-allow').check(cmd, { mode })
     if (self) return self
@@ -513,17 +810,22 @@ function check(cmd, {
     const t = c.argv
     if (!t.length) continue
     const seg = t.join(' ')
-    const targets = rmTargets(t)
+    const targets = rmTargets(t, mode)
     const cmdMode = c.depth > 0 && mode !== 'sh' && !/^(?:rd|rmdir|del|erase|remove-item|ri)$/i.test(shell.bin(t[0])) ? 'sh' : mode
     // variables the same shell sets before this command: the text before it in the string it was read from
     const vars = (targets.length || shell.bin(t[0]) === 'rsync') ? assignments(String(c.src || '').slice(0, c.s), cmdMode) : null
+    const ps = psDelete(t, mode) && (targets.length > 0 || parenNext(c))
+    const nameIt = ps ? 'Name the folder you mean inside the project instead, for example Remove-Item -Recurse -Force .\\dist.' : 'Name the folder you mean inside the project instead, for example rm -rf ./dist.'
+    if (ps && rmRoot()) {
+      for (const hit of psParenTargets(c, home, platform)) {
+        const what = dangerousTarget(hit.path, { cwd, home, platform, repoRoot })
+        if (what) return `[bulkhead] basics: \`${oneLine(psWords(c.src, c.words[0].s).join(' '), 120)}\` deletes ${what} (${hit.word} is ${hit.path}).\n${nameIt}${psHomeNote(hit.word)}`
+      }
+    }
     if (targets.length && rmRoot()) {
       for (const target of targets) {
         const what = dangerousTarget(target, { cwd, home, platform, repoRoot })
-        if (what) {
-          return `[bulkhead] basics: \`${oneLine(seg, 120)}\` deletes ${what} (${target}).\n` +
-            'Name the folder you mean inside the project instead, for example rm -rf ./dist.'
-        }
+        if (what) return `[bulkhead] basics: \`${oneLine(seg, 120)}\` deletes ${what} (${target}).\n${nameIt}${ps ? psHomeNote(target) : ''}`
         const tool = rootToolTarget(target, vars, cmdMode, home, platform)
         if (tool) return rootToolMessage(seg, target, tool)
         const written = substituteVars(target, vars, cmdMode)
@@ -554,10 +856,27 @@ function check(cmd, {
     if (gitDir() && ((targets.length && targets.some(v => isGitDirPath(v) && gitDirAtRisk(v, { cwd, home, platform, vars, env, mode: cmdMode, isDir }))) || findRemovesGit(t))) {
       return gitDirMessage(seg)
     }
+    if (xargsSplitOn()) {
+      const hit = xargsSplit(cmds, c)
+      if (hit) return xargsSplitMessage(String(c.src || '').slice((upstream(cmds, c).pop() || c).s, c.e), hit)
+    }
+    if (targets.length && throughLink()) {
+      for (const target of targets) {
+        const hit = slashThroughLink(target, cwd, home, platform) ||
+          (platform === 'win32' && ps && !dangerousTarget(target, { cwd, home, platform, repoRoot }) && outwardLink(operandDir(target, cwd, home, platform) || ''))
+        if (hit) return linkMessage(seg, hit, platform)
+      }
+    }
     if (path.basename(t[0]).replace(/\.exe$/i, '') !== 'git') continue
     const call = gitCall(t, cwd, c.depth === 0 ? gitEnv(prepared.slice(c.s, c.e)) : {})
     const dir = call.dir
     const rest = call.sub ? [call.sub, ...call.args] : []
+    // git worktree remove --force: checked on every platform (see rm-through-link above)
+    if (rest[0] === 'worktree' && rest[1] === 'remove' && throughLink() && rest.slice(2).some(a => a === '--force' || /^-[a-z]*f/.test(a))) {
+      const where = rest.slice(2).filter(a => !a.startsWith('-')).pop()
+      const hit = where && outwardLink(operandDir(where, dir, home, platform) || '')
+      if (hit) return linkMessage(seg, hit, platform)
+    }
     const who = author() && agentAuthor(t, rest)
     if (who) return agentMessage(who)
     if (rest[0] === 'push' && forcePush() && forcePushToMain(rest, () => { try { return run(['rev-parse', '--abbrev-ref', 'HEAD'], dir) } catch { return '' } }, protectedBranches)) {
@@ -603,7 +922,9 @@ function ruleOf(message) {
   if (/` is dangerous: /.test(message)) return 'rm-empty-var'
   if (/bash splits it into several paths/.test(message)) return 'rm-unquoted-var'
   if (/deletes the repository's history/.test(message)) return 'rm-git-dir'
+  if (/through xargs (?:-I )?without -0|on paths xargs splits at spaces/.test(message)) return 'rm-xargs-split'
+  if (/delete through a link|` goes through a link: /.test(message)) return 'rm-through-link'
   return 'rm-root'
 }
 
-module.exports = { handle, check, rmTargets, dangerousTarget, emptyVarTarget, splitVar, assignments, nonEmpty, findRemovesGit, forcePushToMain, deletesProtected, ruleOf, agentAuthor }
+module.exports = { handle, check, rmTargets, dangerousTarget, outwardLink, xargsOf, psValue, emptyVarTarget, splitVar, assignments, nonEmpty, findRemovesGit, forcePushToMain, deletesProtected, ruleOf, agentAuthor }

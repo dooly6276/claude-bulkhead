@@ -299,9 +299,9 @@ Turn off: `BULKHEAD_DISABLE=orphan-reaper`. Details: [docs/guards/orphan-reaper.
 </details>
 
 <details>
-<summary><strong>basics</strong>: eight mistakes that cannot be undone</summary>
+<summary><strong>basics</strong>: ten mistakes that cannot be undone</summary>
 
-`rm-root` (`rm -rf` at a root, a top-level folder such as `/srv`, home, a folder directly in home such as `~/Documents`, or above the repository, also through a variable the same line sets to one, as in `D=/; rm -rf "$D/"`), `rm-empty-var` (`rm -rf $D/`, `rm -rf "$(cygpath -u ...)"` and `rsync --delete` into `$D/`, which become `/` when the variable or the output is empty; `"${D:?}/"` passes), `rm-unquoted-var` (`rm -rf $D` unquoted when the value has a space, so bash deletes each piece), `rm-git-dir` (`rm -rf .git` on a repository), `force-push-main` (`git push --force` to `main` or `master`; `--force-with-lease` passes), `protected-delete` (`git push origin :main`, `git push --delete origin main`, `git branch -D main`), `discard-changes` (`git reset --hard` or `git clean -fd` that would lose uncommitted work) and `agent-author` (`--author="Claude <noreply@anthropic.com>"`, `git config user.name Claude` and the like, so your commits keep counting as yours).
+`rm-root` (`rm -rf` at a root, a top-level folder such as `/srv`, home, a folder directly in home such as `~/Documents`, an app data folder such as `~/Library/Application Support`, another user's home, or above the repository, also through a variable the same line sets to one, as in `D=/; rm -rf "$D/"`, and through PowerShell's `$home`, as in `Remove-Item -Recurse (Split-Path $home)`), `rm-empty-var` (`rm -rf $D/`, `rm -rf "$(cygpath -u ...)"` and `rsync --delete` into `$D/`, which become `/` when the variable or the output is empty; `"${D:?}/"` passes), `rm-unquoted-var` (`rm -rf $D` unquoted when the value has a space, so bash deletes each piece), `rm-git-dir` (`rm -rf .git` on a repository), `rm-xargs-split` (`find ... | xargs rm -rf` without `-0`, which splits paths at spaces), `rm-through-link` (`git worktree remove --force`, and on Windows `Remove-Item -Recurse`, of a folder with a junction to data outside it; `rm -rf link/`), `force-push-main` (`git push --force` to `main` or `master`; `--force-with-lease` passes), `protected-delete` (`git push origin :main`, `git push --delete origin main`, `git branch -D main`), `discard-changes` (`git reset --hard` or `git clean -fd` that would lose uncommitted work) and `agent-author` (`--author="Claude <noreply@anthropic.com>"`, `git config user.name Claude` and the like, so your commits keep counting as yours).
 
 Turn off: `BULKHEAD_DISABLE=basics`, or one rule by name. Details: [docs/guards/basics.md](docs/guards/basics.md).
 </details>
@@ -357,7 +357,7 @@ Environment variables still work and win over both files. The simplest place for
 
 | Variable | Default | Same as |
 |---|---|---|
-| `BULKHEAD_DISABLE` | empty | Comma-separated guards to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `disk-guard`, `orphan-reaper`, `basics`, or `all`. Single rules can be turned off too: `rm-root`, `rm-empty-var`, `rm-unquoted-var`, `rm-git-dir`, `force-push-main`, `protected-delete`, `discard-changes`, `agent-author`, `stage-all`, `remove-session-dir`. A name here is off whatever the files say |
+| `BULKHEAD_DISABLE` | empty | Comma-separated guards to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `disk-guard`, `orphan-reaper`, `basics`, or `all`. Single rules can be turned off too: `rm-root`, `rm-empty-var`, `rm-unquoted-var`, `rm-git-dir`, `rm-xargs-split`, `rm-through-link`, `force-push-main`, `protected-delete`, `discard-changes`, `agent-author`, `stage-all`, `remove-session-dir`. A name here is off whatever the files say |
 | `BULKHEAD_PRESET` | `normal` | The preset: `quiet`, `normal` or `strict` |
 | `BULKHEAD_WAIT_MAX_SEC` | 180 | `waitGuard.limitSeconds` |
 | `BULKHEAD_MIN_FREE_GB` | 3, or 15% of RAM if less | `memory.minFreeGb` |
@@ -397,7 +397,7 @@ The one-time way is always `bulkhead allow <code>`, run by you. The permanent wa
 | checkout-guard | `git-checkout`, `git-pull` and the other tree changes | `{"checkoutGuard":{"enabled":false}}` |
 | disk-guard | `disk-wide-find`, `parallel-disk-scan`, `disk-wide-scan` | `{"diskGuard":{"enabled":false}}` |
 | basics | `rm-root` | `{"basics":{"rmRoot":false}}` |
-| basics | `rm-empty-var`, `rm-unquoted-var`, `rm-git-dir` | `{"basics":{"rmEmptyVar":false}}`, and likewise (`rmUnquotedVar`, `rmGitDir`) |
+| basics | `rm-empty-var`, `rm-unquoted-var`, `rm-git-dir`, `rm-xargs-split`, `rm-through-link` | `{"basics":{"rmEmptyVar":false}}`, and likewise (`rmUnquotedVar`, `rmGitDir`, `rmXargsSplit`, `rmThroughLink`) |
 | basics | `force-push-main` | `{"basics":{"forcePushMain":false}}` |
 | basics | `discard-changes` | `{"basics":{"discardChanges":false}}` |
 | basics | `agent-author` | `{"basics":{"agentAuthor":false}}` |

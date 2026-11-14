@@ -54,7 +54,7 @@ This writes `"preset": "quiet"` (or `"normal"`, `"strict"`) at the top level of 
 | Preset | What it sets |
 |---|---|
 | `normal` | The defaults below. Nothing changes. |
-| `quiet` | Only the guards that protect one session from another, and the rules that cannot be undone. Stays on: kill-guard, port-guard, checkout-guard, memory-guard, orphan-reaper, and in basics `rmRoot`, `rmEmptyVar`, `rmUnquotedVar`, `rmGitDir`, `forcePushMain` and `selfAllow`. Turned off: `waitGuard.enabled`, `diskGuard.enabled`, `basics.discardChanges`, `basics.agentAuthor`. |
+| `quiet` | Only the guards that protect one session from another, and the rules that cannot be undone. Stays on: kill-guard, port-guard, checkout-guard, memory-guard, orphan-reaper, and in basics `rmRoot`, `rmEmptyVar`, `rmUnquotedVar`, `rmGitDir`, `rmXargsSplit`, `rmThroughLink`, `forcePushMain` and `selfAllow`. Turned off: `waitGuard.enabled`, `diskGuard.enabled`, `basics.discardChanges`, `basics.agentAuthor`. |
 | `strict` | Everything on, with tighter limits: `waitGuard.limitSeconds` 60 (default 180); `memory.minFreeGb` 20% of RAM, at most 5 GB (default 15%, at most 3 GB); `memory.slotFloorGb` 35% of RAM, at most 8 GB (default 25%, at most 5 GB); `memory.maxCommitPct` 65 (default 75, Windows); `basics.protectedBranches` `["main", "master", "develop", "release", "production"]`; `secretsGuard.enabled` true (default false). |
 
 The limits scale with the RAM of the machine, so a small laptop is not locked out of every build. To keep one strict value and relax another, set the key: `{ "preset": "strict", "waitGuard": { "limitSeconds": 120 } }`.
@@ -144,10 +144,12 @@ Critical memory pressure for `memoryGuard.subagents` means macOS `kern.memorysta
 |---|---|---|---|
 | `enabled` | boolean | `true` | Turns all the rules on or off |
 | `protectedBranches` | list of branch names | `["main", "master"]` | Branches the force-push rule protects |
-| `rmRoot` | boolean | `true` | `rm -rf` and its PowerShell and cmd forms at a root, a top-level folder such as `/srv`, the home directory, a folder directly in it (caches excepted), or a folder above the repository, also through a variable the same line sets to one (`D=/; rm -rf "$D/"`, `D="$(cygpath -u 'C:\')"; rm -rf "${D:?}/"`) |
+| `rmRoot` | boolean | `true` | `rm -rf` and its PowerShell and cmd forms at a root, a top-level folder such as `/srv`, the home directory, a folder directly in it (caches excepted), a folder that holds app data (`~/Library/Application Support`, `~/AppData/Roaming`, `~/.local/share`), another user's home, or a folder above the repository, also through PowerShell's `$home` and `(Split-Path $home)`, and also through a variable the same line sets to one (`D=/; rm -rf "$D/"`, `D="$(cygpath -u 'C:\')"; rm -rf "${D:?}/"`) |
 | `rmEmptyVar` | boolean | `true` | `rm -rf $D/`, `rm -rf $(...)/` and `rsync --delete` into `$D/` when the variable or output can be empty (then the path is `/`), and `rm -rf "$(cygpath -u ...)"`. `"${D:?}/"` passes |
 | `rmUnquotedVar` | boolean | `true` | `rm -rf $D` with `D` unquoted when its value has a space or a wildcard, so bash splits it into several paths |
 | `rmGitDir` | boolean | `true` | `rm -rf .git` and `find -name .git -exec rm -rf` on an existing repository's `.git` folder |
+| `rmXargsSplit` | boolean | `true` | `xargs rm -r` without `-0` or `-d`, and `xargs dirname` or `basename` feeding `rm -r`: xargs splits paths at spaces, so rm gets shorter paths and dirname turns them into parent folders. `xargs -0 rm -rf` and `xargs rm -f` pass |
+| `rmThroughLink` | boolean | `true` | `git worktree remove --force` on every platform, and on Windows a PowerShell `Remove-Item -Recurse`, of a folder holding a junction or symbolic link to an existing folder outside it (walks at most 2000 entries, 6 levels); and `rm -rf link/` with a slash, which deletes the folder the link points at |
 | `forcePushMain` | boolean | `true` | `git push --force` to a protected branch. `--force-with-lease` always passes |
 | `protectedDelete` | boolean | `true` | Deleting a protected branch: `git push origin :main`, `git push --delete origin main`, `git branch -D main` |
 | `discardChanges` | boolean | `true` | `git reset --hard` or `git clean -fd` that would lose uncommitted work |
@@ -246,7 +248,7 @@ An entry with a problem (a missing `host`, an unknown key, a value of the wrong 
 
 | Variable | Same as |
 |---|---|
-| `BULKHEAD_DISABLE` | Comma-separated names to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `disk-guard`, `basics`, `edit-guard`, `secrets-guard`, `orphan-reaper`, `session-state`, the basics rules `rm-root`, `rm-empty-var`, `rm-unquoted-var`, `rm-git-dir`, `force-push-main`, `protected-delete`, `discard-changes`, `agent-author`, `self-allow`, or `all`. A name listed here is off whatever the files say |
+| `BULKHEAD_DISABLE` | Comma-separated names to turn off: `kill-guard`, `wait-guard`, `memory-guard`, `port-guard`, `checkout-guard`, `disk-guard`, `basics`, `edit-guard`, `secrets-guard`, `orphan-reaper`, `session-state`, the basics rules `rm-root`, `rm-empty-var`, `rm-unquoted-var`, `rm-git-dir`, `rm-xargs-split`, `rm-through-link`, `force-push-main`, `protected-delete`, `discard-changes`, `agent-author`, `self-allow`, or `all`. A name listed here is off whatever the files say |
 | `BULKHEAD_PRESET` | The preset: `quiet`, `normal` or `strict`. Wins over the `preset` key in the files |
 | `BULKHEAD_WAIT_MAX_SEC` | `waitGuard.limitSeconds` |
 | `BULKHEAD_MIN_FREE_GB` | `memory.minFreeGb` |

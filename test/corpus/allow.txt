@@ -944,6 +944,12 @@ Remove-Item -Recurse -Force node_modules
 Remove-Item -Recurse -Force .\dist
 Remove-Item build.log
 Remove-Item -Recurse -Force "$env:TEMP\scratch"
+Remove-Item -Recurse -Force $home\proj\dist
+Remove-Item -Recurse -Force "$env:USERPROFILE\AppData\Local\Temp\foo"
+Remove-Item $home\notes.txt
+Split-Path $home
+Remove-Item -Recurse -Force (Split-Path $home -Leaf)
+Remove-Item -Recurse .\build -ErrorAction SilentlyContinue
 Get-Process
 Get-Process node
 Get-Process -Name node -ErrorAction SilentlyContinue
@@ -1142,6 +1148,18 @@ nohup node server.js > out.log 2>&1 &
 time npm run lint
 nice -n 10 make -j2
 xargs -I{} rm -f {} < stale-files.txt
+find . -name '*.pyc' -print0 | xargs -0 rm -f
+xargs rm -f < list
+git ls-files -z | xargs -0 rm -rf
+find . -name node_modules -prune -print0 | xargs -0 rm -rf --
+cat dirs.txt | xargs -d '\n' rm -rf
+echo dist build | xargs rm -rf
+find . -print0 | xargs -0 -n1 dirname | sort -u
+rm -rf ~/Library/Caches/foo
+rm -rf ~/.cache/foo
+rm -rf ~/Library/Application\ Support/Foo/cache
+rm -rf ~/.config/foo
+rm -rf /home/someone/work/shop/dist
 eval "$(ssh-agent -s)"
 eval "$(fnm env --use-on-cd)"
 trap 'kill $SERVER_PID' EXIT

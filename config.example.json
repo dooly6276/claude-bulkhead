@@ -48,6 +48,8 @@
     "rmEmptyVar": true,
     "rmUnquotedVar": true,
     "rmGitDir": true,
+    "rmXargsSplit": true,
+    "rmThroughLink": true,
     "forcePushMain": true,
     "protectedDelete": true,
     "discardChanges": true,

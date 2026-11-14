@@ -399,6 +399,44 @@ basics,platform=win32	rm -rf /c/
 basics,platform=win32	Remove-Item -Recurse -Force $env:USERPROFILE
 basics	bash -c "rm -rf /"
 
+# == basics: folders that hold app data, documents or keys, and other users' homes (rm-root) ==
+basics	rm -rf ~/Library
+basics	rm -rf ~/Library/Application\ Support
+basics	rm -rf "$HOME/Library/Application Support/"
+basics	rm -rf ~/.ssh
+basics	rm -rf ~/.config
+basics	rm -rf ~/.local/share
+basics	rm -rf ~/AppData/Roaming
+basics	rm -rf /home/someone
+basics	rm -rf /Users/someone
+basics	rm -rf 'C:\Users'
+basics	rm -rf 'C:\Users\someone'
+basics	rm -rf /mnt/c/Users/someone/AppData
+
+# == basics: PowerShell -Recurse through $home and its parent (rm-root, anomalyco/opencode#62825) ==
+basics	Remove-Item -Recurse -Force (Split-Path $home) -ErrorAction SilentlyContinue
+basics	Remove-Item -Recurse $HOME
+basics	Remove-Item -rec $env:USERPROFILE
+basics	rmdir -Recurse -Force (Split-Path -Parent $home)
+basics	powershell -Command "Remove-Item -Recurse -Force (Split-Path $home)"
+basics	pwsh -c 'Remove-Item -Recurse -Force (Split-Path $env:USERPROFILE)'
+basics,platform=win32	rd -r C:\
+basics,platform=win32	ri -Recurse $env:HOMEPATH
+#@ tool PowerShell
+basics	Remove-Item -Recurse -Force (Split-Path $home) -ErrorAction SilentlyContinue
+basics	rm -r $home
+basics	Remove-Item -Recurse:$true -Path $env:USERPROFILE
+#@ tool Bash
+
+# == basics: xargs splits paths before a recursive rm (rm-xargs-split, a r/ClaudeCode report) ==
+basics	find ~/Library/Application\ Support/Foo -name '*.log' | xargs -n1 dirname | xargs rm -rf
+basics	find . -name node_modules | xargs rm -rf
+basics	find . -type d -name build | xargs rm -r
+basics	ls | xargs -n1 basename | xargs rm -rf
+basics	find . -name '*.tmp' | xargs -I {} rm -rf {}
+basics	xargs rm -rf < dirs.txt
+basics	find . -print0 | xargs -0 -n1 dirname | xargs -0 rm -rf
+
 # == basics: force-pushing main ==
 basics	git push --force origin main
 basics	git push -f origin main
