@@ -91,8 +91,12 @@ test('rm-empty-var: rsync --delete into an empty destination (anthropics/claude-
     assert.strictEqual(ruleFor(cmd), 'rm-empty-var', cmd)
   }
   assert.match(check('rsync -a --delete src/ $R/', opts()), /--delete then deletes everything there/)
+  // the incident itself: wsl -- hands the line to a Linux shell that expands $R before bash -lc sets it
+  assert.strictEqual(ruleFor('wsl -d Ubuntu-24.04 -- bash -lc \'set -u; R=~/some-dir; mkdir -p $R; rsync -a --delete --exclude x /mnt/d/p/ $R/\''), 'rm-empty-var')
   for (const cmd of ['rsync -a --delete src/ dist/', 'rsync -a src/ $R/', 'rsync -a --delete src/ "$TMPDIR/out/"', 'rsync -a --delete src/ "${R:?}/"',
-    'wsl -d Ubuntu-24.04 -- bash -lc \'set -u; R=~/some-dir; mkdir -p $R; rsync -a --delete --exclude x /mnt/d/p/ $R/\'']) {
+    'wsl -d Ubuntu-24.04 --exec bash -lc \'set -u; R=~/some-dir; mkdir -p $R; rsync -a --delete --exclude x /mnt/d/p/ $R/\'',
+    'bash -lc \'set -u; R=~/some-dir; mkdir -p $R; rsync -a --delete --exclude x /mnt/d/p/ $R/\'',
+    'wsl -d Ubuntu-24.04 -- bash -lc \'rsync -a --delete /mnt/d/p/ "${R:?}"/\'']) {
     assert.strictEqual(check(cmd, opts()), null, cmd)
   }
 })

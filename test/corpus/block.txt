@@ -368,6 +368,7 @@ basics	rsync -a --delete src/ $R/
 basics	rsync -a --delete-after src/ "${R}"/
 basics	wsl -d Ubuntu-24.04 -- bash -lc 'set -u; mkdir -p $R; rsync -a --delete --exclude node_modules /mnt/d/app/ $R/'
 basics	wsl -d Ubuntu-24.04 -- bash -lc 'rm -rf $R/'
+basics	wsl -d Ubuntu-24.04 -- bash -lc 'set -u; R=~/some-dir; mkdir -p $R; rsync -a --delete --exclude node_modules /mnt/d/app/ $R/'
 
 # == basics: unquoted variable split into several paths (rm-unquoted-var) ==
 basics	D="My Project/build"; rm -rf $D

@@ -732,7 +732,7 @@ git clone https://example.com/x.git /tmp/bulkhead-x && rm -rf /tmp/bulkhead-x/.g
 find vendor -name .git -exec rm -rf {} +
 rsync -a --delete src/ dist/
 rsync -a src/ $R/
-wsl -d Ubuntu-24.04 -- bash -lc 'set -u; R=~/some-dir; mkdir -p $R; rsync -a --delete --exclude x /mnt/d/app/ $R/'
+wsl -d Ubuntu-24.04 --exec bash -lc 'set -u; R=~/some-dir; mkdir -p $R; rsync -a --delete --exclude x /mnt/d/app/ $R/'
 D=dist; rm -rf $D
 rm -r out
 rmdir empty-dir

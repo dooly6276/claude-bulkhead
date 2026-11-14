@@ -404,7 +404,12 @@ function check(cmd, {
     const linux = k > 0 ? c.argv.slice(k + 1) : []
     const sh = linux.length && /^(?:bash|sh|zsh|dash)$/.test(shell.bin(linux[0])) ? linux.findIndex(a => /^-[a-z]*c[a-z]*$/.test(a)) : -1
     const inner = sh > 0 ? linux[sh + 1] : linux.length ? linux.join(' ') : null
-    if (inner) cmds.push(...shell.commands(inner, 'sh', c.depth + 1))
+    if (!inner) continue
+    // Without --exec, wsl hands its command line to the Linux login shell, and Windows quotes each
+    // argument with double quotes on the way: that shell expands $R before bash -c runs, so an
+    // assignment inside the bash -c string comes too late (anthropics/claude-code#109735).
+    const viaShell = c.argv[k] === '--'
+    cmds.push(...shell.commands(inner, 'sh', c.depth + 1).map(x => (viaShell ? { ...x, src: '' } : x)))
   }
   for (const c of cmds) {
     const t = c.argv
