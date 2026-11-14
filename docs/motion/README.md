@@ -4,7 +4,7 @@ Python 3 (stdlib only) sources for the animated README graphics. They write:
 
 - `docs/hero.svg`, `docs/hero-light.svg`: four Claude Code sessions on one machine, five guard moments, then the `bulkhead scan` result (25 s loop).
 - `docs/scan.svg`, `docs/scan-light.svg`: a terminal running `bulkhead scan` (16 s loop). The text is the real output of the tool on the synthetic transcripts from `scripts/demo-scan/make-transcripts.js`, regenerated on every build.
-- `docs/social-preview.png`: the 1280x640 GitHub social card, a still of the hero under the title.
+- `docs/social-preview.png`: the 1280x640 GitHub social card: three agent commands and the bulkhead message each one got (texts shortened from `bulkhead explain`).
 
 Rebuild everything from the repository root:
 
