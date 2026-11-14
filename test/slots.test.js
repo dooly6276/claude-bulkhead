@@ -195,8 +195,8 @@ test('twelve short jobs on eight slots finish in a few seconds, not in 15 second
   const took = Date.now() - started
   // The bug this guards against makes the run take 15 s or more. Windows runners start
   // processes slowly (9.4 s seen on Node 18), so give them more room under that bound.
-  const limit = process.platform === 'win32' ? 14000 : 8000
-  assert.ok(took < limit, `took ${took} ms`)
+  const maxMs = process.platform === 'win32' ? 14000 : 8000
+  assert.ok(took < maxMs, `took ${took} ms`)
   assert.deepStrictEqual(fs.readdirSync(path.join(state, 'queue')), [])
 })
 
