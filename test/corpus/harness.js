@@ -145,10 +145,18 @@ function payload(command, { cwd, tool = 'Bash', timeout = 120000, sessionId = 'c
 // if it happens again, reported as a timeout.
 async function runHook(guard, input, opts = {}) {
   const r = await runHookOnce(guard, input, opts)
-  if (!r.timedOut) return r
+  if (!flaky(r)) return r
   const again = await runHookOnce(guard, input, opts)
   if (!again.timedOut) return again
   return { ...again, status: null, stderr: `timed out after ${again.ms} ms (twice)\n` + again.stderr }
+}
+
+// A run worth one retry: it timed out, or the process ended with an unexpected code and printed
+// nothing at all. A real guard crash prints a stack trace; a silent exit 1 is the CI machine
+// (seen on a loaded Windows runner, about once in 11,000 hook processes).
+function flaky(r) {
+  if (r.timedOut) return true
+  return r.status !== 0 && r.status !== 2 && !r.stderr.trim() && !r.stdout.trim()
 }
 
 function runHookOnce(guard, input, { cwd, memory = PLENTY, mock = {}, env = {}, stateDir, configDir, timeoutMs = 30000 } = {}) {
