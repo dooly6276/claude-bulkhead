@@ -28,14 +28,22 @@
 
 ## Instalación
 
-Dentro de Claude Code:
+Primero, sin instalar nada, mira qué habría detenido en tus propias sesiones:
+
+```
+npx -y claude-bulkhead scan --since 30d --share
+```
+
+Solo lee las transcripciones de `~/.claude/projects` y no envía nada.
+
+Después, instala el plugin dentro de Claude Code:
 
 ```
 /plugin marketplace add dooly6276/claude-bulkhead
 /plugin install bulkhead@bulkhead
 ```
 
-Después, mira qué habría detenido en tu último mes, sin cambiar nada:
+Una vez instalado, el mismo informe se ve dentro de Claude Code:
 
 ```
 /bulkhead:scan 30d

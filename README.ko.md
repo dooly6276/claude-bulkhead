@@ -28,14 +28,22 @@
 
 ## 설치
 
-Claude Code 안에서 입력합니다.
+먼저 아무것도 설치하지 않고, 내 세션 기록에서 무엇을 막았을지 확인합니다.
+
+```
+npx -y claude-bulkhead scan --since 30d --share
+```
+
+`~/.claude/projects` 의 기록을 읽기만 하고 어디로도 보내지 않습니다.
+
+그다음 Claude Code 안에서 플러그인을 설치합니다.
 
 ```
 /plugin marketplace add dooly6276/claude-bulkhead
 /plugin install bulkhead@bulkhead
 ```
 
-그다음 아무것도 바꾸지 않고, 지난 한 달 기록에서 무엇을 막았을지 확인합니다.
+설치한 뒤에는 같은 보고서를 Claude Code 안에서 볼 수 있습니다.
 
 ```
 /bulkhead:scan 30d

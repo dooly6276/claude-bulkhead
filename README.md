@@ -28,14 +28,22 @@
 
 ## Install
 
-Inside Claude Code:
+First, with nothing installed, see what it would have stopped in your own sessions:
+
+```
+npx -y claude-bulkhead scan --since 30d --share
+```
+
+It only reads the transcripts in `~/.claude/projects` and sends nothing.
+
+Then install the plugin inside Claude Code:
 
 ```
 /plugin marketplace add dooly6276/claude-bulkhead
 /plugin install bulkhead@bulkhead
 ```
 
-Then see what it would have stopped in your own last month, without changing anything:
+Once installed, the same report runs inside Claude Code:
 
 ```
 /bulkhead:scan 30d

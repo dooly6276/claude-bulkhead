@@ -28,14 +28,22 @@
 
 ## 安装
 
-在 Claude Code 中执行：
+先不安装任何东西，看看它在你自己的会话里会拦下什么：
+
+```
+npx -y claude-bulkhead scan --since 30d --share
+```
+
+它只读取 `~/.claude/projects` 里的记录，不会发送任何内容。
+
+然后在 Claude Code 中安装插件：
 
 ```
 /plugin marketplace add dooly6276/claude-bulkhead
 /plugin install bulkhead@bulkhead
 ```
 
-然后不改动任何东西，看看它在你过去一个月里会拦下什么：
+安装后，在 Claude Code 中也能看到同样的报告：
 
 ```
 /bulkhead:scan 30d

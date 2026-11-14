@@ -28,14 +28,22 @@
 
 ## Instalação
 
-Dentro do Claude Code:
+Primeiro, sem instalar nada, veja o que ele teria bloqueado nas suas próprias sessões:
+
+```
+npx -y claude-bulkhead scan --since 30d --share
+```
+
+Ele só lê as transcrições em `~/.claude/projects` e não envia nada.
+
+Depois, instale o plugin dentro do Claude Code:
 
 ```
 /plugin marketplace add dooly6276/claude-bulkhead
 /plugin install bulkhead@bulkhead
 ```
 
-Depois, veja o que ele teria bloqueado no seu último mês, sem mudar nada:
+Depois de instalado, o mesmo relatório roda dentro do Claude Code:
 
 ```
 /bulkhead:scan 30d
