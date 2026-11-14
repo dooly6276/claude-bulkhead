@@ -68,6 +68,21 @@ const AGENTS = {
     match: p => nameIs(p, /^droid(?:\.exe)?$/i) || (RUNTIME.test(p.name) && script('droid').test(p.cmd)),
     dirs: ['.factory'],
   },
+  pi: {
+    label: 'Pi',
+    // Pi sets process.title to "pi" ("pi-rpc" in RPC mode), which is what ps shows as its command
+    // line; before that it is node running dist/bundle/cli.js, or the npm bin link. "pi" is a
+    // short word, so a script is only taken for Pi from a bin folder.
+    match: p => nameIs(p, /^pi(?:-rpc)?(?:\.exe)?$/i) || (RUNTIME.test(p.name) && (/@(?:earendil-works|mariozechner)[\\/]pi-coding-agent[\\/]/.test(p.cmd) || /[\\/]bin[\\/]pi(?=["']?(?:\s|$))/.test(p.cmd))),
+    dirs: ['.pi/agent'],
+    homeEnv: 'PI_CODING_AGENT_DIR',
+  },
+  qwen: {
+    label: 'Qwen Code',
+    match: p => nameIs(p, /^qwen(?:\.exe)?$/i) || (RUNTIME.test(p.name) && (/@qwen-code[\\/]qwen-code[\\/]/.test(p.cmd) || script('qwen').test(p.cmd))),
+    dirs: ['.qwen'],
+    homeEnv: 'QWEN_HOME',
+  },
   aider: {
     label: 'Aider',
     // Python console scripts show the interpreter first on some platforms.

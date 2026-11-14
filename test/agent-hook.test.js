@@ -42,12 +42,28 @@ const FIXTURES = {
     hookName: 'tool_call', clineVersion: '1.0.0', timestamp: '2026-11-11T08:00:00Z', taskId: 'conv-1', workspaceRoots: ['/work/api'],
     userId: 'user', iteration: 1, tool_call: { id: 'call-1', name: 'run_commands', input: { commands: [cmd] } },
   }),
+  qwen: cmd => ({
+    session_id: 'qwen-1', transcript_path: '/home/dev/.qwen/projects/x/chats/s.jsonl', cwd: '/work/api', hook_event_name: 'PreToolUse',
+    timestamp: '2026-11-14T08:00:00.000Z', permission_mode: 'default', tool_name: 'run_shell_command',
+    tool_input: { command: cmd, is_background: false, description: 'run it' }, tool_use_id: 'toolu_1',
+  }),
+  kimi: cmd => ({
+    hook_event_name: 'PreToolUse', session_id: 'kimi-1', session_title: 'Fix the login page', client_type: 'kimi_code_cli', cwd: '/work/api',
+    tool_name: 'Bash', tool_input: { command: cmd },
+  }),
+  grok: cmd => ({ hookEventName: 'PreToolUse', sessionId: 'grok-1', cwd: '/work/api', workspaceRoot: '/work/api', toolName: 'Bash', toolInput: { command: cmd } }),
+  antigravity: cmd => ({
+    toolCall: { name: 'run_command', args: { CommandLine: cmd, Cwd: '/work/api', WaitMsBeforeAsync: 5000 } }, stepIdx: 19,
+    conversationId: 'ag-1', workspacePaths: ['/work/api'], modelName: 'x',
+  }),
   opencode: cmd => ({ command: cmd, cwd: '/work/api', session_id: 'ses_1' }),
   amp: cmd => ({ command: cmd, cwd: '/work/api', session_id: 'T-1' }),
+  // what pi/extension.js sends for a Pi tool_call event on the bash tool
+  pi: cmd => ({ command: cmd, cwd: '/work/api', session_id: 'pi-1', tool: 'bash' }),
 }
 
 // What each agent's payload turns into for the guards.
-const SESSION = { codex: '019a-codex', gemini: 'gem-1', copilot: 'cop-1', cursor: 'cur-1', windsurf: 'traj-1', droid: 'droid-1', devin: '3f8d1c2a', cline: 'conv-1', opencode: 'ses_1', amp: 'T-1' }
+const SESSION = { codex: '019a-codex', gemini: 'gem-1', copilot: 'cop-1', cursor: 'cur-1', windsurf: 'traj-1', droid: 'droid-1', devin: '3f8d1c2a', cline: 'conv-1', opencode: 'ses_1', amp: 'T-1', qwen: 'qwen-1', kimi: 'kimi-1', grok: 'grok-1', antigravity: 'ag-1', pi: 'pi-1' }
 
 test('every adapter has a fixture and maps it to the shape the guards read', () => {
   assert.deepStrictEqual(Object.keys(FIXTURES).sort(), [...AGENT_NAMES].sort())
@@ -90,8 +106,22 @@ test('block answers use each agent\'s own format', async () => {
   assert.strictEqual(cline.cancel, true)
   assert.match(cline.errorMessage, text)
 
+  for (const agent of ['qwen', 'kimi']) {
+    const r = await answer(agent)
+    assert.strictEqual(r.code, 0, agent)
+    const h = JSON.parse(r.out).hookSpecificOutput
+    assert.strictEqual(h.hookEventName, 'PreToolUse', agent)
+    assert.strictEqual(h.permissionDecision, 'deny', agent)
+    assert.match(h.permissionDecisionReason, text, agent)
+  }
+  for (const agent of ['grok', 'antigravity']) {
+    const r = JSON.parse((await answer(agent)).out)
+    assert.strictEqual(r.decision, 'deny', agent)
+    assert.match(r.reason, text, agent)
+  }
+
   // exit code 2 with the reason on stderr
-  for (const agent of ['windsurf', 'devin', 'opencode', 'amp']) {
+  for (const agent of ['windsurf', 'devin', 'opencode', 'amp', 'pi']) {
     const r = await answer(agent)
     assert.strictEqual(r.code, 2, agent)
     assert.match(r.err, text, agent)
@@ -100,8 +130,8 @@ test('block answers use each agent\'s own format', async () => {
   }
 })
 
-test('allowed commands answer silently, or with the explicit allow Cursor and Cline need', async () => {
-  const expected = { cursor: '{"permission":"allow"}', cline: '{}' }
+test('allowed commands answer silently, or with the explicit allow Cursor, Cline and Antigravity need', async () => {
+  const expected = { cursor: '{"permission":"allow"}', cline: '{}', antigravity: '{"decision":"allow"}' }
   for (const agent of AGENT_NAMES) {
     const r = await run(agent, JSON.stringify(FIXTURES[agent](FINE)))
     assert.deepStrictEqual(r, { out: expected[agent] || '', code: 0 }, agent)
@@ -117,18 +147,24 @@ test('anything that is not a shell command passes', async () => {
     droid: { ...FIXTURES.droid(BLOCKED), tool_name: 'Create' },
     devin: { ...FIXTURES.devin(BLOCKED), tool_name: 'read' },
     cline: { ...FIXTURES.cline(BLOCKED), tool_call: { id: 'c', name: 'read_files', input: { filePath: BLOCKED } } },
+    qwen: { ...FIXTURES.qwen(BLOCKED), tool_name: 'write_file', tool_input: { file_path: 'a', content: BLOCKED } },
+    kimi: { ...FIXTURES.kimi(BLOCKED), tool_name: 'Write' },
+    grok: { ...FIXTURES.grok(BLOCKED), toolName: 'Edit' },
+    antigravity: { ...FIXTURES.antigravity(BLOCKED), toolCall: { name: 'view_file', args: { AbsolutePath: '/a', CommandLine: BLOCKED } } },
   }
   for (const [agent, payload] of Object.entries(other)) {
     assert.strictEqual((await run(agent, JSON.stringify(payload))).code, 0, agent)
-    assert.ok(!JSON.parse((await run(agent, JSON.stringify(payload))).out || '{}').permissionDecision, agent)
+    const out = JSON.parse((await run(agent, JSON.stringify(payload))).out || '{}')
+    assert.ok(!out.permissionDecision && !out.hookSpecificOutput && out.decision !== 'deny', agent)
   }
 })
 
 test('fails open on bad input: no JSON, wrong shapes, missing fields', async () => {
-  const expected = { cursor: '{"permission":"allow"}', cline: '{}' }
+  const expected = { cursor: '{"permission":"allow"}', cline: '{}', antigravity: '{"decision":"allow"}' }
   for (const agent of AGENT_NAMES) {
     for (const raw of ['', 'not json', '{}', 'null', '[]', '42', '{"tool_name":"Bash","tool_input":"pkill node"}', '{"toolName":"bash","toolArgs":"{broken"}',
-      '{"tool_info":{"command_line":5}}', '{"tool_call":{"name":"run_commands","input":null}}', '{"command":{"a":1}}']) {
+      '{"tool_info":{"command_line":5}}', '{"tool_call":{"name":"run_commands","input":null}}', '{"command":{"a":1}}',
+      '{"toolName":"Bash","toolInput":"pkill node"}', '{"toolCall":{"name":"run_command","args":{"CommandLine":7}}}', '{"toolCall":{"name":"run_command"}}']) {
       assert.deepStrictEqual(await run(agent, raw), { out: expected[agent] || '', code: 0 }, `${agent}: ${raw}`)
     }
   }
@@ -172,6 +208,21 @@ test('field mapping per agent', () => {
   assert.strictEqual(ADAPTERS.cursor.read({ conversation_id: 'c', command: 'ls', cwd: '', workspace_roots: ['/ws'] }).cwd, '/ws')
   // Devin names its shell tool "exec"
   assert.ok(ADAPTERS.devin.read({ tool_name: 'exec', tool_input: { command: 'ls' } }))
+  // Qwen Code: directory is where the command runs, is_background marks a background job
+  assert.deepStrictEqual(ADAPTERS.qwen.read({ cwd: '/work', tool_name: 'run_shell_command', tool_input: { command: 'npm run dev', directory: 'web', is_background: true }, session_id: 's' }),
+    { tool_name: 'Bash', tool_input: { command: 'npm run dev', run_in_background: true }, cwd: path.resolve('/work', 'web'), session_id: 's' })
+  // Kimi: Bash in Kimi Code, Shell in the older kimi-cli
+  assert.ok(ADAPTERS.kimi.read({ tool_name: 'Shell', tool_input: { command: 'ls' }, cwd: '/w' }))
+  assert.strictEqual(ADAPTERS.kimi.read({ tool_name: 'ReadFile', tool_input: { command: 'ls' } }), null)
+  // Grok: its own shell tools, with workdir or working_directory relative to cwd, or workspaceRoot
+  assert.strictEqual(ADAPTERS.grok.read({ cwd: '/w', toolName: 'run_terminal_command', toolInput: { command: 'ls', workdir: 'sub' }, sessionId: 's' }).cwd, path.resolve('/w', 'sub'))
+  assert.strictEqual(ADAPTERS.grok.read({ cwd: '/w', toolName: 'Shell', toolInput: { command: 'ls', working_directory: '/x' } }).cwd, path.resolve('/x'))
+  assert.strictEqual(ADAPTERS.grok.read({ workspaceRoot: '/ws', toolName: 'bash', toolInput: { command: 'ls' } }).cwd, '/ws')
+  // Antigravity: no Cwd falls back to the first workspace path
+  assert.strictEqual(ADAPTERS.antigravity.read({ toolCall: { name: 'run_command', args: { CommandLine: 'ls' } }, workspacePaths: ['/ws'] }).cwd, '/ws')
+  // Pi: the powershell tool goes to the PowerShell guards
+  assert.strictEqual(ADAPTERS.pi.read({ command: 'Get-Date', cwd: 'C:\\w', tool: 'powershell' }).tool_name, 'PowerShell')
+  assert.strictEqual(ADAPTERS.pi.read({ command: 'ls', cwd: '/w', tool: 'bash' }).tool_name, 'Bash')
 })
 
 test('cline run_commands inputs: string, list, { commands }, { command, args }, { cmd }', () => {
@@ -220,6 +271,6 @@ test('bulkhead hook needs a known agent', () => {
   for (const agent of [null, 'nope']) {
     const r = cli(agent, '{}')
     assert.strictEqual(r.status, 1)
-    assert.match(r.stderr, /usage: bulkhead hook --agent <codex\|gemini\|copilot\|cursor\|windsurf\|droid\|devin\|cline\|opencode\|amp>/)
+    assert.match(r.stderr, /usage: bulkhead hook --agent <codex\|gemini\|copilot\|cursor\|windsurf\|droid\|devin\|cline\|qwen\|kimi\|grok\|antigravity\|opencode\|amp\|pi>/)
   }
 })

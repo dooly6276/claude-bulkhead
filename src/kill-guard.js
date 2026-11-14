@@ -16,7 +16,7 @@ const SHARED = [
   'electron', 'simulator', 'xcode', 'postgres',
   'docker desktop', 'code helper', 'cursor', 'cursor helper',
   // other coding agents, whose sessions are as shared as Claude's
-  'codex', 'gemini', 'copilot', 'opencode', 'cline', 'droid', 'cursor-agent',
+  'codex', 'gemini', 'copilot', 'opencode', 'cline', 'droid', 'cursor-agent', 'pi', 'qwen',
   // dev servers and their children, by the names they show in ps and Activity Monitor
   'next-server', 'next-router-worker', 'next-render-worker', 'uvicorn', 'gunicorn', 'rails', 'puma', 'flask', 'expo', 'metro',
   'storybook', 'turbo', 'tsc', 'nodemon', 'qemu', 'emulator', 'playwright', 'puppeteer', 'ms-playwright', 'php',

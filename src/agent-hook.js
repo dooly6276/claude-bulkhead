@@ -6,8 +6,8 @@ const { option } = require('./cli-util')
 // agent pipes its pre-tool payload on stdin; the adapter maps it to the shape the guards read
 // ({ tool_name, tool_input: { command }, cwd, session_id }), runs the same guards as the Claude
 // Code PreToolUse hook, and answers in the agent's own block format. Anything unexpected lets
-// the command through, and Copilot and Cursor treat a crash or bad output as a denial, so those
-// two always get an explicit allow.
+// the command through, and Copilot, Cursor and Antigravity treat a crash or bad output as a
+// denial, so those always get an explicit allow.
 
 const str = v => (typeof v === 'string' && v ? v : null)
 const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : null)
@@ -104,10 +104,53 @@ const ADAPTERS = {
     block: msg => ({ out: json({ cancel: true, errorMessage: msg }) }),
     allow: '{}',
   },
-  // The opencode and Amp plugins that `bulkhead setup` writes pipe { command, cwd, session_id }
-  // and turn exit code 2 into a rejected tool call.
+  // https://qwenlm.github.io/qwen-code-docs/en/users/features/hooks/: PreToolUse, tool_name
+  // "run_shell_command" with tool_input { command, directory, is_background }
+  qwen: {
+    read: p => {
+      const ti = obj(p.tool_input)
+      if (p.tool_name !== 'run_shell_command' || !ti) return null
+      return sh(str(ti.command), resolveDir(p.cwd, ti.directory), p.session_id, ti.is_background ? { run_in_background: true } : {})
+    },
+    block: msg => ({ out: json({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: msg } }) }),
+  },
+  // https://www.kimi.com/code/docs/en/kimi-code-cli/customization/hooks.html: PreToolUse on the
+  // Bash tool (Shell in the older kimi-cli), tool_input.command
+  kimi: {
+    read: p => (/^(?:Bash|Shell)$/.test(String(p.tool_name)) ? sh(str(obj(p.tool_input) && p.tool_input.command), p.cwd, p.session_id) : null),
+    block: msg => ({ out: json({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: msg } }) }),
+  },
+  // https://docs.x.ai/build/features/hooks: PreToolUse, camelCase { toolName, toolInput, cwd,
+  // sessionId }; Claude's Bash or Grok's own shell tools, with workdir or working_directory
+  grok: {
+    read: p => {
+      const ti = obj(p.toolInput)
+      if (!ti || !/^(?:bash|shell|run_terminal_command|run_terminal_cmd)$/i.test(String(p.toolName))) return null
+      return sh(str(ti.command), resolveDir(p.cwd || p.workspaceRoot, ti.workdir || ti.working_directory), p.sessionId)
+    },
+    block: msg => ({ out: json({ decision: 'deny', reason: msg }) }),
+  },
+  // https://antigravity.google/docs/hooks: PreToolUse { toolCall: { name: "run_command", args:
+  // { CommandLine, Cwd } }, conversationId }; "decision" is required in the answer
+  antigravity: {
+    read: p => {
+      const call = obj(p.toolCall)
+      const args = call && obj(call.args)
+      if (!args || call.name !== 'run_command') return null
+      return sh(str(args.CommandLine), str(args.Cwd) || (Array.isArray(p.workspacePaths) && str(p.workspacePaths[0])), p.conversationId)
+    },
+    block: msg => ({ out: json({ decision: 'deny', reason: msg }) }),
+    allow: json({ decision: 'allow' }),
+  },
+  // The opencode, Amp and Pi plugins pipe { command, cwd, session_id } (Pi adds { tool }) and
+  // turn exit code 2 into a rejected tool call.
   opencode: { read: p => sh(str(p.command), p.cwd, p.session_id), block: msg => ({ err: msg, code: 2 }) },
   amp: { read: p => sh(str(p.command), p.cwd, p.session_id), block: msg => ({ err: msg, code: 2 }) },
+  // https://github.com/earendil-works/pi docs/extensions.md: tool_call on "bash" or "powershell"
+  pi: {
+    read: p => (p.tool === 'powershell' ? powershell(sh(str(p.command), p.cwd, p.session_id)) : sh(str(p.command), p.cwd, p.session_id)),
+    block: msg => ({ err: msg, code: 2 }),
+  },
 }
 
 const AGENT_NAMES = Object.keys(ADAPTERS)
