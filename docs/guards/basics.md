@@ -23,6 +23,8 @@ Why folders directly in home: they are where people keep things that are not in 
 
 Git options before the subcommand (`-C`, `-c`, `--git-dir`, `--work-tree`, `--no-pager`, `-p` ...) do not hide a push or a reset from the rules, and a `--git-dir` or `--work-tree` is passed on to the `git status` the discard check runs. Wrappers (`bash -c`, `cmd /c`, `sudo`, `env` and the others listed in [kill-guard](kill-guard.md)) are opened for all the rules, and so is `wsl ... -- bash -c '...'`. Commands run on another machine with `ssh` pass.
 
+A Windows drive counts as a root however it is spelled: `C:\`, `/c/`, `/mnt/c` (WSL) and `/cygdrive/c`. A variable the same line sets is filled in first, so `D=/; rm -rf "$D/"`, `D=~; rm -rf "${D:?}"/*` and `D='C:\'; rm -rf "${D:?}/"` are blocked like the paths they stand for. So is a variable set to a path command applied to a root or home, such as `D="$(cygpath -u 'C:\')"`, `D=$(wslpath 'C:\')`, `D=$(realpath /)` or `D=$(readlink -f ~)`, when the delete names the variable alone or followed only by `/` or `/*`: `${D:?}` proves the value is not empty, not that it is not the root. A folder after it, `rm -rf "${D:?}/sub"`, passes (anthropics/claude-code#95426).
+
 Passes: `rm -rf node_modules`, `rm -rf ./dist`, `rm -rf ~/Documents/old-export`, and paths with variables it cannot expand.
 
 ## rm-empty-var
@@ -38,7 +40,7 @@ wsl -d Ubuntu -- bash -lc 'rsync -a --delete /mnt/d/app/ $R/'
 
 Passes:
 
-- `rm -rf "${D:?}/"` and `rm -rf "${D:?}"/*`: the shell stops when `D` is empty. This is the form the block message suggests.
+- `rm -rf "${D:?}/"` and `rm -rf "${D:?}"/*`: the shell stops when `D` is empty. This is the form the block message suggests, with a glob such as `/*` left outside the quotes so the shell still expands it. When the same line sets `D` to a root, rm-root blocks these too.
 - A variable followed by a path segment: `rm -rf "$TMPDIR/foo"`, `rm -rf "$(git rev-parse --show-toplevel)/dist"`. With an empty variable that is a path at the top of the drive, which rm-root judges like any other path.
 - A variable the same shell sets earlier on the line to something that cannot be empty: `D=$(mktemp -d) && rm -rf "$D"/`, `D=./out; rm -rf $D/*`, `for d in a b; do rm -rf $d/; done`. An assignment counts only for commands in the same shell: `R=/x; bash -c 'rm -rf $R/'` is blocked, because the inner bash does not see a variable that was not exported. `D=$(some command)` does not count, since the command can print nothing. Nor does an assignment inside `wsl ... -- bash -lc '...'`: without `--exec`, wsl hands its command line to the Linux login shell, Windows double-quotes each argument on the way, and that shell expands `$R` before the inner bash sets it, which is how anthropics/claude-code#109735 ran `rsync --delete` into `/`. With `wsl --exec bash -lc '...'` the assignment counts.
 - An unquoted `$(find ...)`, `$(git ls-files -o)` and other lists: an empty list deletes nothing. A quoted `"$(...)"` stands for one path and is blocked unless a path segment follows it.

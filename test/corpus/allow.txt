@@ -734,6 +734,10 @@ rsync -a --delete src/ dist/
 rsync -a src/ $R/
 wsl -d Ubuntu-24.04 --exec bash -lc 'set -u; R=~/some-dir; mkdir -p $R; rsync -a --delete --exclude x /mnt/d/app/ $R/'
 D=dist; rm -rf $D
+D="$(cygpath -u 'C:\')"; rm -rf "${D:?}/sub"
+D=build; rm -rf "$D/"
+D=./out; rm -rf $D/*
+git commit -m "D=/; rm -rf $D/"
 rm -r out
 rmdir empty-dir
 tar -czf dist.tar.gz dist

@@ -351,6 +351,22 @@ basics	Remove-Item -Recurse -Force ~
 basics	Remove-Item -Recurse -Force $HOME
 basics,platform=win32	Remove-Item -Recurse -Force C:\
 basics,platform=win32	rd /s /q C:\
+basics	rm -rf /mnt/c
+
+# == basics: a variable the same line sets to a root (rm-root, anthropics/claude-code#95426) ==
+basics	D=/; rm -rf "$D/"
+basics	D=/; rm -rf $D/
+basics	D=/; rm -rf "${D:?}"/*
+basics	D=~; rm -rf "${D:?}/"
+basics	D=$HOME; rm -rf "$D"
+basics	D=/c/; rm -rf "${D:?}/"
+basics	D='C:\'; rm -rf "${D:?}/"
+basics	D=/mnt/c; rm -rf "$D"/*
+basics	D="$(cygpath -u 'C:\')"; echo "$D"; rm -rf "${D:?}/"
+basics	D="$(cygpath -u 'C:\')"; echo "$D"; rm -rf "${D:?}"
+basics	D="$(cygpath -u 'C:\')"; echo "$D"; rm -rf "${D:?}"/*
+basics	D=$(wslpath 'C:\'); rm -rf "${D:?}/"
+basics	D=$(readlink -f ~); rm -rf "${D:?}"
 
 # == basics: a variable or command output that can be empty, before a slash (rm-empty-var) ==
 basics	rm -rf $D/

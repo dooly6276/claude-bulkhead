@@ -120,6 +120,67 @@ test('rm-empty-var: PowerShell and cmd forms', () => {
   assert.strictEqual(check('Remove-Item -Recurse -Force "$env:TEMP\\scratch"', { ...win(), env: {}, mode: 'ps' }), null)
 })
 
+test('rm-empty-var: the hint keeps a glob outside the quotes', () => {
+  const hint = cmd => check(cmd, opts()).split('\n')[1]
+  assert.strictEqual(hint('rm -rf "$BUILD_DIR"/*'), 'Use `rm -rf "${BUILD_DIR:?}"/*` (the shell stops when the variable is empty), or write the path out.')
+  assert.strictEqual(hint('rm -rf $D/'), 'Use `rm -rf "${D:?}/"` (the shell stops when the variable is empty), or write the path out.')
+  assert.strictEqual(hint('rm -rf "$D"/.*'), 'Use `rm -rf "${D:?}"/.*` (the shell stops when the variable is empty), or write the path out.')
+  assert.strictEqual(hint('rm -rf $(cygpath -u "$X")/'), 'Use `D=$(...) first, check it, then rm -rf "${D:?}/"` (the shell stops when the variable is empty), or write the path out.')
+  assert.strictEqual(hint('rm -rf $(cygpath -u "$X")/*'), 'Use `D=$(...) first, check it, then rm -rf "${D:?}"/*` (the shell stops when the variable is empty), or write the path out.')
+  assert.strictEqual(hint('rm -rf "$(mktemp -d)"'), 'Use `D=$(...) first, check it, then rm -rf "${D:?}"` (the shell stops when the variable is empty), or write the path out.')
+  assert.strictEqual(hint('rm -rf "$(cygpath -u \'C:\\\')"'), 'Name the folder under that root: `D=$(...); rm -rf "${D:?}/<folder>"`, or write the path out.')
+  assert.strictEqual(hint('rsync -a --delete src/ $R/'), 'Use `rsync --delete <source>/ "${R:?}/"` (the shell stops when the variable is empty), or write the path out.')
+  assert.strictEqual(hint('rsync -av --delete src/ dst/ $R'), 'Use `rsync --delete <source>/ "${R:?}"` (the shell stops when the variable is empty), or write the path out.')
+  assert.strictEqual(check('Remove-Item -Recurse -Force $env:X\\', { ...win(), env: {}, mode: 'ps' }).split('\n')[1],
+    'Check that X is set before deleting (PowerShell: `if (-not $env:X) { throw \'X is empty\' }`, cmd: `if not defined X exit /b 1`), or write the path out.')
+  // the hints themselves pass
+  for (const cmd of ['rm -rf "${BUILD_DIR:?}"/*', 'rm -rf "${D:?}/"', 'rm -rf "${D:?}"/.*', 'rsync -a --delete src/ "${R:?}/"']) assert.strictEqual(check(cmd, opts()), null, cmd)
+})
+
+test('rm-root: a variable the same line sets to a root, home or a drive (anthropics/claude-code#95426)', () => {
+  const values = ['/', '~', '$HOME', '"$HOME"', '/c/', '\'C:\\\'', '/mnt/c', '/cygdrive/c/', '"/"', '/home/dev/work']
+  const uses = ['$D', '"$D"', '$D/', '"$D/"', '"$D"/', '"${D}"/*', '"${D:?}"', '"${D:?}/"', '"${D:?}"/*', '${D?}/']
+  for (const value of values) {
+    for (const use of uses) {
+      const cmd = `D=${value}; rm -rf ${use}`
+      assert.strictEqual(ruleFor(cmd), 'rm-root', cmd)
+    }
+  }
+  assert.match(check('D=/; rm -rf "$D/"', opts()), /deletes a filesystem root \(\$D\/ is \/, set earlier on the line\)/)
+  for (const cmd of ['export D=/; rm -rf "$D"/*', 'D=/; echo "$D"; rm -rf "${D:?}/"', 'D=/ && sudo rm -rf $D/', 'bash -c \'D=/; rm -rf "$D"/\'']) {
+    assert.strictEqual(ruleFor(cmd), 'rm-root', cmd)
+  }
+  assert.strictEqual(ruleOf(check('$D = \'C:\\\'; Remove-Item -Recurse -Force $D', { ...win(), env: {}, mode: 'ps' })), 'rm-root')
+  assert.strictEqual(ruleOf(check('set D=C:\\ && rd /s /q %D%', { ...win(), env: {}, mode: 'cmd' })), 'rm-root')
+  // written out, the same paths are blocked without a variable
+  for (const cmd of ['rm -rf /mnt/c', 'rm -rf /mnt/c/*', 'rm -rf /mnt/d/Users', 'rm -rf /cygdrive/c', 'rm -rf \'C:\\\'', 'rm -rf C:/*']) {
+    assert.strictEqual(ruleFor(cmd), 'rm-root', cmd)
+  }
+})
+
+test('rm-root: a variable set to a path command applied to a root (anthropics/claude-code#95426)', () => {
+  for (const value of ['"$(cygpath -u \'C:\\\')"', '$(cygpath -u C:/)', '"$(wslpath \'C:\\\')"', '$(realpath /)', '$(readlink -f ~)',
+    '$(realpath "$HOME")', '$(dirname /)', '$(dirname /tmp)', '`cygpath -u C:/`']) {
+    for (const use of ['"${D:?}"', '"${D:?}/"', '"${D:?}"/*', '$D', '"$D"/']) {
+      const cmd = `D=${value}; echo "$D"; rm -rf ${use}`
+      assert.strictEqual(ruleFor(cmd), 'rm-root', cmd)
+    }
+  }
+  const m = check('D="$(cygpath -u \'C:\\\')"; rm -rf "${D:?}/"', opts())
+  assert.match(m, /prints a drive or filesystem root/)
+  assert.match(m, /rm -rf "\$\{D:\?\}\/<folder>"/)
+})
+
+test('rm-root: a folder under the variable, and values that are not roots, pass', () => {
+  for (const cmd of ['D="$(cygpath -u \'C:\\\')"; rm -rf "${D:?}/sub"', 'D="$(cygpath -u \'C:\\\')"; rm -rf "${D:?}"/sub/*',
+    'D=$(mktemp -d) && rm -rf $D/', 'rm -rf "${D:?}/"', 'rm -rf node_modules dist', 'rm -rf "$TMPDIR/foo"', 'D=build; rm -rf "$D/"',
+    'D=./out; rm -rf $D/*', 'git commit -m "D=/; rm -rf $D/"', 'rsync -a --delete src/ dist/', 'D=/tmp/bulkhead-x; rm -rf "$D"/',
+    'D=~/.cache/pw; rm -rf "${D:?}"/*', 'D=$(realpath ./dist); rm -rf "${D:?}"', 'D=$(cygpath -u "$X"); rm -rf "${D:?}/"',
+    'D=/; rm -rf "$D/sub/x"', 'D=/mnt/c/work/shop; rm -rf "$D"/dist', 'D=/; D=build; rm -rf "$D/"', 'D=/; echo \'rm -rf $D/\'']) {
+    assert.strictEqual(check(cmd, opts()), null, cmd)
+  }
+})
+
 test('rm-unquoted-var: an unquoted variable whose value has a space is split (anthropics/claude-code#107271)', () => {
   assert.strictEqual(ruleFor('D="My Project/build"; rm -rf $D'), 'rm-unquoted-var')
   assert.strictEqual(ruleFor('rm -rf $OUT', opts({ env: { OUT: '/home/dev/My Files/out' } })), 'rm-unquoted-var')

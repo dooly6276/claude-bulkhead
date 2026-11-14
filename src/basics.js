@@ -19,9 +19,15 @@ function expand(arg, home, platform) {
     .replace(/^~(?=[\\/]|$)/, home)
     .replace(/^(?:\$HOME|\$\{HOME\}|\$env:USERPROFILE|\$env:HOME|%USERPROFILE%|\$USERPROFILE)(?=[\\/]|$)/i, home)
   if (/[$%]/.test(a)) return null
-  if (platform === 'win32') a = a.replace(/^\/([a-z])(?=\/|$)/i, '$1:')
+  if (platform === 'win32') a = a.replace(/^\/(?:cygdrive\/)?([a-z])(?=\/|$)/i, '$1:')
   return a
 }
+
+// A Windows drive as a Linux-side shell mounts it: /mnt/c (WSL), /cygdrive/c (Cygwin).
+const MOUNTED_DRIVE = /^\/(?:mnt|cygdrive)\/[a-z]$/i
+// A Windows drive root written out (C:\, C:/) is the drive wherever the hook runs: an agent on
+// Linux or macOS that writes it means the Windows drive, not a file named C:\ in the cwd.
+const DRIVE_LETTER_ROOT = /^[a-z]:[\\/]*$/i
 
 const pathFor = platform => (platform === 'win32' ? path.win32 : path.posix)
 
@@ -73,6 +79,7 @@ function dangerousTarget(arg, { cwd, home, platform, repoRoot }) {
   if (expanded === null) return null
   const dir = expanded.replace(/[\\/]\*$/, '') || '/'
   const rel = expanded === '*' ? '.' : dir
+  if (DRIVE_LETTER_ROOT.test(dir)) return 'a filesystem root'
   // as written, and on this machine also from the real cwd and home: rm resolves .. from the
   // folder the cwd really is, not from the link it was entered through
   const views = [{ cwd, home }]
@@ -80,6 +87,8 @@ function dangerousTarget(arg, { cwd, home, platform, repoRoot }) {
   for (const v of views) {
     const abs = norm(pathFor(platform).resolve(v.cwd, rel), platform)
     if (/^(?:\/|[a-z]:\/?)$/i.test(abs) || /^[a-z]:$/i.test(abs)) return 'a filesystem root'
+    if (MOUNTED_DRIVE.test(abs)) return 'a filesystem root'
+    if (MOUNTED_DRIVE.test(pathFor('linux').dirname(abs)) && !isAncestorOrSame(abs, norm(v.cwd, platform))) return 'a top-level folder of the drive'
     const homeKey = norm(v.home, platform)
     if (isAncestorOrSame(abs, homeKey)) return 'your home directory or a folder above it'
     const parent = pathFor('linux').dirname(abs)
@@ -152,6 +161,79 @@ function nonEmpty(raw) {
 const PATH_TOOLS = /^(?:cygpath|wslpath|dirname|realpath|readlink|pwd|mktemp)$/
 // cygpath -u 'C:\', wslpath C:/, realpath /, dirname /: a drive or filesystem root
 const ROOT_ARG = /^(?:[a-z]:[\\/]?|[\\/]+)$/i
+
+// ---------------------------------------------------------------------------------------------
+// rm-root through a variable the same line sets: D=/; rm -rf "$D/" deletes / just as rm -rf / does
+// (anthropics/claude-code#95426).
+
+// $D, ${D}, ${D:?msg}, ${D?}, ${D:-x}, ${D:=x}, $env:D, %D%
+const VAR_REF = `\\$\\{(${NAME})(?::?[?=-][^}]*)?\\}|\\$env:(${NAME})|\\$(${NAME})|%(${NAME})%`
+const refName = m => m[1] || m[2] || m[3] || m[4]
+
+// The text an assigned value stands for, when it is written out: D=/, D='C:\', D="$HOME/x". A
+// value with a command substitution or another variable (other than a leading $HOME) is not known.
+function literalValue(raw) {
+  if (raw === null || raw === undefined) return null
+  if (/^'[^']*'$/.test(raw)) return raw.slice(1, -1)
+  const v = raw.replace(/^"(.*)"$/s, '$1')
+  if (/`|\$\(|["']/.test(v)) return null
+  return v
+}
+
+// Writes each variable the line sets to a literal into the path, so rm-root can judge it.
+// Returns null when no variable was replaced.
+function substituteVars(target, vars, mode) {
+  let changed = false
+  const text = target.replace(new RegExp(VAR_REF, 'gi'), (all, ...groups) => {
+    const name = refName([all, ...groups])
+    if (ALWAYS_SET.test(name) || !hasVar(vars, name, mode)) return all
+    const value = literalValue(lookup(vars, name, mode))
+    // an empty value: ${D:?} stops the shell, and $D/ is rm-empty-var's case
+    if (!value) return all
+    changed = true
+    return value
+  })
+  return changed ? text : null
+}
+
+// The value is a drive or filesystem root, or the home directory.
+function isRootValue(p, home, platform) {
+  const s = p.replace(/\\/g, '/').replace(/(.)\/+$/, '$1')
+  if (/^(?:\/+|[a-z]:\/?|\/(?:(?:mnt|cygdrive)\/)?[a-z])$/i.test(s)) return true
+  const h = home.replace(/\\/g, '/').replace(/\/+$/, '')
+  return platform === 'win32' ? s.toLowerCase() === h.toLowerCase() : s === h
+}
+
+// D=$(cygpath -u 'C:\'), D=$(wslpath C:/), D=$(realpath ~), D=$(dirname /x): a path command whose
+// argument is a drive or filesystem root (or home) prints that root, so ${D:?} proves the value is
+// not empty but not that it is not the root. Returns the substitution, or null.
+const ROOT_TOOLS = /^(?:cygpath|wslpath|realpath|readlink|dirname)$/
+function rootTool(raw, mode, home, platform) {
+  if (raw === null || raw === undefined) return null
+  const v = raw.replace(/^"(.*)"$/s, '$1')
+  if (substitutionEnd(v) !== v.length) return null
+  const inner = shell.commands(v.startsWith('$(') ? v.slice(2, -1) : v.slice(1, -1), mode === 'cmd' ? 'sh' : mode, shell.MAX_DEPTH)
+  if (inner.length !== 1 || !ROOT_TOOLS.test(shell.bin(inner[0].argv[0] || ''))) return null
+  const dirname = shell.bin(inner[0].argv[0]) === 'dirname'
+  for (const a of inner[0].argv.slice(1)) {
+    if (a.startsWith('-')) continue
+    const p = expand(a, home, platform)
+    if (p === null) continue
+    if (isRootValue(p, home, platform) || (dirname && isRootValue(path.posix.dirname(p.replace(/\\/g, '/')), home, platform))) return v
+  }
+  return null
+}
+
+// A target that is such a variable alone, or followed only by / or /*: "${D:?}", "${D:?}/", "$D"/*.
+// A folder after it ("${D:?}/sub") deletes only that folder.
+function rootToolTarget(target, vars, mode, home, platform) {
+  const m = new RegExp(`^(?:${VAR_REF})(?:[\\\\/]+(?:\\*|\\.\\*)?)?$`, 'i').exec(target)
+  if (!m) return null
+  const name = refName(m)
+  if (ALWAYS_SET.test(name) || !hasVar(vars, name, mode)) return null
+  const sub = rootTool(lookup(vars, name, mode), mode, home, platform)
+  return sub ? { name, sub } : null
+}
 
 // Why deleting this operand can delete a whole drive, or null:
 //   { kind: 'var', what: '$D', name: 'D' }   $D/ or $D/* with D possibly empty: / or /*
@@ -278,11 +360,27 @@ function emptyVarMessage(seg, operand, hit, rsync) {
     root: `${sub} prints a drive or filesystem root, so this deletes at the root of the drive`,
   }[hit.kind]
   const tool = rsync ? 'rsync --delete <source>/' : 'rm -rf'
-  const safe = hit.kind === 'var' && !/^%|^\$env:/i.test(hit.what)
-    ? `${tool} "\${${hit.name}:?}${rest}"`
-    : `D=$(...) first, check it, then ${tool} "\${D:?}/"`
-  return `[bulkhead] basics: \`${oneLine(seg, 120)}\` is dangerous: ${why}.\n` +
-    `Use \`${safe}\` (the shell stops when the variable is empty), or write the path out.`
+  const head = `[bulkhead] basics: \`${oneLine(seg, 120)}\` is dangerous: ${why}.\n`
+  if (hit.kind === 'var' && /^%|^\$env:/i.test(hit.what)) {
+    return head + `Check that ${hit.name} is set before deleting (PowerShell: \`if (-not $env:${hit.name}) { throw '${hit.name} is empty' }\`, cmd: \`if not defined ${hit.name} exit /b 1\`), or write the path out.`
+  }
+  if (hit.kind === 'root') {
+    return head + `Name the folder under that root: \`D=$(...); ${tool} ${guarded('D', '/<folder>')}\`, or write the path out.`
+  }
+  const safe = hit.kind === 'var' ? `${tool} ${guarded(hit.name, rest)}` : `D=$(...) first, check it, then ${tool} ${guarded('D', rest)}`
+  return head + `Use \`${safe}\` (the shell stops when the variable is empty), or write the path out.`
+}
+
+// "${D:?}" followed by the rest of the path. A trailing * or .* stays outside the quotes, where the
+// shell still expands it: "${D:?}"/*, not "${D:?}/*", which names a file called *.
+function guarded(name, rest) {
+  const g = /^(.*?)([\\/]+)(\*|\.\*)$/s.exec(rest)
+  return g ? `"\${${name}:?}${g[1]}"${g[2]}${g[3]}` : `"\${${name}:?}${rest}"`
+}
+
+function rootToolMessage(seg, target, hit) {
+  return `[bulkhead] basics: \`${oneLine(seg, 120)}\` deletes a filesystem root (${target}): ${hit.name} is set earlier on the line to \`${oneLine(hit.sub, 60)}\`, which prints a drive or filesystem root (or the home directory), and :? only stops an empty value.\n` +
+    `Name the folder under it instead, for example rm -rf ${guarded(hit.name, '/<folder>')}.`
 }
 
 function splitVarMessage(seg, hit) {
@@ -416,6 +514,9 @@ function check(cmd, {
     if (!t.length) continue
     const seg = t.join(' ')
     const targets = rmTargets(t)
+    const cmdMode = c.depth > 0 && mode !== 'sh' && !/^(?:rd|rmdir|del|erase|remove-item|ri)$/i.test(shell.bin(t[0])) ? 'sh' : mode
+    // variables the same shell sets before this command: the text before it in the string it was read from
+    const vars = (targets.length || shell.bin(t[0]) === 'rsync') ? assignments(String(c.src || '').slice(0, c.s), cmdMode) : null
     if (targets.length && rmRoot()) {
       for (const target of targets) {
         const what = dangerousTarget(target, { cwd, home, platform, repoRoot })
@@ -423,11 +524,16 @@ function check(cmd, {
           return `[bulkhead] basics: \`${oneLine(seg, 120)}\` deletes ${what} (${target}).\n` +
             'Name the folder you mean inside the project instead, for example rm -rf ./dist.'
         }
+        const tool = rootToolTarget(target, vars, cmdMode, home, platform)
+        if (tool) return rootToolMessage(seg, target, tool)
+        const written = substituteVars(target, vars, cmdMode)
+        const whatThen = written !== null && dangerousTarget(written, { cwd, home, platform, repoRoot })
+        if (whatThen) {
+          return `[bulkhead] basics: \`${oneLine(seg, 120)}\` deletes ${whatThen} (${target} is ${oneLine(written.replace(/([\\/])[\\/]+/g, '$1'), 60)}, set earlier on the line).\n` +
+            'Name the folder you mean inside the project instead, for example rm -rf ./dist.'
+        }
       }
     }
-    const cmdMode = c.depth > 0 && mode !== 'sh' && !/^(?:rd|rmdir|del|erase|remove-item|ri)$/i.test(shell.bin(t[0])) ? 'sh' : mode
-    // variables the same shell sets before this command: the text before it in the string it was read from
-    const vars = (targets.length || shell.bin(t[0]) === 'rsync') ? assignments(String(c.src || '').slice(0, c.s), cmdMode) : null
     if (targets.length && emptyVar()) {
       const operands = c.words.filter((w, i) => i > 0 && targets.includes(w.v))
       for (const w of operands) {

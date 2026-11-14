@@ -144,7 +144,7 @@ Critical memory pressure for `memoryGuard.subagents` means macOS `kern.memorysta
 |---|---|---|---|
 | `enabled` | boolean | `true` | Turns all the rules on or off |
 | `protectedBranches` | list of branch names | `["main", "master"]` | Branches the force-push rule protects |
-| `rmRoot` | boolean | `true` | `rm -rf` and its PowerShell and cmd forms at a root, a top-level folder such as `/srv`, the home directory, a folder directly in it (caches excepted), or a folder above the repository |
+| `rmRoot` | boolean | `true` | `rm -rf` and its PowerShell and cmd forms at a root, a top-level folder such as `/srv`, the home directory, a folder directly in it (caches excepted), or a folder above the repository, also through a variable the same line sets to one (`D=/; rm -rf "$D/"`, `D="$(cygpath -u 'C:\')"; rm -rf "${D:?}/"`) |
 | `rmEmptyVar` | boolean | `true` | `rm -rf $D/`, `rm -rf $(...)/` and `rsync --delete` into `$D/` when the variable or output can be empty (then the path is `/`), and `rm -rf "$(cygpath -u ...)"`. `"${D:?}/"` passes |
 | `rmUnquotedVar` | boolean | `true` | `rm -rf $D` with `D` unquoted when its value has a space or a wildcard, so bash splits it into several paths |
 | `rmGitDir` | boolean | `true` | `rm -rf .git` and `find -name .git -exec rm -rf` on an existing repository's `.git` folder |

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- basics `rm-root` fills in a variable the same line sets before judging the path, so `D=/; rm -rf "$D/"`, `D=/; rm -rf $D/`, `D=~; rm -rf "${D:?}"/*`, `D=$HOME; rm -rf "$D"` and `D='C:\'; rm -rf "${D:?}/"` are blocked like `rm -rf /`. A variable set to a path command applied to a drive root, `/` or home, such as `D="$(cygpath -u 'C:\')"`, `D=$(wslpath 'C:\')`, `D=$(realpath /)` or `D=$(readlink -f ~)`, counts as that root when the delete names the variable alone or followed only by `/` or `/*`: `"${D:?}/"` proves the value is not empty, not that it is not the root. `rm -rf "${D:?}/sub"` still passes. `C:\`, `/mnt/c` and `/cygdrive/c` count as drive roots on every platform, and `/mnt/c/<folder>` as a top-level folder of the drive. Reported by foma-agent in anthropics/claude-code#95426.
+- basics `rm-empty-var` suggested `rm -rf "${BUILD_DIR:?}/*"` for `rm -rf "$BUILD_DIR"/*`, with the glob inside the quotes, where it never expands. The hint now keeps a trailing `*` or `.*` outside: `rm -rf "${BUILD_DIR:?}"/*`. For a path command that prints a root it suggests naming a folder under it, and for `$env:X` and `%X%` it shows the PowerShell and cmd checks instead of a bash form.
+
 ## 0.4.0 - 2026-11-14
 
 ### Added
