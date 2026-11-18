@@ -1345,6 +1345,14 @@ ss -ltnp 'sport = :3000'
 netstat -anv | grep '\.3000 '
 #@ state default
 
+#@ state desktop-apps
+# == one session alone next to desktop apps: only a pattern that reaches an app is broad ==
+pkill cat
+pkill -f my-unique-worker.js
+kill 12345
+pgrep -fl cat
+#@ state default
+
 #@ state shared-tree
 # == another session works in the same tree ==
 git status
