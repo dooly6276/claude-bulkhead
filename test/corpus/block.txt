@@ -1084,6 +1084,12 @@ kill-guard,state=same-dir	docker compose down
 kill-guard,state=same-dir	docker-compose down
 kill-guard,state=same-dir	docker compose -p shop stop
 
+# == kill-guard: broad-pattern, pkill -f reaching desktop apps (state desktop-apps) ==
+# One session alone with its own `cat`; Safari and Shottr are running, so every app path matches.
+kill-guard,state=desktop-apps	pkill -f cat
+kill-guard,state=desktop-apps	pkill -f 'cat' -n -u 501
+kill-guard,state=desktop-apps	pkill -f app
+
 # == kill-guard: PIDs and patterns that belong to another session (state busy-ports) ==
 kill-guard,state=busy-ports	kill 900111
 kill-guard,state=busy-ports	kill -9 900111

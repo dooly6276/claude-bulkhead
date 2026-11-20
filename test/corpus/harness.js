@@ -84,11 +84,24 @@ function sameDirSnapshot() {
   return snap
 }
 
+// One session alone (the hook's own, with a `cat` of its own) next to desktop apps, which every
+// path under /Applications carries: what `pkill -f cat` reaches on a Mac with nothing else running.
+function appsSnapshot() {
+  const procs = [
+    proc(900200, 1, 'claude', 'claude', t0),
+    proc(900210, 900200, 'cat', 'cat', t0 + 10e3),
+    proc(500, 1, 'Safari', '/Applications/Safari.app/Contents/MacOS/Safari', t0),
+    proc(501, 1, 'Shottr', '/Applications/Shottr.app/Contents/MacOS/Shottr', t0),
+  ]
+  return { procs, ports: [] }
+}
+
 // State names used by the corpus: what the machine looks like while the hooks run.
 //   quiet: plenty of RAM, no other Claude session anywhere, nothing listening.
 //   low-ram: as quiet, but RAM is nearly gone.
 //   busy-ports: another session holds every default dev port.
 //   shared-tree: another live session works in the same (dirty) repository.
+//   desktop-apps: one session alone, its own `cat`, and two desktop apps (Safari, Shottr) running.
 //   same-dir: another live session (with a dev server) whose working folder is the hook's folder.
 function stateFor(name, { cleanRepo, dirtyRepo }) {
   const base = { memory: PLENTY, cwd: cleanRepo, mock: { listening: false, self: null, sessionFiles: [] } }
@@ -104,6 +117,9 @@ function stateFor(name, { cleanRepo, dirtyRepo }) {
     case 'same-dir':
       // another live session whose working folder is the folder the hook runs in
       return { ...base, mock: { listening: false, self: 900200, sessionFiles: [[900100, { cwd: cleanRepo, startedAt: 0, sessionId: 'other' }]], snapshot: sameDirSnapshot() } }
+    case 'desktop-apps':
+      // the hook's own session is the only one; the apps belong to no session
+      return { ...base, mock: { listening: false, self: 900200, sessionFiles: [[900200, { cwd: cleanRepo, startedAt: 0, sessionId: 'me' }]], snapshot: appsSnapshot() } }
     case 'shared-tree':
       return { ...base, cwd: dirtyRepo, mock: { listening: false, self: null, sessionFiles: [[process.pid, { cwd: dirtyRepo, startedAt: Math.round(Date.now() - process.uptime() * 1000), sessionId: 'other-session' }]] } }
     case 'dirty':
