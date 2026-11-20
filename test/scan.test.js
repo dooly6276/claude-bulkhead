@@ -153,7 +153,7 @@ test('the CLI reads a folder, prints JSON, and explains a missing folder', () =>
   const out = spawnSync(process.execPath, [bin, 'scan', '--path', dir, '--json'], { encoding: 'utf8' })
   assert.strictEqual(out.status, 0, out.stderr)
   assert.strictEqual(JSON.parse(out.stdout).commands, 12)
-  const text = spawnSync(process.execPath, [bin, 'scan', '--path', dir, '-n', '0'], { encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' } })
+  const text = spawnSync(process.execPath, [bin, 'scan', '--path', dir, '-n', '0'], { encoding: 'utf8', env: { ...process.env, NO_COLOR: '1', BULKHEAD_STATE_DIR: dir } })
   assert.match(text.stdout, /would have been stopped/)
   const missing = spawnSync(process.execPath, [bin, 'scan', '--path', path.join(dir, 'nope')], { encoding: 'utf8' })
   assert.strictEqual(missing.status, 1)

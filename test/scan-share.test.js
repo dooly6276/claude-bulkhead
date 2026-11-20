@@ -2,9 +2,10 @@
 const test = require('node:test')
 const assert = require('node:assert')
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
-const { scan, renderScan, renderExplain, exampleList } = require('../src/scan')
+const { scan, renderScan, renderExplain, exampleList, starAsk } = require('../src/scan')
 const sr = require('../src/scan-report')
 const { tempDir } = require('./helpers')
 
@@ -68,6 +69,20 @@ test('share numbers and the normal report come from the same result', () => {
   assert.match(text, /Most common: 90 long foreground sleeps.*; 55 branch switches/)
   assert.match(text, /Up to 18 Claude Code sessions ran at the same time/)
   assert.match(text, /Share these numbers: bulkhead scan --share/)
+  assert.ok(!/star/.test(text), 'the report itself never asks for a star')
+})
+
+test('the star ask shows once, only after a report that found something', () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bulkhead-star-'))
+  const env = { BULKHEAD_STATE_DIR: stateDir }
+  assert.strictEqual(starAsk({ summary: { commandsHit: 0 } }, env), '')
+  assert.ok(!fs.existsSync(path.join(stateDir, 'star-asked')))
+  const first = starAsk(fixed(), env)
+  assert.match(first, /a star helps other Claude Code users find bulkhead:\n {2}https:\/\/github\.com\/dooly6276\/claude-bulkhead\n/)
+  assert.match(first, /gh api -X PUT user\/starred\/dooly6276\/claude-bulkhead/)
+  assert.ok(fs.existsSync(path.join(stateDir, 'star-asked')))
+  assert.strictEqual(starAsk(fixed(), env), '')
+  fs.rmSync(stateDir, { recursive: true, force: true })
 })
 
 test('the first lines of the report say what was found in plain words', () => {
@@ -146,7 +161,7 @@ test('the CLI: --share, --share --markdown, --explain and bad combinations', () 
   const line = (min, command, id) => JSON.stringify({ type: 'assistant', timestamp: new Date(T + min * 60000).toISOString(), cwd: repo, message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }] } })
   fs.writeFileSync(f, [line(1, 'pkill -f "next dev" # /Users/zed/private', 'a'), line(2, 'rm -rf /', 'b')].join('\n') + '\n')
   const bin = path.join(__dirname, '..', 'bin', 'bulkhead')
-  const run = (...a) => spawnSync(process.execPath, [bin, 'scan', '--path', dir, ...a], { encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' } })
+  const run = (...a) => spawnSync(process.execPath, [bin, 'scan', '--path', dir, ...a], { encoding: 'utf8', env: { ...process.env, NO_COLOR: '1', BULKHEAD_STATE_DIR: dir } })
   const share = run('--share')
   assert.strictEqual(share.status, 0, share.stderr)
   assert.match(share.stdout, /^bulkhead scan, 1 day, 1 session\./)

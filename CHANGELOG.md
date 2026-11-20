@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2 - 2026-11-21
+
+### Changed
+
+- `bulkhead scan` asks once for a GitHub star, after the first report that found commands bulkhead would have stopped. It prints the repository link and `gh api -X PUT user/starred/dooly6276/claude-bulkhead`, and writes `star-asked` to the state folder (`~/.claude/bulkhead`, or `BULKHEAD_STATE_DIR`) before it prints, so later scans never ask again. `--json`, `--share` and `--explain` never ask, and a scan that found nothing does not use up the ask.
+
 ## 0.5.1 - 2026-11-14
 
 ### Fixed

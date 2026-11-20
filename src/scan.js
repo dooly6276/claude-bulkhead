@@ -7,7 +7,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { claudeDir } = require('./sessions')
-const { setting } = require('./hook')
+const { setting, stateDir } = require('./hook')
 const { useColor, paint, shortPath, option, table, bytes } = require('./cli-util')
 const { parseSince } = require('./log-cli')
 const scanReport = require('./scan-report')
@@ -495,6 +495,19 @@ function renderScan(r, { color = false, home = os.homedir(), examples = 3, width
   return out.join('\n')
 }
 
+// Asked once, after the first report that found something: those numbers are the user's own reason
+// to care. The marker is written before the text is returned, so a failed write means no ask at all.
+function starAsk(r, env = process.env) {
+  if (!r.summary || !(r.summary.commandsHit > 0)) return ''
+  const file = path.join(env.BULKHEAD_STATE_DIR || stateDir(), 'star-asked')
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, `${new Date().toISOString()}\n`, { flag: 'wx' })
+  } catch { return '' }
+  const repo = scanReport.REPO.replace('https://github.com/', '')
+  return `\nIf these numbers surprised you, a star helps other Claude Code users find bulkhead:\n  ${scanReport.REPO}\n  or from a terminal: gh api -X PUT user/starred/${repo}\n`
+}
+
 // One example in full: the whole command, what matched, the rule and where it is documented.
 function renderExplain(r, number, { examples = 3, home = os.homedir(), color = false } = {}) {
   const list = exampleList(r, examples > 0 ? examples : 3)
@@ -667,7 +680,7 @@ async function main(args, { env = process.env, stdout = process.stdout, stderr =
   if (args.includes('--json')) return stdout.write(JSON.stringify(toJson(r), null, 2) + '\n')
   if (args.includes('--share')) return stdout.write((args.includes('--markdown') ? scanReport.shareMarkdown(r) : scanReport.shareText(r)) + '\n')
   if (option(args, 'explain') !== undefined) return stdout.write(renderExplain(r, Number(option(args, 'explain')), { examples: n, color: useColor(stdout, env) }) + '\n')
-  stdout.write(renderScan(r, { color: useColor(stdout, env), examples: n, width: stdout.columns || 120 }) + '\n')
+  stdout.write(renderScan(r, { color: useColor(stdout, env), examples: n, width: stdout.columns || 120 }) + '\n' + starAsk(r, env))
 }
 
-module.exports = { main, scan, timeSpan, replay, renderScan, renderExplain, exampleList, toJson, mask, outcomeOf, sessionKey, findTranscripts, concurrency, USAGE }
+module.exports = { main, scan, timeSpan, replay, renderScan, renderExplain, starAsk, exampleList, toJson, mask, outcomeOf, sessionKey, findTranscripts, concurrency, USAGE }
