@@ -1,0 +1,65 @@
+{
+  "$schema": "https://fundingjson.org/schema/v1.1.0.json",
+  "version": "v1.1.0",
+  "entity": {
+    "type": "individual",
+    "role": "owner",
+    "name": "Myeongseok Kang",
+    "email": "dooly6276@gmail.com",
+    "description": "Independent developer in Seoul, South Korea, and the creator and sole maintainer of claude-bulkhead, an MIT-licensed set of hooks that keeps coding agents from damaging each other when several sessions share one machine.",
+    "webpageUrl": {
+      "url": "https://github.com/dooly6276"
+    }
+  },
+  "projects": [
+    {
+      "guid": "claude-bulkhead",
+      "name": "claude-bulkhead",
+      "description": "Hooks for a machine shared by many coding agent sessions and subagents (Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, opencode and others). It blocks rm -rf on an empty variable, pkill of another session's dev server, taking another session's port, and git add -A committing another session's edits, and it tracks which session owns which process, port and git worktree. JavaScript, zero runtime dependencies, README in 6 languages.",
+      "webpageUrl": {
+        "url": "https://github.com/dooly6276/claude-bulkhead"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/dooly6276/claude-bulkhead"
+      },
+      "licenses": [
+        "spdx:MIT"
+      ],
+      "tags": [
+        "developer-tools",
+        "security",
+        "ai",
+        "cli",
+        "hooks",
+        "devops",
+        "automation",
+        "nodejs"
+      ]
+    }
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "github-sponsors",
+        "type": "payment-provider",
+        "address": "https://github.com/sponsors/dooly6276",
+        "description": "GitHub Sponsors for dooly6276."
+      }
+    ],
+    "plans": [
+      {
+        "guid": "maintainer-year",
+        "status": "active",
+        "name": "Maintainer time and security work for one year",
+        "description": "Full-time maintainer time for one year: end-to-end tests with real agent sessions on Linux, Windows and macOS, a published threat model and an external security review of the hook code, support for more coding agents, documentation in more languages, and a hardened release process.",
+        "amount": 100000,
+        "currency": "USD",
+        "frequency": "yearly",
+        "channels": [
+          "github-sponsors"
+        ]
+      }
+    ],
+    "history": []
+  }
+}

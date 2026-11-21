@@ -77,3 +77,7 @@ It prints the median per guard for an allowed command and for a blocked one, wit
 - Update `CHANGELOG.md` under `Unreleased` for anything a user would notice.
 - Do not add dependencies. The plugin runs with Node's standard library only.
 - Keep machine-specific details out of the tree: no personal paths, host names or project names in code, tests or docs. Use placeholders like `~/src/acme-web` and `~/src/acme-web-checkout`.
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant 2.1](CODE_OF_CONDUCT.md). Report problems to dooly6276@gmail.com.
